@@ -1,0 +1,21 @@
+{
+  "name": "محاسب الذهب",
+  "short_name": "محاسب الذهب",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#080a0f",
+  "theme_color": "#080a0f",
+  "orientation": "portrait",
+  "icons": [
+    {
+      "src": "https://api.iconify.design/lucide:scale.svg?color=%23c9a84c",
+      "sizes": "192x192",
+      "type": "image/svg+xml"
+    },
+    {
+      "src": "https://api.iconify.design/lucide:scale.svg?color=%23c9a84c",
+      "sizes": "512x512",
+      "type": "image/svg+xml"
+    }
+  ]
+}

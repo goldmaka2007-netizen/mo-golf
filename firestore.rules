@@ -1,0 +1,93 @@
+﻿rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+
+    function isOwner(userId) {
+      return isAuthenticated() && request.auth.uid == userId;
+    }
+
+    function isAdmin() {
+      return isAuthenticated() && (
+        request.auth.token.email == 'mohamedyasser757.my@gmail.com' ||
+        (exists(/databases/$(database)/documents/users/$(request.auth.uid)) &&
+         get(/databases/$(database)/documents/users/$(request.auth.uid)).data.get('role', 'user') == 'admin')
+      );
+    }
+
+    function ownsExisting() {
+      return isAuthenticated() && (resource.data.userId == request.auth.uid || isAdmin());
+    }
+
+    function ownsIncoming() {
+      return isAuthenticated() && (request.resource.data.userId == request.auth.uid || isAdmin());
+    }
+
+    function preservesOwner() {
+      return isAdmin() || request.resource.data.userId == resource.data.userId;
+    }
+
+    match /users/{userId} {
+      allow read: if isOwner(userId) || isAdmin();
+      allow create: if isOwner(userId) || isAdmin();
+      allow update: if (isOwner(userId) || isAdmin()) && (isAdmin() || request.resource.data.role == resource.data.role);
+      allow delete: if isAdmin();
+    }
+
+    match /settings/{userId} {
+      allow read, write: if isOwner(userId) || isAdmin();
+    }
+
+    match /accounts/{accountId} {
+      allow read: if ownsExisting();
+      allow create: if ownsIncoming();
+      allow update: if ownsExisting() && ownsIncoming() && preservesOwner();
+      allow delete: if ownsExisting();
+    }
+
+    match /entries/{entryId} {
+      allow read: if ownsExisting();
+      allow create: if ownsIncoming();
+      allow update: if ownsExisting() && ownsIncoming() && preservesOwner();
+      allow delete: if ownsExisting();
+    }
+
+    match /transactionRules/{ruleId} {
+      allow read: if ownsExisting();
+      allow create: if ownsIncoming();
+      allow update: if ownsExisting() && ownsIncoming() && preservesOwner();
+      allow delete: if ownsExisting();
+    }
+
+    match /customRules/{ruleId} {
+      allow read: if ownsExisting();
+      allow create: if ownsIncoming();
+      allow update: if ownsExisting() && ownsIncoming() && preservesOwner();
+      allow delete: if ownsExisting();
+    }
+
+    match /inventory_checks/{checkId} {
+      allow read: if ownsExisting();
+      allow create: if ownsIncoming();
+      allow update: if ownsExisting() && ownsIncoming() && preservesOwner();
+      allow delete: if ownsExisting();
+    }
+
+    match /audit_logs/{logId} {
+      allow read: if isAdmin();
+      allow create: if isAuthenticated() && request.resource.data.userId == request.auth.uid;
+      allow update, delete: if false;
+    }
+
+    match /test/connection {
+      allow read: if isAuthenticated();
+      allow write: if false;
+    }
+
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}

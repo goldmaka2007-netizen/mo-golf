@@ -1,0 +1,15 @@
+node_modules/
+build/
+dist/
+coverage/
+.firebase/
+.DS_Store
+*.log
+.env*
+!.env.example
+*.pem
+*.key
+serviceAccount*.json
+credentials*.json
+firebase-applet-config.json
+firebase-blueprint.json
