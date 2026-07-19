@@ -1,8 +1,29 @@
-import { Account, AccountNature, AccountCategories, Entry } from '../types';
-import { calculateArabicWeight, parseWeight } from '../lib/accounting';
+﻿import { Account, AccountNature, AccountCategories, Entry } from '../types';
+import { parseWeight } from '../lib/accounting';
+import { canCalculateGoldEquivalent21, calculateGoldEquivalent21, inferGoldKaratFromMultiplier, isSupportedGoldKarat } from '../lib/goldEquivalent';
 
 const textIncludesAny = (value: string | undefined, needles: string[]): boolean =>
     needles.some(needle => (value || '').includes(needle));
+
+const getEntryCalculationKarat = (entry: Partial<Entry>) => {
+    if (isSupportedGoldKarat(entry.karat)) return entry.karat;
+    return inferGoldKaratFromMultiplier(entry.multiplier);
+};
+
+const getLegacyArabicWeightValue = (entry: Partial<Entry>): number => parseFloat(entry.arabicWeight || '0') || 0;
+
+const getCalculatedGoldValue = (entry: Entry): number => {
+    if (entry.goldEquivalent21Snapshot && Number.isSafeInteger(entry.goldEquivalent21Snapshot.equivalent21Units)) {
+        return entry.goldEquivalent21Snapshot.equivalent21Units / 100;
+    }
+
+    const karat = getEntryCalculationKarat(entry);
+    if (karat && canCalculateGoldEquivalent21(entry.weight || '0', karat)) {
+        return calculateGoldEquivalent21(entry.weight || '0', karat).equivalent21Units / 100;
+    }
+
+    return getLegacyArabicWeightValue(entry);
+};
 
 const inferNatureFromLegacyLabels = (account: Account): AccountNature => {
     const balanceNature = account.balanceNature || '';
@@ -35,6 +56,14 @@ export const getDynamicAccountNature = (accountName: string, accountsDb: Account
     return inferNatureFromLegacyLabels(found);
 };
 
+export const isGoldEquivalentEntry = (entry: Partial<Entry>, accountsDb: Account[] = []): boolean => {
+    const debitNature = getDynamicAccountNature(entry.debit || '', accountsDb);
+    const creditNature = getDynamicAccountNature(entry.credit || '', accountsDb);
+    const hasGoldAcc = [AccountNature.GOLD, AccountNature.MIXED_GOLD].includes(debitNature) || [AccountNature.GOLD, AccountNature.MIXED_GOLD].includes(creditNature);
+    const hasSilverAcc = [AccountNature.SILVER, AccountNature.MIXED_SILVER].includes(debitNature) || [AccountNature.SILVER, AccountNature.MIXED_SILVER].includes(creditNature);
+    const hasAccessoryAcc = debitNature === AccountNature.ACC || creditNature === AccountNature.ACC;
+    return hasGoldAcc && !hasSilverAcc && !hasAccessoryAcc && !!getEntryCalculationKarat(entry);
+};
 /**
  * 2. LEDGER ROUTING
  * Determines if a transaction value should be recorded in a specific Ledger (Metric).
@@ -64,6 +93,23 @@ export const getMetricValue = (entry: Entry, metric: 'cash' | 'gold' | 'silver' 
     if (metric === 'cash') return parseFloat(entry.cash || '0') || 0;
     if (metric === 'accs') return parseFloat(entry.count || '0') || 0;
 
+    const debitAcc = entry.debit || '';
+    const creditAcc = entry.credit || '';
+    const db = accountsDb || [];
+    const debitNature = getDynamicAccountNature(debitAcc, db);
+    const creditNature = getDynamicAccountNature(creditAcc, db);
+    const hasGoldAcc = [AccountNature.GOLD, AccountNature.MIXED_GOLD].includes(debitNature) || [AccountNature.GOLD, AccountNature.MIXED_GOLD].includes(creditNature);
+    const hasSilverAcc = [AccountNature.SILVER, AccountNature.MIXED_SILVER].includes(debitNature) || [AccountNature.SILVER, AccountNature.MIXED_SILVER].includes(creditNature);
+    const hasAccessoryAcc = debitNature === AccountNature.ACC || creditNature === AccountNature.ACC;
+
+    if (metric === 'gold') {
+        if (!hasGoldAcc || hasSilverAcc || hasAccessoryAcc) return 0;
+    }
+
+    if (metric === 'silver') {
+        if (!hasSilverAcc || hasGoldAcc || hasAccessoryAcc) return 0;
+    }
+
     let w = 0;
     if (options?.useActualWeight) {
         w = parseWeight(entry.weight) || 0;
@@ -75,37 +121,13 @@ export const getMetricValue = (entry: Entry, metric: 'cash' | 'gold' | 'silver' 
             }
         }
     } else {
-        w = metric === 'gold' ? 
-            (parseFloat(entry.arabicWeight || '0') || parseFloat(calculateArabicWeight(entry.weight, entry.multiplier || 1) || '0')) : 
-            (parseWeight(entry.weight) || 0);
+        w = metric === 'gold' ? getCalculatedGoldValue(entry) : (parseWeight(entry.weight) || 0);
     }
 
     if (w === 0) return 0;
 
-    const debitAcc = entry.debit || '';
-    const creditAcc = entry.credit || '';
-    
-    const db = accountsDb || [];
-    const debitNature = getDynamicAccountNature(debitAcc, db);
-    const creditNature = getDynamicAccountNature(creditAcc, db);
-
-    if (metric === 'gold') {
-        const hasGoldAcc = [AccountNature.GOLD, AccountNature.MIXED_GOLD].includes(debitNature) || [AccountNature.GOLD, AccountNature.MIXED_GOLD].includes(creditNature);
-        const hasSilverAcc = [AccountNature.SILVER, AccountNature.MIXED_SILVER].includes(debitNature) || [AccountNature.SILVER, AccountNature.MIXED_SILVER].includes(creditNature);
-        
-        if (hasGoldAcc) return w;
-        if (hasSilverAcc) return 0;
-        return 0;
-    }
-
-    if (metric === 'silver') {
-        const hasSilverAcc = [AccountNature.SILVER, AccountNature.MIXED_SILVER].includes(debitNature) || [AccountNature.SILVER, AccountNature.MIXED_SILVER].includes(creditNature);
-        const hasGoldAcc = [AccountNature.GOLD, AccountNature.MIXED_GOLD].includes(debitNature) || [AccountNature.GOLD, AccountNature.MIXED_GOLD].includes(creditNature);
-        
-        if (hasSilverAcc) return w;
-        if (hasGoldAcc) return 0;
-        return 0;
-    }
+    if (metric === 'gold') return w;
+    if (metric === 'silver') return w;
 
     return 0;
 };

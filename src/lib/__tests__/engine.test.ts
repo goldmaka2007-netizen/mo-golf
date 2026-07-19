@@ -1,6 +1,7 @@
 ﻿import { describe, expect, it } from 'vitest';
 import { analyzeProfitability, processCostBasis, processInventory } from '../engine';
-import { belongsToMetric, getAccountTypeDetails } from '../../utils/accountLogic';
+import { buildGoldEquivalent21Audit, calculateGoldEquivalent21, compareLegacyGoldEquivalent21, GOLD_EQUIVALENT_21_CALCULATION_VERSION } from '../goldEquivalent';
+import { belongsToMetric, getAccountTypeDetails, getMetricValue } from '../../utils/accountLogic';
 import { Account, Entry } from '../../types';
 
 const accounts: Account[] = [
@@ -38,7 +39,7 @@ describe('engine inventory movements', () => {
     ], accounts);
 
     expect(result.snapshots['gold18-raw'].weight).toBe(10);
-    expect(result.snapshots['gold18-raw'].arabicWeight).toBeCloseTo(10 * 18 / 21, 5);
+    expect(result.snapshots['gold18-raw'].arabicWeight).toBe(8.57);
   });
 
   it('records sales as inventory outflow', () => {
@@ -87,6 +88,14 @@ describe('engine inventory movements', () => {
     expect(result.snapshots.accessory.arabicWeight).toBe(0);
   });
 
+  it('does not produce equivalent-21 weight for accessory entries even when weight is nonzero', () => {
+    const result = processInventory([
+      entry({ operationKind: 'purchase', debit: 'accessory', debitAccountId: 'accessory', credit: 'cash', creditAccountId: 'cash', count: '1', weight: '5', karat: 18 }),
+    ], accounts);
+
+    expect(result.snapshots.accessory.weight).toBe(5);
+    expect(result.snapshots.accessory.arabicWeight).toBe(0);
+  });
   it('keeps personal withdrawals cash-only and out of inventory', () => {
     const result = processInventory([
       entry({ operationKind: 'personal_withdrawal', debit: 'equity-draw', debitAccountId: 'equity-draw', credit: 'cash', creditAccountId: 'cash', cash: '1000' }),
@@ -104,7 +113,7 @@ describe('engine inventory movements', () => {
     expect(result.snapshots['gold18-product'].weight).toBe(10);
     expect(result.snapshots['gold18-raw'].weight).toBe(-4);
     expect(result.merchantWeightLiabilities['merchant-gold'].weight).toBe(6);
-    expect(result.merchantWeightLiabilities['merchant-gold'].arabicWeight).toBeCloseTo(6 * 18 / 21, 5);
+    expect(result.merchantWeightLiabilities['merchant-gold'].arabicWeight).toBeCloseTo(5.14, 5);
   });
 
   it('routes merchant weight accounts into the gold liability ledger by metadata', () => {
@@ -139,5 +148,110 @@ describe('engine cost and profitability', () => {
 
     expect(basis.getCost('gold18-product')).toBe(3000);
     expect(basis.getCost('gold18-raw')).toBe(3000);
+  });
+});
+
+describe('gold equivalent-21 calculation engine', () => {
+  it('calculates 18K equivalent using centigram units', () => {
+    const result = calculateGoldEquivalent21('10.50', 18);
+    expect(result.physicalWeight).toBe('10.50');
+    expect(result.physicalWeightUnits).toBe(1050);
+    expect(result.equivalent21).toBe('9.00');
+    expect(result.equivalent21Units).toBe(900);
+  });
+
+  it('calculates 21K equivalent without changing the weight', () => {
+    expect(calculateGoldEquivalent21('10.50', 21).equivalent21).toBe('10.50');
+  });
+
+  it('calculates 24K equivalent rounded to two decimals', () => {
+    const result = calculateGoldEquivalent21('10.50', 24);
+    expect(result.equivalent21).toBe('12.00');
+    expect(result.equivalent21Units).toBe(1200);
+  });
+
+  it('accepts the smallest valid physical weight', () => {
+    const result = calculateGoldEquivalent21('0.01', 18);
+    expect(result.physicalWeightUnits).toBe(1);
+    expect(result.equivalent21).toBe('0.01');
+  });
+
+  it('rounds equivalent weights to centigrams without accepting over-precise input', () => {
+    expect(calculateGoldEquivalent21('0.01', 24).equivalent21).toBe('0.01');
+  });
+
+  it.each([0, -1, Number.NaN, Number.POSITIVE_INFINITY])('rejects invalid weight %s', (weight) => {
+    expect(() => calculateGoldEquivalent21(weight, 21)).toThrow();
+  });
+
+  it('rejects unsupported karats', () => {
+    expect(() => calculateGoldEquivalent21('1.00', 22)).toThrow();
+  });
+
+  it('does not expose floating-point drift for repeated decimal cases', () => {
+    const outputs = Array.from({ length: 10 }, () => calculateGoldEquivalent21('0.10', 18).equivalent21);
+    expect(outputs).toEqual(Array(10).fill('0.09'));
+  });
+
+  it('returns all required snapshot fields', () => {
+    const result = calculateGoldEquivalent21('2.00', 24);
+    expect(result).toMatchObject({
+      physicalWeight: '2.00',
+      physicalWeightUnits: 200,
+      karat: 24,
+      equivalent21: '2.29',
+      equivalent21Units: 229,
+      roundingScale: '0.01g',
+      calculationVersion: GOLD_EQUIVALENT_21_CALCULATION_VERSION,
+    });
+  });
+
+  it('reports legacy matches', () => {
+    const calculated = calculateGoldEquivalent21('10.50', 18);
+    expect(compareLegacyGoldEquivalent21('9.00', calculated)).toMatchObject({
+      legacyValue: '9.00',
+      calculatedValue: '9.00',
+      difference: '0.00',
+      mismatch: false,
+    });
+  });
+
+  it('reports legacy mismatches without changing the legacy value', () => {
+    const calculated = calculateGoldEquivalent21('10.50', 18);
+    expect(compareLegacyGoldEquivalent21('8.99', calculated)).toMatchObject({
+      legacyValue: '8.99',
+      calculatedValue: '9.00',
+      difference: '0.01',
+      mismatch: true,
+    });
+  });
+  it.each(['1.005', '10abc', '1e2', '', '0', '-1'])('rejects invalid string weight %s', (weight) => {
+    expect(() => calculateGoldEquivalent21(weight, 21)).toThrow();
+  });
+
+  it.each(['1', '1.2', '1.20', '0.01'])('accepts valid string weight %s', (weight) => {
+    expect(calculateGoldEquivalent21(weight, 21).physicalWeight).toBe(Number(weight).toFixed(2));
+  });
+
+  it('does not create a legacy mismatch for a new entry without a real legacy value', () => {
+    const audit = buildGoldEquivalent21Audit('10.50', 18);
+    expect(audit?.snapshot.equivalent21).toBe('9.00');
+    expect(audit?.legacyComparison).toBeNull();
+  });
+
+  it('compares edited old entries against the original stored legacy value', () => {
+    const audit = buildGoldEquivalent21Audit('10.50', 18, '8.99');
+    expect(audit?.legacyComparison).toMatchObject({ legacyValue: '8.99', calculatedValue: '9.00', mismatch: true });
+  });
+
+  it('uses legacy arabicWeight fallback for old records without snapshot, karat, or reliable multiplier', () => {
+    const oldEntry = entry({ debit: 'gold18-product', credit: 'cash', weight: '10.00', arabicWeight: '8.50', multiplier: undefined, karat: undefined });
+    expect(getMetricValue(oldEntry, 'gold', accounts)).toBe(8.5);
+  });
+
+  it('does not route silver entries through the gold equivalent engine', () => {
+    const silverEntry = entry({ debit: 'silver', credit: 'cash', weight: '3.00', karat: undefined, multiplier: undefined });
+    expect(getMetricValue(silverEntry, 'gold', accounts)).toBe(0);
+    expect(getMetricValue(silverEntry, 'silver', accounts)).toBe(3);
   });
 });

@@ -2,6 +2,8 @@
  * Accounting Utilities for Gold & Silver Shop
  */
 
+import { calculateGoldEquivalent21, inferGoldKaratFromMultiplier } from './goldEquivalent';
+
 export const MULTIPLIERS = {
   K18: 0.857142857,
   K21: 1,
@@ -10,14 +12,16 @@ export const MULTIPLIERS = {
 };
 
 /**
- * Calculates Arabic Weight (Grade 21 equivalent)
+ * Calculates Arabic Weight (Grade 21 equivalent) through the centigram-safe engine.
  */
-export function calculateArabicWeight(weight: string | number, multiplier: number | null | undefined): string {
+export function calculateArabicWeight(weight: string | number, multiplier: number | null | undefined, karat?: string | number | null): string {
   if (!weight) return "";
-  const normalized = typeof weight === 'string' ? normalizeNumerals(weight) : weight;
-  const n = typeof normalized === 'string' ? parseFloat(normalized) : normalized;
-  const m = multiplier || 1;
-  return isNaN(n) ? "" : (n * m).toFixed(2);
+  const inferredKarat = karat ?? inferGoldKaratFromMultiplier(multiplier) ?? 21;
+  try {
+    return calculateGoldEquivalent21(weight, inferredKarat).equivalent21;
+  } catch {
+    return "";
+  }
 }
 
 /**

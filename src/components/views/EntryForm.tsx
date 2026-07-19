@@ -1,4 +1,4 @@
-import React, { useState, useMemo, useEffect } from 'react';
+﻿import React, { useState, useMemo, useEffect } from 'react';
 import { motion } from 'framer-motion';
 import { 
   CheckCircle2, 
@@ -33,6 +33,8 @@ import {
   calculateKaratPrice 
 } from '../../lib/accounting';
 import { FormInput } from '../ui/FormInput';
+import { buildGoldEquivalent21Audit, canCalculateGoldEquivalent21, inferGoldKaratFromMultiplier } from '../../lib/goldEquivalent';
+import { isGoldEquivalentEntry } from '../../utils/accountLogic';
 import { AccountSearchSelect } from '../ui/AccountSearchSelect';
 
 export const EntryForm = React.memo(() => {
@@ -285,7 +287,7 @@ export const EntryForm = React.memo(() => {
           ...p, 
           karat: detectedKarat, 
           multiplier: mult,
-          arabicWeight: calculateArabicWeight(p.weight, mult)
+          arabicWeight: calculateArabicWeight(p.weight, mult, detectedKarat)
         }));
       }
 
@@ -380,7 +382,7 @@ export const EntryForm = React.memo(() => {
     if (debits.length === 1 && formData.debit !== debits[0]) setFormData(prev => ({ ...prev, debit: debits[0], credit: '' }));
     if (formData.debit && credits.length === 1 && formData.credit !== credits[0].c) {
       const c = credits[0];
-      setFormData(prev => ({ ...prev, credit: c.c, karat: c.k ?? prev.karat, multiplier: c.m || prev.multiplier, arabicWeight: calculateArabicWeight(prev.weight, c.m || 1) }));
+      setFormData(prev => ({ ...prev, credit: c.c, karat: c.k ?? prev.karat, multiplier: c.m || prev.multiplier, arabicWeight: calculateArabicWeight(prev.weight, c.m || 1, c.k ?? prev.karat) }));
     }
   }, [formData.tx, formData.debit, debits, credits]);
 
@@ -431,8 +433,21 @@ export const EntryForm = React.memo(() => {
 
     if (formData.karat) entry.karat = formData.karat;
     if (formData.marketPrice !== undefined) entry.marketPrice = formData.marketPrice;
-
     try {
+      if (isGoldEquivalentEntry(entry, accountsDb)) {
+        const calculationKarat = entry.karat ?? inferGoldKaratFromMultiplier(entry.multiplier);
+        if (!canCalculateGoldEquivalent21(entry.weight, calculationKarat)) {
+          setGlobalError('وزن الذهب أو العيار غير صالح. أدخل وزنًا موجبًا بحد أقصى منزلتين عشريتين وعيار 18 أو 21 أو 24.');
+          return;
+        }
+
+        const goldAudit = buildGoldEquivalent21Audit(entry.weight, calculationKarat);
+        if (goldAudit) {
+          entry.goldEquivalent21Snapshot = goldAudit.snapshot;
+          if (goldAudit.legacyComparison) entry.goldEquivalent21LegacyComparison = goldAudit.legacyComparison;
+        }
+      }
+
       await addDoc(collection(db, 'entries'), entry);
       
       // Transition to success step only after successful save
@@ -596,7 +611,7 @@ export const EntryForm = React.memo(() => {
           onSelect={(val, karat, mult) => {
             const activeMult = mult || 1;
             setFormData(p => ({ 
-              ...p, credit: val, karat: karat || p.karat, multiplier: activeMult, arabicWeight: calculateArabicWeight(p.weight, activeMult) 
+              ...p, credit: val, karat: karat || p.karat, multiplier: activeMult, arabicWeight: calculateArabicWeight(p.weight, activeMult, karat || p.karat)
             }));
           }}
           inputRef={creditSearchRef}
@@ -628,8 +643,7 @@ export const EntryForm = React.memo(() => {
                 value={formData.weight}
                 onChangeValue={(v) => {
                   let w = normalize(v);
-                  if (w.includes('.')) { const [i, d] = w.split('.'); if (d?.length > 2) w = `${i}.${d.slice(0, 2)}`; }
-                  setFormData(p => ({ ...p, weight: w, arabicWeight: calculateArabicWeight(w, p.multiplier) }));
+                  setFormData(p => ({ ...p, weight: w, arabicWeight: calculateArabicWeight(w, p.multiplier, p.karat) }));
                 }}
                 containerClassName="space-y-2"
                 labelClassName="text-[#c9a84c]"

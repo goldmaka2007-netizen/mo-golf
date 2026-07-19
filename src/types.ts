@@ -1,4 +1,5 @@
-﻿import { User as FirebaseUser } from 'firebase/auth';
+import { User as FirebaseUser } from 'firebase/auth';
+import type { GoldEquivalent21LegacyComparison, GoldEquivalent21Snapshot } from './lib/goldEquivalent';
 
 export type { FirebaseUser };
 
@@ -43,6 +44,8 @@ export interface Entry {
   clientName?: string;
   clientPhone?: string;
   marketPrice?: number;
+  goldEquivalent21Snapshot?: GoldEquivalent21Snapshot;
+  goldEquivalent21LegacyComparison?: GoldEquivalent21LegacyComparison;
   userId: string;
   createdAt?: any;
   isSettled?: boolean;

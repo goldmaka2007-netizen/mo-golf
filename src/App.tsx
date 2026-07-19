@@ -4,6 +4,8 @@ import { AnimatePresence, motion } from 'framer-motion';
 import { useAppStore } from './store';
 import { db, logOut } from './firebase';
 import { Entry } from './types';
+import { buildGoldEquivalent21Audit, canCalculateGoldEquivalent21, inferGoldKaratFromMultiplier } from './lib/goldEquivalent';
+import { isGoldEquivalentEntry } from './utils/accountLogic';
 
 import { Home, BookOpenCheck, PlusCircle, BarChart3, Menu, RefreshCw } from 'lucide-react';
 
@@ -36,7 +38,7 @@ export default function App() {
   const {
     user, isAuthReady, setEntries, view, setView, setReportsTab,
     globalError, setGlobalError, setIsUpdatingPrice,
-    editingEntry, setEditingEntry
+    editingEntry, setEditingEntry, accountsDb
   } = useAppStore();
 
   const {
@@ -149,6 +151,14 @@ export default function App() {
     setIsUpdatingEntry(true);
     try {
       const { id, ...rawData } = entryToUpdate;
+      const calculationKarat = rawData.karat ?? inferGoldKaratFromMultiplier(rawData.multiplier);
+      if (isGoldEquivalentEntry(rawData, accountsDb) && canCalculateGoldEquivalent21(rawData.weight || '', calculationKarat)) {
+        const goldAudit = buildGoldEquivalent21Audit(rawData.weight || '', calculationKarat, rawData.arabicWeight);
+        if (goldAudit) {
+          rawData.goldEquivalent21Snapshot = goldAudit.snapshot;
+          if (goldAudit.legacyComparison) rawData.goldEquivalent21LegacyComparison = goldAudit.legacyComparison;
+        }
+      }
       const data: any = {};
       Object.keys(rawData).forEach(key => {
         const val = (rawData as any)[key];

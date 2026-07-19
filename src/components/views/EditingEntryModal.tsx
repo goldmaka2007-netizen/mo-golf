@@ -1,4 +1,4 @@
-import React from 'react';
+﻿import React from 'react';
 import { motion } from 'framer-motion';
 import { X, Trash2, Save, BarChart3, Printer } from 'lucide-react';
 import { Entry } from '../../types';
@@ -6,6 +6,8 @@ import { useAppStore } from '../../store';
 import { cn } from '../../lib/utils';
 import { normalizeNumerals, calculateArabicWeight } from '../../lib/accounting';
 import { FormInput } from '../ui/FormInput';
+import { buildGoldEquivalent21Audit, canCalculateGoldEquivalent21, inferGoldKaratFromMultiplier } from '../../lib/goldEquivalent';
+import { isGoldEquivalentEntry } from '../../utils/accountLogic';
 import { AccountSearchSelect } from '../ui/AccountSearchSelect';
 
 interface EditingEntryModalProps {
@@ -57,6 +59,25 @@ export const EditingEntryModal = ({
   }, [editingEntry?.karat, editingEntry?.multiplier, goldPrice, silverPrice]);
   
   const normalize = normalizeNumerals;
+
+  const withGoldAudit = (next: Partial<Entry>): Partial<Entry> => {
+    const calculationKarat = next.karat ?? inferGoldKaratFromMultiplier(next.multiplier);
+    if (!isGoldEquivalentEntry(next, accountsDb) || !canCalculateGoldEquivalent21(next.weight || '', calculationKarat)) {
+      return {
+        ...next,
+        goldEquivalent21Snapshot: undefined,
+        goldEquivalent21LegacyComparison: undefined,
+      };
+    }
+
+    const audit = buildGoldEquivalent21Audit(next.weight || '', calculationKarat, next.arabicWeight);
+    if (!audit) return next;
+    return {
+      ...next,
+      goldEquivalent21Snapshot: audit.snapshot,
+      goldEquivalent21LegacyComparison: audit.legacyComparison || undefined,
+    };
+  };
 
   if (!editingEntry) return null;
 
@@ -147,7 +168,7 @@ export const EditingEntryModal = ({
                       type="button"
                       onClick={() => {
                         const m = k === 18 ? 0.857142857 : k === 24 ? 1.142857143 : 1;
-                        setEditingEntry({ ...editingEntry, karat: k, multiplier: m, arabicWeight: editingEntry.weight ? (parseFloat(editingEntry.weight) * m).toFixed(2) : "" });
+                        setEditingEntry(withGoldAudit({ ...editingEntry, karat: k, multiplier: m }));
                       }}
                       className={cn(
                         "flex-1 py-3 rounded-xl border text-sm font-bold transition-all",
@@ -159,7 +180,7 @@ export const EditingEntryModal = ({
                   ))}
                   <button
                     type="button"
-                    onClick={() => setEditingEntry({ ...editingEntry, karat: null, multiplier: 1, arabicWeight: editingEntry.weight || "" })}
+                    onClick={() => setEditingEntry({ ...editingEntry, karat: null, multiplier: 1 })}
                     className={cn(
                       "flex-1 py-3 rounded-xl border text-sm font-bold transition-all",
                       editingEntry.karat === null ? "bg-[#c9a84c11] border-[#c9a84c] text-[#c9a84c]" : "bg-[#080a0f] border-[#1a1e2a] text-[#5a5548]"
@@ -249,9 +270,7 @@ export const EditingEntryModal = ({
                   value={editingEntry.weight || ''}
                   onChangeValue={(v) => {
                     let w = normalize(v);
-                    if (w.includes('.')) { const [i, d] = w.split('.'); if (d?.length > 2) w = `${i}.${d.slice(0, 2)}`; }
-                    const m = editingEntry.multiplier || 1;
-                    setEditingEntry({ ...editingEntry, weight: w, arabicWeight: calculateArabicWeight(w, m) });
+                    setEditingEntry(withGoldAudit({ ...editingEntry, weight: w }));
                   }}
                   containerClassName={!showCash ? "col-span-2" : ""}
                   labelClassName="text-xs tracking-widest"
@@ -262,7 +281,7 @@ export const EditingEntryModal = ({
                 <div className="space-y-2">
                   <label className="text-xs text-[#5a5548] font-bold uppercase tracking-widest px-1">جرام عربي</label>
                   <div className="w-full bg-[#0a0e06] border border-[#c9a84c33] rounded-2xl p-4 text-base font-bold text-[#c9a84c] min-h-[54px] flex items-center justify-center font-mono">
-                    {editingEntry.arabicWeight ? parseFloat(editingEntry.arabicWeight).toFixed(2) : "—"}
+                    {canCalculateGoldEquivalent21(editingEntry.weight || '', editingEntry.karat ?? inferGoldKaratFromMultiplier(editingEntry.multiplier)) ? calculateArabicWeight(editingEntry.weight || '', editingEntry.multiplier || 1, editingEntry.karat) : (editingEntry.goldEquivalent21Snapshot?.equivalent21 ?? '-')}
                   </div>
                 </div>
 

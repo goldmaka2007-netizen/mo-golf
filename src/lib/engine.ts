@@ -1,6 +1,7 @@
 ﻿import { Entry, Account, AccountingOperationKind } from '../types';
 import { OPERATION_RULES } from '../constants';
 import { parseWeight, normalizeNumerals } from './accounting';
+import { canCalculateGoldEquivalent21, calculateGoldEquivalent21 } from './goldEquivalent';
 
 export const KARAT_MULT: Record<string, number> = { '18': 18 / 21, '21': 1, '24': 24 / 21, silver: 1 };
 
@@ -53,8 +54,20 @@ export const getEntryKaratKey = (entry: Entry, debitAcc?: Account, creditAcc?: A
 
 export const getEntryArabicWeight = (entry: Entry, account?: Account): number => {
   const weight = parseWeight(entry.weight);
-  const karat = account?.metal === 'silver' ? 'silver' : account?.karat ?? entry.karat ?? '21';
-  return weight * getKaratMultiplier(karat);
+  if (weight <= 0) return 0;
+  if (isAccessoryAccount(account)) return 0;
+  if (account?.metal === 'silver') return weight;
+
+  const karat = account?.karat ?? entry.karat ?? '21';
+  if (entry.goldEquivalent21Snapshot && String(entry.goldEquivalent21Snapshot.karat) === String(karat).replace('.0', '')) {
+    return entry.goldEquivalent21Snapshot.equivalent21Units / 100;
+  }
+
+  if (canCalculateGoldEquivalent21(entry.weight, karat)) {
+    return calculateGoldEquivalent21(entry.weight, karat).equivalent21Units / 100;
+  }
+
+  return parseWeight(entry.arabicWeight);
 };
 
 export const parseCash = (entry: Entry): number => parseFloat(normalizeNumerals(String(entry.cash ?? '0'))) || 0;
@@ -377,7 +390,7 @@ export function analyzeProfitability(
 
     const debitIsGold = isMetalInventoryAccount(debitAcc) && isGoldAccount(debitAcc);
     const creditIsGold = isMetalInventoryAccount(creditAcc) && isGoldAccount(creditAcc);
-    const arWeight = weight * getKaratMultiplier(karat);
+    const arWeight = canCalculateGoldEquivalent21(entry.weight, karat) ? calculateGoldEquivalent21(entry.weight, karat).equivalent21Units / 100 : parseWeight(entry.arabicWeight);
 
     if (isPrePeriod) {
       if (debitIsGold) flow.opening += arWeight;
