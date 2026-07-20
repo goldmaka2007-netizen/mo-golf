@@ -1,7 +1,8 @@
-﻿import { Entry, Account, AccountingOperationKind } from '../types';
+import { Entry, Account, AccountingOperationKind } from '../types';
 import { OPERATION_RULES } from '../constants';
 import { parseWeight, normalizeNumerals } from './accounting';
 import { canCalculateGoldEquivalent21, calculateGoldEquivalent21 } from './goldEquivalent';
+import { rebuildCostTimeline, getOperationId, compareEntriesForCost, type CostTimelineResult, type OperationCostResult, type OpeningCostConfig } from './weightedAverageCost';
 
 export const KARAT_MULT: Record<string, number> = { '18': 18 / 21, '21': 1, '24': 24 / 21, silver: 1 };
 
@@ -25,8 +26,8 @@ export const isMerchantWeightAccount = (account?: Account | null): boolean => {
   if (account?.type !== 'merchant') return false;
   if (account.metal === 'gold' || account.metal === 'silver') return true;
 
-  return textIncludesAny(account.balanceNature, ['جرام ذهب', 'جرام فضة'])
-    || textIncludesAny(account.subType, ['تجار ذهب', 'تجار فضة']);
+  return textIncludesAny(account.balanceNature, ['\u062C\u0631\u0627\u0645 \u0630\u0647\u0628', '\u062C\u0631\u0627\u0645 \u0641\u0636\u0629'])
+    || textIncludesAny(account.subType, ['\u062A\u062C\u0627\u0631 \u0630\u0647\u0628', '\u062A\u062C\u0627\u0631 \u0641\u0636\u0629']);
 };
 
 export interface AccountIndex {
@@ -75,32 +76,31 @@ export const parseCash = (entry: Entry): number => parseFloat(normalizeNumerals(
 export const resolveOperationKind = (entry: Entry): AccountingOperationKind => {
   if (entry.operationKind) return entry.operationKind;
 
-  const txKey = entry.subTx ? `رصيد افتتاحي ${entry.subTx}` : (entry.tx || '');
+  const txKey = entry.subTx ? `\u0631\u0635\u064A\u062F \u0627\u0641\u062A\u062A\u0627\u062D\u064A ${entry.subTx}` : (entry.tx || '');
   const rule = OPERATION_RULES[txKey] ?? OPERATION_RULES[entry.tx || ''];
   if (rule?.isOpening) return 'opening';
   if (rule?.isPurchase) return 'purchase';
   if (rule?.isSale) return 'sale';
 
   switch (entry.tx) {
-    case 'تيفيت': return 'tifeet';
-    case 'تحويل': return 'transfer';
-    case 'تسوية':
-    case 'تسوية عجز':
-    case 'تسوية زيادة':
+    case '\u062A\u064A\u0641\u064A\u062A': return 'tifeet';
+    case '\u062A\u062D\u0648\u064A\u0644': return 'transfer';
+    case '\u062A\u0633\u0648\u064A\u0629':
+    case '\u062A\u0633\u0648\u064A\u0629 \u0639\u062C\u0632':
+    case '\u062A\u0633\u0648\u064A\u0629 \u0632\u064A\u0627\u062F\u0629':
       return 'adjustment';
-    case 'حساب تاجر ذهب':
-    case 'حساب تاجر فضة':
+    case '\u062D\u0633\u0627\u0628 \u062A\u0627\u062C\u0631 \u0630\u0647\u0628':
+    case '\u062D\u0633\u0627\u0628 \u062A\u0627\u062C\u0631 \u0641\u0636\u0629':
       return 'merchant_settlement';
-    case 'مسحوبات':
+    case '\u0645\u0633\u062D\u0648\u0628\u0627\u062A':
       return 'personal_withdrawal';
-    case 'م ت':
-    case 'م ا ع':
+    case '\u0645 \u062A':
+    case '\u0645 \u0627 \u0639':
       return 'expense';
     default:
       return rule?.affectsInventory ? 'transfer' : 'other';
   }
 };
-
 export const affectsInventory = (entry: Entry): boolean => {
   const kind = resolveOperationKind(entry);
   return ['opening', 'purchase', 'sale', 'transfer', 'tifeet', 'adjustment', 'merchant_settlement'].includes(kind);
@@ -176,82 +176,57 @@ export function processInventory(entries: Entry[], accountsDb: Account[]): Inven
 
 export interface CostBasisEngine {
   getCost: (accNameOrId: string) => number;
+  getResult: (operationId: string | undefined) => OperationCostResult | undefined;
   avgProductCost: Record<string, number>;
   avgScrapCost: Record<string, number>;
   avgDirectCost: Record<string, number>;
+  timeline: CostTimelineResult;
+  hasMissingCostBasis: boolean;
 }
 
-const ensureCostBucket = (map: Record<string, { totalWeight: number; totalCost: number }>, key: string) => {
-  if (!map[key]) map[key] = { totalWeight: 0, totalCost: 0 };
-  return map[key];
+const averageCostForDisplay = (quantityUnits: number, totalCostMinor: number, isAccessory: boolean): number => {
+  if (quantityUnits <= 0) return 0;
+  const minorPerUnit = totalCostMinor / quantityUnits;
+  return isAccessory ? minorPerUnit / 100 : minorPerUnit;
 };
 
-export function processCostBasis(entries: Entry[], accountsDb: Account[], goldPrice: number, silverPrice: number): CostBasisEngine {
+export function processCostBasis(entries: Entry[], accountsDb: Account[], _goldPrice: number, _silverPrice: number, openingConfig: OpeningCostConfig = {}): CostBasisEngine {
   const index = buildAccountIndex(accountsDb);
-  const productCost: Record<string, { totalWeight: number; totalCost: number }> = {};
-  const scraps: Record<string, { totalWeight: number; totalCost: number }> = {};
-  const directCost: Record<string, { totalWeight: number; totalCost: number }> = {};
+  const timeline = rebuildCostTimeline(entries, accountsDb, openingConfig);
+  const avgProductCost: Record<string, number> = {};
+  const avgScrapCost: Record<string, number> = {};
+  const avgDirectCost: Record<string, number> = {};
 
-  const addCost = (account: Account, weight: number, costValue: number) => {
-    if (weight <= 0) return;
-    const key = account.name;
-    if (account.type === 'gold_raw' || account.type === 'silver') {
-      const bucket = ensureCostBucket(scraps, key);
-      bucket.totalWeight += weight;
-      bucket.totalCost += costValue;
-    } else if (account.type === 'gold_direct') {
-      const bucket = ensureCostBucket(directCost, key);
-      bucket.totalWeight += weight;
-      bucket.totalCost += costValue;
-    } else if (account.type === 'gold_product') {
-      const bucket = ensureCostBucket(productCost, key);
-      bucket.totalWeight += weight;
-      bucket.totalCost += costValue;
-    }
-  };
-
-  entries.forEach(entry => {
-    const kind = resolveOperationKind(entry);
-    const weight = parseWeight(entry.weight);
-    const cash = parseCash(entry);
-    const debitAcc = resolveAccount(entry, 'debit', index);
-    const creditAcc = resolveAccount(entry, 'credit', index);
-
-    if ((kind === 'purchase' || kind === 'opening') && debitAcc && isMetalInventoryAccount(debitAcc) && weight > 0) {
-      const defaultPrice = isSilverAccount(debitAcc) ? silverPrice : goldPrice;
-      const costValue = cash > 0 ? cash : weight * defaultPrice * getKaratMultiplier(debitAcc.karat);
-      addCost(debitAcc, weight, costValue);
-    }
-
-    if (kind === 'tifeet' && debitAcc?.type === 'gold_product' && creditAcc && weight > 0) {
-      const scrap = scraps[creditAcc.name];
-      if (scrap && scrap.totalWeight > 0) {
-        const avgCost = scrap.totalCost / scrap.totalWeight;
-        const transferred = weight * avgCost;
-        scrap.totalWeight -= weight;
-        scrap.totalCost -= transferred;
-        addCost(debitAcc, weight, transferred);
-      }
-    }
+  Object.values(timeline.finalStates).forEach(state => {
+    const account = index.byName.get(state.accountName) ?? index.byId.get(state.accountId);
+    if (!account || state.quantityUnits <= 0 || !state.hasReliableCostBasis) return;
+    const avg = averageCostForDisplay(state.quantityUnits, state.totalCostMinor, isAccessoryAccount(account));
+    if (account.type === 'gold_raw' || account.type === 'silver') avgScrapCost[account.name] = avg;
+    else if (account.type === 'gold_direct') avgDirectCost[account.name] = avg;
+    else if (account.type === 'gold_product' || account.type === 'accessory') avgProductCost[account.name] = avg;
   });
-
-  const avg = (map: Record<string, { totalWeight: number; totalCost: number }>) =>
-    Object.fromEntries(Object.entries(map).map(([key, value]) => [key, value.totalWeight > 0 ? value.totalCost / value.totalWeight : 0]));
-
-  const avgProduct = avg(productCost);
-  const avgScrap = avg(scraps);
-  const avgDirect = avg(directCost);
 
   const getCost = (accNameOrId: string): number => {
     const account = index.byName.get(accNameOrId) ?? index.byId.get(accNameOrId);
     const key = account?.name ?? accNameOrId;
-    const defaultPrice = account?.metal === 'silver' ? silverPrice : goldPrice;
-    return avgProduct[key] ?? avgDirect[key] ?? avgScrap[key] ?? defaultPrice;
+    return avgProductCost[key] ?? avgDirectCost[key] ?? avgScrapCost[key] ?? 0;
   };
 
-  return { avgProductCost: avgProduct, avgScrapCost: avgScrap, avgDirectCost: avgDirect, getCost };
-}
+  const getResult = (operationId: string | undefined): OperationCostResult | undefined => {
+    if (!operationId) return undefined;
+    return timeline.resultsByOperationId[operationId];
+  };
 
+  return {
+    avgProductCost,
+    avgScrapCost,
+    avgDirectCost,
+    getCost,
+    getResult,
+    timeline,
+    hasMissingCostBasis: timeline.results.some(result => result.status === 'missing_cost_basis'),
+  };
+}
 export interface ProfitKaratRow {
   openingAr: number;
   purchAr: number;
@@ -264,6 +239,12 @@ export interface ProfitKaratRow {
 export interface ProfitAccountRow extends ProfitKaratRow {
   karat: string;
   flowsAr: Record<string, number>;
+  cogs: number;
+  missingCostBasisCount: number;
+  invalidCostOperationCount: number;
+  affectedSalesCount: number;
+  profitStatus: 'valid' | 'incomplete_cost_basis' | 'invalid';
+  grossProfit: number | null;
 }
 
 export interface ProfitFlowRow {
@@ -294,6 +275,11 @@ export interface ProfitAnalysisResult {
   accData: Record<string, ProfitAccountRow>;
   flowData: Record<string, ProfitFlowRow>;
   costBasis: CostBasisEngine;
+  profitStatus: 'valid' | 'incomplete_cost_basis' | 'invalid';
+  missingOpeningCostBasisCount: number;
+  missingCostBasisCount: number;
+  invalidCostOperationCount: number;
+  affectedSalesCount: number;
 }
 
 const emptyKaratRow = (): ProfitKaratRow => ({ openingAr: 0, purchAr: 0, purchCash: 0, salesAr: 0, salesCash: 0, closingAr: 0 });
@@ -311,10 +297,12 @@ export function analyzeProfitability(
   silverPrice: number,
   startDate = '2000-01-01',
   endDate = '2099-12-31',
+  openingConfig: OpeningCostConfig = {},
 ): ProfitAnalysisResult {
-  const sorted = [...entries].sort((a, b) => (a.date || '').localeCompare(b.date || ''));
+  const sorted = [...entries].sort(compareEntriesForCost);
   const index = buildAccountIndex(accountsDb);
-  const costBasis = processCostBasis(sorted, accountsDb, goldPrice, silverPrice);
+  const costEntries = sorted.filter(entry => !entry.date || entry.date <= endDate);
+  const costBasis = processCostBasis(costEntries, accountsDb, goldPrice, silverPrice, openingConfig);
 
   const karatData: Record<string, ProfitKaratRow> = {
     '18': emptyKaratRow(),
@@ -331,7 +319,17 @@ export function analyzeProfitability(
 
   const getAccRow = (account: Account, karat: string): ProfitAccountRow => {
     if (!accData[account.name]) {
-      accData[account.name] = { karat, ...emptyKaratRow(), flowsAr: {} };
+      accData[account.name] = {
+        karat,
+        ...emptyKaratRow(),
+        flowsAr: {},
+        cogs: 0,
+        missingCostBasisCount: 0,
+        invalidCostOperationCount: 0,
+        affectedSalesCount: 0,
+        profitStatus: 'valid',
+        grossProfit: 0,
+      };
     }
     return accData[account.name];
   };
@@ -353,7 +351,8 @@ export function analyzeProfitability(
       const row = getAccRow(account, karat);
       const kRow = karatData[karat] ?? karatData['21'];
       const arWeight = getEntryArabicWeight(entry, account);
-      const cashValue = cash > 0 ? cash : weight * costBasis.getCost(account.name);
+      const operationCost = costBasis.getResult(getOperationId(entry));
+      const cashValue = cash;
 
       if (!date || date <= endDate) {
         row.closingAr += arWeight * sign;
@@ -376,6 +375,13 @@ export function analyzeProfitability(
       if (isInPeriod && kind === 'sale' && sign === -1) {
         row.salesAr += arWeight;
         row.salesCash += cashValue;
+        if (operationCost?.status === 'valid') {
+          row.cogs += operationCost.cogsMinor / 100;
+        } else {
+          row.affectedSalesCount += 1;
+          if (operationCost?.status === 'missing_cost_basis') row.missingCostBasisCount += 1;
+          else row.invalidCostOperationCount += 1;
+        }
         kRow.salesAr += arWeight;
         kRow.salesCash += cashValue;
       }
@@ -408,14 +414,14 @@ export function analyzeProfitability(
       if (debitIsGold) {
         flow.tifeetIn += arWeight;
         flow.tifeetMarket += arWeight * goldPrice;
-        flow.tifeetCost += arWeight * costBasis.getCost(debitAcc?.name || '');
+        flow.tifeetCost += (costBasis.getResult(getOperationId(entry))?.incomingCostMinor || 0) / 100;
       }
       if (creditIsGold) flow.tifeetOut += arWeight;
     } else if (kind === 'transfer') {
       if (debitIsGold) {
         flow.transferIn += arWeight;
         flow.transferMarket += arWeight * goldPrice;
-        flow.transferCost += arWeight * costBasis.getCost(debitAcc?.name || '');
+        flow.transferCost += (costBasis.getResult(getOperationId(entry))?.incomingCostMinor || 0) / 100;
       }
       if (creditIsGold) flow.transferOut += arWeight;
     } else if (kind === 'adjustment') {
@@ -436,6 +442,30 @@ export function analyzeProfitability(
     flow.closingMarket = flow.closing * goldPrice * mult;
   });
 
-  return { karatData, accData, flowData, costBasis };
+  let missingCostBasisCount = 0;
+  let invalidCostOperationCount = 0;
+  let affectedSalesCount = 0;
+  Object.values(accData).forEach(row => {
+    if (row.affectedSalesCount > 0) {
+      row.profitStatus = row.missingCostBasisCount > 0 ? 'incomplete_cost_basis' : 'invalid';
+      row.grossProfit = null;
+    } else {
+      row.profitStatus = 'valid';
+      row.grossProfit = row.salesCash - row.cogs;
+    }
+    missingCostBasisCount += row.missingCostBasisCount;
+    invalidCostOperationCount += row.invalidCostOperationCount;
+    affectedSalesCount += row.affectedSalesCount;
+  });
+
+  const profitStatus = affectedSalesCount === 0
+    ? 'valid'
+    : missingCostBasisCount > 0 ? 'incomplete_cost_basis' : 'invalid';
+
+  const missingOpeningCostBasisCount = costBasis.timeline.results.filter(result =>
+    result.status === 'missing_cost_basis' && resolveOperationKind(result.entry) === 'opening'
+  ).length;
+
+  return { karatData, accData, flowData, costBasis, profitStatus, missingOpeningCostBasisCount, missingCostBasisCount, invalidCostOperationCount, affectedSalesCount };
 }
 

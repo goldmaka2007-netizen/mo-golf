@@ -1,6 +1,6 @@
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
-import { Entry, FirebaseUser, AccountCategories, Account, TransactionRule, CustomRule, InventoryCheck } from './types';
+import { Entry, FirebaseUser, AccountCategories, Account, TransactionRule, CustomRule, InventoryCheck, AnnualOpeningCostConfig } from './types';
 import { ACCOUNT_CATEGORIES } from './constants';
 
 interface AppState {
@@ -42,6 +42,9 @@ interface AppState {
 
   silverSpread: number;
   setSilverSpread: (spread: number) => void;
+
+  openingCostConfig: AnnualOpeningCostConfig[];
+  setOpeningCostConfig: (config: AnnualOpeningCostConfig[]) => void;
 
   goldKarat: 18 | 21;
   setGoldKarat: (karat: 18 | 21) => void;
@@ -161,6 +164,9 @@ export const useAppStore = create<AppState>()(
   silverSpread: 5,
   setSilverSpread: (silverSpread) => set({ silverSpread }),
 
+  openingCostConfig: [],
+  setOpeningCostConfig: (openingCostConfig) => set({ openingCostConfig }),
+
   goldKarat: 21,
   setGoldKarat: (goldKarat) => set({ goldKarat }),
 
@@ -235,7 +241,8 @@ export const useAppStore = create<AppState>()(
         goldSpread: state.goldSpread,
         silverPrice: state.silverPrice,
         silverBuyPrice: state.silverBuyPrice,
-        silverSpread: state.silverSpread
+        silverSpread: state.silverSpread,
+        openingCostConfig: state.openingCostConfig
       }),
     }
   )

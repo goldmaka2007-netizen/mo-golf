@@ -148,6 +148,12 @@ export interface InventoryCheck {
   isResolved?: boolean;
 }
 
+export interface AnnualOpeningCostConfig {
+  year: number;
+  gold21PriceMinorPerGram?: number | string;
+  silverPriceMinorPerGram?: number | string;
+}
+
 export interface Category {
   cat: string;
   items: string[];

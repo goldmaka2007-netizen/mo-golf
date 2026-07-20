@@ -20,7 +20,8 @@ export const useDataSync = (user: any, isAuthReady: boolean) => {
     setSilverPrice, 
     setSilverBuyPrice,
     setSilverSpread,
-    setAccountCategories
+    setAccountCategories,
+    setOpeningCostConfig
   } = useAppStore();
 
   useEffect(() => {
@@ -168,6 +169,9 @@ export const useDataSync = (user: any, isAuthReady: boolean) => {
         if (data.silverBuyPrice) setSilverBuyPrice(data.silverBuyPrice);
         if (data.silverSpread) setSilverSpread(data.silverSpread);
         if (data.accountCategories) setAccountCategories(data.accountCategories);
+        setOpeningCostConfig(Array.isArray(data.openingCostConfig) ? data.openingCostConfig : []);
+      } else {
+        setOpeningCostConfig([]);
       }
     }, (error) => {
       console.warn("Settings snapshot error:", error);

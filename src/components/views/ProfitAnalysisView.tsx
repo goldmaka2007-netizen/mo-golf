@@ -1,14 +1,15 @@
 ﻿import React, { useMemo, useState } from "react";
 import { format, parseISO } from "date-fns";
 import { ar } from "date-fns/locale";
-import { Download, Layers, TrendingUp } from "lucide-react";
+import { AlertTriangle, Download, Layers, TrendingUp } from "lucide-react";
 import { useAppStore } from "../../store";
 import { analyzeProfitability, type ProfitAccountRow } from "../../lib/engine";
+import { buildOpeningCostConfig } from "../../lib/openingCostConfig";
 import { cn } from "../../lib/utils";
 import { exportToExcel } from "../../utils/exportUtils";
 
 export const ProfitAnalysisView = () => {
-  const { entries, goldPrice, silverPrice, accountsDb } = useAppStore();
+  const { entries, goldPrice, silverPrice, accountsDb, openingCostConfig, setView } = useAppStore();
   const [selectedMonth, setSelectedMonth] = useState("all");
 
   const availableMonths = useMemo(() => {
@@ -22,9 +23,9 @@ export const ProfitAnalysisView = () => {
   const startDate = selectedMonth === "all" ? "2000-01-01" : `${selectedMonth}-01`;
   const endDate = selectedMonth === "all" ? "2099-12-31" : `${selectedMonth}-31`;
 
-  const { karatData, accData, flowData, costBasis } = useMemo(
-    () => analyzeProfitability(entries, accountsDb, goldPrice, silverPrice, startDate, endDate),
-    [entries, accountsDb, goldPrice, silverPrice, startDate, endDate],
+  const { karatData, accData, flowData, profitStatus, affectedSalesCount, missingOpeningCostBasisCount } = useMemo(
+    () => analyzeProfitability(entries, accountsDb, goldPrice, silverPrice, startDate, endDate, buildOpeningCostConfig(openingCostConfig)),
+    [entries, accountsDb, goldPrice, silverPrice, startDate, endDate, openingCostConfig],
   );
 
   const goldRows = ["18", "21", "24"].map(karat => ({ karat, ...karatData[karat] }));
@@ -43,16 +44,18 @@ export const ProfitAnalysisView = () => {
 
   const goldCOGS = (Object.entries(accData) as [string, ProfitAccountRow][]).reduce((sum, [name, row]) => {
     if (row.karat === "silver") return sum;
-    return sum + row.salesAr * costBasis.getCost(name);
+    return sum + row.cogs;
   }, 0);
   const silverCOGS = (Object.entries(accData) as [string, ProfitAccountRow][]).reduce((sum, [name, row]) => {
     if (row.karat !== "silver") return sum;
-    return sum + row.salesAr * costBasis.getCost(name);
+    return sum + row.cogs;
   }, 0);
 
-  const goldProfit = totalGold.salesCash - goldCOGS;
-  const silverProfit = silverRow.salesCash - silverCOGS;
-  const totalProfit = goldProfit + silverProfit;
+  const hasIncompleteGoldProfit = (Object.values(accData) as ProfitAccountRow[]).some(row => row.karat !== 'silver' && row.profitStatus !== 'valid');
+  const hasIncompleteSilverProfit = (Object.values(accData) as ProfitAccountRow[]).some(row => row.karat === 'silver' && row.profitStatus !== 'valid');
+  const goldProfit = hasIncompleteGoldProfit ? null : totalGold.salesCash - goldCOGS;
+  const silverProfit = hasIncompleteSilverProfit ? null : silverRow.salesCash - silverCOGS;
+  const totalProfit = profitStatus === 'valid' && goldProfit !== null && silverProfit !== null ? goldProfit + silverProfit : null;
   const avgSalePrice = totalGold.salesAr > 0 ? totalGold.salesCash / totalGold.salesAr : 0;
   const avgPurchPrice = totalGold.purchAr > 0 ? totalGold.purchCash / totalGold.purchAr : 0;
 
@@ -97,9 +100,27 @@ export const ProfitAnalysisView = () => {
           { label: "إيرادات الذهب", value: totalGold.salesCash.toLocaleString(), color: "text-green-400" },
           { label: "متوسط البيع/جم 21", value: Math.round(avgSalePrice).toLocaleString(), color: "text-[#ddd8cc]" },
           { label: "متوسط الشراء/جم 21", value: Math.round(avgPurchPrice).toLocaleString(), color: "text-blue-400" },
-          { label: "صافي الربح التقديري", value: Math.round(totalProfit).toLocaleString(), color: totalProfit >= 0 ? "text-green-400" : "text-red-400" },
+          { label: "صافي الربح التقديري", value: totalProfit === null ? "غير متاح" : Math.round(totalProfit).toLocaleString(), color: totalProfit === null ? "text-yellow-400" : totalProfit >= 0 ? "text-green-400" : "text-red-400" },
         ].map(item => <div key={item.label} className="bg-[#0e1018] border border-[#1a1e2a] p-4 rounded-2xl"><p className="text-[10px] text-[#5a5548] font-bold mb-1">{item.label}</p><div className={cn("text-xl font-black font-mono", item.color)}>{item.value} <span className="text-xs">ج.م</span></div></div>)}
       </div>
+
+      {affectedSalesCount > 0 && (
+        <div className="bg-yellow-500/10 border border-yellow-500/30 text-yellow-200 rounded-2xl p-4 text-sm font-bold">
+          لا يمكن حساب الربح بدقة لوجود عمليات بيع بدون تكلفة مخزون موثقة.
+        </div>
+      )}
+
+      {missingOpeningCostBasisCount > 0 && (
+        <div className="bg-yellow-500/10 border border-yellow-500/30 text-yellow-200 rounded-2xl p-4 text-sm font-bold flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+          <div className="flex items-start gap-2">
+            <AlertTriangle className="w-4 h-4 mt-0.5 shrink-0" />
+            <span>تكلفة المخزون الافتتاحي غير مكتملة. أدخل سعر الافتتاح السنوي من الإعدادات لإظهار تكلفة المخزون والأرباح بدقة.</span>
+          </div>
+          <button onClick={() => setView('settings')} className="px-3 py-2 rounded-xl bg-yellow-500/20 border border-yellow-500/30 text-[11px] font-bold">
+            فتح الإعدادات
+          </button>
+        </div>
+      )}
 
       <div className="bg-[#0e1018] border border-[#1a1e2a] rounded-2xl overflow-hidden">
         <div className="p-4 border-b border-[#1a1e2a] flex justify-between items-center">
@@ -135,7 +156,7 @@ export const ProfitAnalysisView = () => {
         <div><p className="text-[10px] text-[#5a5548] mb-1">فضة افتتاحي</p><div className="text-lg font-black font-mono text-[#ddd8cc]">{silverRow.openingAr.toFixed(2)}</div></div>
         <div><p className="text-[10px] text-[#5a5548] mb-1">فضة مشتريات</p><div className="text-lg font-black font-mono text-blue-400">{silverRow.purchAr.toFixed(2)}</div></div>
         <div><p className="text-[10px] text-[#5a5548] mb-1">فضة مبيعات</p><div className="text-lg font-black font-mono text-red-400">{silverRow.salesAr.toFixed(2)}</div></div>
-        <div><p className="text-[10px] text-[#5a5548] mb-1">ربح الفضة</p><div className={cn("text-lg font-black font-mono", silverProfit >= 0 ? "text-green-400" : "text-red-400")}>{Math.round(silverProfit).toLocaleString()} ج.م</div></div>
+        <div><p className="text-[10px] text-[#5a5548] mb-1">ربح الفضة</p><div className={cn("text-lg font-black font-mono", silverProfit === null ? "text-yellow-400" : silverProfit >= 0 ? "text-green-400" : "text-red-400")}>{silverProfit === null ? "غير متاح" : Math.round(silverProfit).toLocaleString()} ج.م</div></div>
       </div>
     </div>
   );

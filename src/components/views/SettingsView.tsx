@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useMemo, useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { 
   Settings as SettingsIcon, 
@@ -22,24 +22,114 @@ import {
   addDoc, 
   deleteDoc, 
   doc, 
+  setDoc,
   writeBatch 
 } from 'firebase/firestore';
 import { User as FirebaseUser } from 'firebase/auth';
 import * as XLSX from 'xlsx';
 import { db, OperationType, handleFirestoreError } from '../../firebase';
-import { Entry, CustomRule } from '../../types';
+import { Entry, CustomRule, AnnualOpeningCostConfig } from '../../types';
 import { useAppStore } from '../../store';
 import { cn } from '../../lib/utils';
 import { ChartOfAccountsSettings } from './ChartOfAccountsSettings';
+import { formatMinorUnitsToEgpInput, parseEgpToMinorUnits } from '../../lib/openingCostConfig';
 
 export const SettingsView = React.memo(() => {
-  const { setView, customRules, user, entries, setGlobalError } = useAppStore();
+  const { setView, customRules, user, entries, setGlobalError, openingCostConfig, setOpeningCostConfig } = useAppStore();
   const [newRule, setNewRule] = useState({ t: '', d: '', c: '', k: '', m: '1' });
+  const [openingPriceForm, setOpeningPriceForm] = useState({ year: String(new Date().getFullYear()), gold: '', silver: '' });
+  const [openingPriceError, setOpeningPriceError] = useState('');
+  const [isSavingOpeningPrice, setIsSavingOpeningPrice] = useState(false);
   const [importText, setImportText] = useState('');
   const [isImporting, setIsImporting] = useState(false);
   const [isDeletingAll, setIsDeletingAll] = useState(false);
   const [showDeleteAllConfirm, setShowDeleteAllConfirm] = useState(false);
-  const [activeTab, setActiveTab] = useState<'rules' | 'import' | 'accounts'>('rules');
+  const [activeTab, setActiveTab] = useState<'rules' | 'cost' | 'import' | 'accounts'>('rules');
+
+  const sortedOpeningCostConfig = useMemo(
+    () => [...openingCostConfig].sort((a, b) => Number(a.year) - Number(b.year)),
+    [openingCostConfig],
+  );
+
+  const validateOpeningPriceForm = (): AnnualOpeningCostConfig => {
+    const year = Number(openingPriceForm.year);
+    if (!Number.isInteger(year) || year < 2000 || year > 2100) {
+      throw new Error('أدخل سنة صحيحة بين 2000 و 2100.');
+    }
+
+    const next: AnnualOpeningCostConfig = { year };
+    const gold = openingPriceForm.gold.trim();
+    const silver = openingPriceForm.silver.trim();
+    if (!gold && !silver) {
+      throw new Error('أدخل سعر افتتاح للذهب أو الفضة على الأقل.');
+    }
+    if (gold) {
+      let goldMinor: number;
+      try {
+        goldMinor = parseEgpToMinorUnits(gold);
+      } catch {
+        throw new Error('سعر افتتاح الذهب يجب أن يكون رقمًا صحيحًا أو عشريًا حتى قرشين.');
+      }
+      if (goldMinor <= 0) throw new Error('سعر افتتاح الذهب يجب أن يكون أكبر من صفر.');
+      next.gold21PriceMinorPerGram = goldMinor;
+    }
+    if (silver) {
+      let silverMinor: number;
+      try {
+        silverMinor = parseEgpToMinorUnits(silver);
+      } catch {
+        throw new Error('سعر افتتاح الفضة يجب أن يكون رقمًا صحيحًا أو عشريًا حتى قرشين.');
+      }
+      if (silverMinor <= 0) throw new Error('سعر افتتاح الفضة يجب أن يكون أكبر من صفر.');
+      next.silverPriceMinorPerGram = silverMinor;
+    }
+    return next;
+  };
+
+  const persistOpeningCostConfig = async (nextConfig: AnnualOpeningCostConfig[]) => {
+    if (!user?.uid) throw new Error('لا يوجد مستخدم نشط لحفظ الإعدادات.');
+    const sorted = [...nextConfig].sort((a, b) => Number(a.year) - Number(b.year));
+    await setDoc(doc(db, 'settings', user.uid), { openingCostConfig: sorted }, { merge: true });
+    setOpeningCostConfig(sorted);
+  };
+
+  const handleSaveOpeningPrice = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setOpeningPriceError('');
+    setIsSavingOpeningPrice(true);
+    try {
+      const nextRow = validateOpeningPriceForm();
+      const nextConfig = sortedOpeningCostConfig.filter(row => Number(row.year) !== nextRow.year);
+      await persistOpeningCostConfig([...nextConfig, nextRow]);
+      setOpeningPriceForm({ year: String(nextRow.year + 1), gold: '', silver: '' });
+    } catch (error) {
+      setOpeningPriceError(error instanceof Error ? error.message : 'تعذر حفظ سعر الافتتاح. راجع القيم المدخلة.');
+    } finally {
+      setIsSavingOpeningPrice(false);
+    }
+  };
+
+  const handleEditOpeningPrice = (row: AnnualOpeningCostConfig) => {
+    setOpeningPriceError('');
+    setOpeningPriceForm({
+      year: String(row.year),
+      gold: formatMinorUnitsToEgpInput(row.gold21PriceMinorPerGram),
+      silver: formatMinorUnitsToEgpInput(row.silverPriceMinorPerGram),
+    });
+  };
+
+  const handleDeleteOpeningPrice = async (year: number) => {
+    if (!window.confirm(`حذف أسعار افتتاح سنة ${year}؟`)) return;
+    setOpeningPriceError('');
+    setIsSavingOpeningPrice(true);
+    try {
+      await persistOpeningCostConfig(sortedOpeningCostConfig.filter(row => Number(row.year) !== Number(year)));
+    } catch (error) {
+      setOpeningPriceError(error instanceof Error ? error.message : 'تعذر حذف سنة الافتتاح.');
+    } finally {
+      setIsSavingOpeningPrice(false);
+    }
+  };
 
   const handleDeleteAllData = async () => {
     setIsDeletingAll(true);
@@ -390,6 +480,15 @@ export const SettingsView = React.memo(() => {
           شجرة الحسابات
         </button>
         <button
+          onClick={() => setActiveTab('cost')}
+          className={cn(
+            "px-4 py-2 rounded-full text-xs font-bold whitespace-nowrap transition-all",
+            activeTab === 'cost' ? "bg-[#c9a84c] text-[#080a0f]" : "bg-[#1a1e2a] text-[#5a5548] hover:text-[#ddd8cc]"
+          )}
+        >
+          أسعار افتتاح التكلفة
+        </button>
+        <button
           onClick={() => setActiveTab('import')}
           className={cn(
             "px-4 py-2 rounded-full text-xs font-bold whitespace-nowrap transition-all",
@@ -401,6 +500,83 @@ export const SettingsView = React.memo(() => {
       </div>
 
       <AnimatePresence mode="wait">
+        {activeTab === 'cost' && (
+          <motion.div
+            key="cost"
+            initial={{ opacity: 0, y: 10 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: -10 }}
+            className="space-y-4"
+            dir="rtl"
+          >
+            <div className="bg-[#0e1018] border border-[#1a1e2a] rounded-3xl p-6 space-y-5">
+              <div className="space-y-1">
+                <h3 className="text-sm font-bold text-[#ddd8cc]">أسعار الافتتاح السنوية للتكلفة</h3>
+                <p className="text-[11px] text-[#8a8172] leading-6">
+                  تُستخدم هذه الأسعار فقط لتحديد تكلفة المخزون الافتتاحي وحساب متوسط التكلفة. لا تُستخدم كتقييم سوقي حالي.
+                </p>
+              </div>
+
+              <form onSubmit={handleSaveOpeningPrice} className="grid grid-cols-1 md:grid-cols-[120px_1fr_1fr_auto] gap-3 items-end">
+                <label className="space-y-1">
+                  <span className="text-[10px] font-bold text-[#c9a84c]">السنة</span>
+                  <input value={openingPriceForm.year} onChange={(e) => setOpeningPriceForm(prev => ({ ...prev, year: e.target.value }))} inputMode="numeric" className="w-full bg-[#080a0f] border border-[#1a1e2a] rounded-xl p-3 text-sm text-[#ddd8cc] outline-none focus:border-[#c9a84c55]" placeholder="2026" />
+                </label>
+                <label className="space-y-1">
+                  <span className="text-[10px] font-bold text-[#c9a84c]">سعر افتتاح جرام الذهب عيار 21 بالجنيه</span>
+                  <input value={openingPriceForm.gold} onChange={(e) => setOpeningPriceForm(prev => ({ ...prev, gold: e.target.value }))} inputMode="decimal" className="w-full bg-[#080a0f] border border-[#1a1e2a] rounded-xl p-3 text-sm text-[#ddd8cc] outline-none focus:border-[#c9a84c55]" placeholder="4000" />
+                </label>
+                <label className="space-y-1">
+                  <span className="text-[10px] font-bold text-[#c9a84c]">سعر افتتاح جرام الفضة بالجنيه</span>
+                  <input value={openingPriceForm.silver} onChange={(e) => setOpeningPriceForm(prev => ({ ...prev, silver: e.target.value }))} inputMode="decimal" className="w-full bg-[#080a0f] border border-[#1a1e2a] rounded-xl p-3 text-sm text-[#ddd8cc] outline-none focus:border-[#c9a84c55]" placeholder="60" />
+                </label>
+                <button type="submit" disabled={isSavingOpeningPrice} className="px-5 py-3 bg-[#c9a84c] text-[#080a0f] rounded-xl text-xs font-bold flex items-center justify-center gap-2 disabled:opacity-60">
+                  {isSavingOpeningPrice ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
+                  حفظ
+                </button>
+              </form>
+
+              {openingPriceError && (
+                <div className="bg-red-500/10 border border-red-500/30 text-red-200 rounded-2xl p-3 text-xs font-bold">
+                  {openingPriceError}
+                </div>
+              )}
+
+              <div className="overflow-x-auto border border-[#1a1e2a] rounded-2xl">
+                <table className="w-full text-right text-xs min-w-[620px]">
+                  <thead>
+                    <tr className="border-b border-[#1a1e2a] [&>th]:p-3 [&>th]:text-[#8a8172]">
+                      <th>السنة</th>
+                      <th>ذهب 21 بالجنيه</th>
+                      <th>فضة بالجنيه</th>
+                      <th>إجراءات</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-[#1a1e2a] [&>tr>td]:p-3">
+                    {sortedOpeningCostConfig.length === 0 ? (
+                      <tr>
+                        <td colSpan={4} className="text-center text-[#8a8172]">لا توجد أسعار افتتاح محفوظة بعد.</td>
+                      </tr>
+                    ) : sortedOpeningCostConfig.map(row => (
+                      <tr key={row.year}>
+                        <td className="font-mono font-bold text-[#ddd8cc]">{row.year}</td>
+                        <td className="font-mono text-[#ddd8cc]">{formatMinorUnitsToEgpInput(row.gold21PriceMinorPerGram) || "-"}</td>
+                        <td className="font-mono text-[#ddd8cc]">{formatMinorUnitsToEgpInput(row.silverPriceMinorPerGram) || "-"}</td>
+                        <td>
+                          <div className="flex gap-2">
+                            <button type="button" onClick={() => handleEditOpeningPrice(row)} className="px-3 py-2 bg-[#1a1e2a] text-[#c9a84c] rounded-lg text-[10px] font-bold">تعديل</button>
+                            <button type="button" onClick={() => handleDeleteOpeningPrice(Number(row.year))} className="px-3 py-2 bg-red-500/10 text-red-300 rounded-lg text-[10px] font-bold">حذف السنة</button>
+                          </div>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          </motion.div>
+        )}
+
         {activeTab === 'import' && (
           <motion.div
             key="import"

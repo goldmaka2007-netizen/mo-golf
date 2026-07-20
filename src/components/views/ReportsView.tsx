@@ -1,17 +1,15 @@
 import React, { useMemo, useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { 
-  ChevronRight, TrendingUp, Calendar, Landmark, Briefcase, BookOpen, PieChart, Book, BookMarked, RefreshCw, Download
+  AlertTriangle, ChevronRight, TrendingUp, Calendar, Landmark, Briefcase, BookOpen, PieChart, Book, BookMarked, RefreshCw, Download
 } from 'lucide-react';
 import { format } from 'date-fns';
 import { useAppStore } from '../../store';
 import { cn } from '../../lib/utils';
 import { exportToExcel } from '../../utils/exportUtils';
 import { getMetricValue, getDynamicAccountNature } from '../../utils/accountLogic';
-import { parseWeight, normalizeNumerals } from '../../lib/accounting';
-import { AccountNature } from '../../types';
-import { OPERATION_RULES } from '../../constants';
-import { processCostBasis } from '../../lib/engine';
+import { analyzeProfitability } from '../../lib/engine';
+import { buildOpeningCostConfig } from '../../lib/openingCostConfig';
 import { IncomeStatementView } from './reports/IncomeStatementView';
 import { EquityStatementView } from './reports/EquityStatementView';
 import { BalanceSheetView } from './reports/BalanceSheetView';
@@ -26,12 +24,12 @@ import { ProfitAnalysisView } from './ProfitAnalysisView';
 import { AdvancedAnalyticsView } from './AdvancedAnalyticsView';
 
 export const ReportsView = React.memo(() => {
-  const { entries, accountsDb, reportsTab, setReportsTab } = useAppStore();
+  const { entries, accountsDb, reportsTab, setReportsTab, goldPrice, silverPrice, openingCostConfig, setView } = useAppStore();
   const [startDate, setStartDate] = useState(format(new Date(new Date().getFullYear(), 0, 1), 'yyyy-MM-dd'));
   const [endDate, setEndDate] = useState(format(new Date(), 'yyyy-MM-dd'));
 
   const handleFullExport = () => {
-    const { goldPrice, silverPrice } = useAppStore.getState();
+    const { goldPrice, silverPrice, openingCostConfig } = useAppStore.getState();
 
     // 1. Journal Sheet
     const journalData = filteredEntries.map(e => ({
@@ -73,50 +71,33 @@ export const ReportsView = React.memo(() => {
       };
     }).filter(a => a["الرصيد النقدي"] !== 0 || a["رصيد الذهب (21)"] !== 0 || a["رصيد الفضة"] !== 0);
 
-    // 3. Profit Analysis Sheet (Simplified)
-    const costBasis = processCostBasis(entries, accountsDb, goldPrice, silverPrice);
+    // 3. Profit Analysis Sheet
+    const profitAnalysis = analyzeProfitability(
+      entries,
+      accountsDb,
+      goldPrice,
+      silverPrice,
+      startDate,
+      endDate,
+      buildOpeningCostConfig(openingCostConfig),
+    );
     const profitData = accountsDb.filter(a => a.is_inventory).map(acc => {
-      let openingAr = 0;
-      let purchAr = 0;
-      let salesAr = 0;
-      let purchCash = 0;
-      let salesCash = 0;
-
-      entries.forEach(e => {
-        const isOpening = e.tx.includes("رصيد اول") || e.tx.includes("قيد افتتاحي") || (OPERATION_RULES[e.tx]?.isOpening);
-        const w = parseWeight(e.weight);
-        const k = e.karat ? String(e.karat) : (acc.karat || '21');
-        const m = k === "18" ? 18/21 : (k === "24" ? 24/21 : 1);
-        const aw = w * m;
-        const opRule = OPERATION_RULES[e.tx || ''];
-
-        if (isOpening && (e.debit === acc.name || e.credit === acc.name)) {
-          openingAr += (e.debit === acc.name ? aw : -aw);
-        } else if (e.date >= startDate && e.date <= endDate) {
-          if (e.debit === acc.name && opRule?.isPurchase) {
-            purchAr += aw;
-            purchCash += (parseFloat(e.cash) || (aw * costBasis.getCost(acc.name)));
-          }
-          if (e.credit === acc.name && opRule?.isSale) {
-            salesAr += aw;
-            salesCash += (parseFloat(e.cash) || 0);
-          }
-        }
-      });
-
-      const closingAr = openingAr + purchAr - salesAr;
-      const profit = salesCash - (salesAr * costBasis.getCost(acc.name));
+      const row = profitAnalysis.accData[acc.name];
+      const hasIncompleteOpeningCost = profitAnalysis.missingOpeningCostBasisCount > 0;
+      const profit = hasIncompleteOpeningCost ? null : row?.grossProfit ?? null;
 
       return {
-        "الصنف": acc.name,
-        "العيار": acc.karat || "N/A",
-        "الافتتاحي": openingAr,
-        "المشتريات": purchAr,
-        "تكلفة الشراء": purchCash,
-        "المبيعات": salesAr,
-        "قيمة المبيعات": salesCash,
-        "الرصيد الحالي": closingAr,
-        "الربح التقديري": profit
+        account: acc.name,
+        karat: acc.karat || "N/A",
+        openingEquivalent21: row?.openingAr ?? 0,
+        purchasesEquivalent21: row?.purchAr ?? 0,
+        purchaseCost: row?.purchCash ?? 0,
+        salesEquivalent21: row?.salesAr ?? 0,
+        salesRevenue: row?.salesCash ?? 0,
+        salesCogs: row?.cogs ?? 0,
+        closingEquivalent21: row?.closingAr ?? 0,
+        profitStatus: hasIncompleteOpeningCost ? "incomplete_cost_basis" : row?.profitStatus ?? "valid",
+        grossProfit: profit === null ? "unavailable" : profit
       };
     });
 
@@ -134,6 +115,11 @@ export const ReportsView = React.memo(() => {
   const balanceEntries = useMemo(() => {
     return entries.filter(e => e.date <= endDate);
   }, [entries, endDate]);
+
+  const reportProfitAnalysis = useMemo(
+    () => analyzeProfitability(entries, accountsDb, goldPrice, silverPrice, startDate, endDate, buildOpeningCostConfig(openingCostConfig)),
+    [entries, accountsDb, goldPrice, silverPrice, startDate, endDate, openingCostConfig],
+  );
 
   const subTabs = [
     { id: 'profit-analysis', label: 'الربحية', icon: <PieChart className="w-4 h-4" /> },
@@ -194,6 +180,24 @@ export const ReportsView = React.memo(() => {
         </div>
       </div>
       {/* Report Navigation */}
+      {reportProfitAnalysis.missingOpeningCostBasisCount > 0 && (
+        <div className="bg-yellow-500/10 border border-yellow-500/30 text-yellow-200 rounded-2xl p-4 text-sm font-bold flex flex-col sm:flex-row sm:items-center justify-between gap-3" dir="rtl">
+          <div className="flex items-start gap-2">
+            <AlertTriangle className="w-4 h-4 mt-0.5 shrink-0" />
+            <span>تكلفة المخزون الافتتاحي غير مكتملة. أدخل سعر الافتتاح السنوي من الإعدادات لإظهار تكلفة المخزون والأرباح بدقة.</span>
+          </div>
+          <button onClick={() => setView('settings')} className="px-3 py-2 rounded-xl bg-yellow-500/20 border border-yellow-500/30 text-[11px] font-bold">
+            فتح الإعدادات
+          </button>
+        </div>
+      )}
+
+      {reportProfitAnalysis.affectedSalesCount > 0 && (
+        <div className="bg-yellow-500/10 border border-yellow-500/30 text-yellow-200 rounded-2xl p-4 text-sm font-bold" dir="rtl">
+          لا يمكن حساب الربح بدقة لوجود عمليات بيع بدون تكلفة مخزون موثقة.
+        </div>
+      )}
+
       <div className="space-y-3">
         <div className="flex items-center justify-between px-1">
           <h2 className="text-sm font-black text-[#f5f1e8]">التقارير والتحليلات</h2>
@@ -246,5 +250,3 @@ export const ReportsView = React.memo(() => {
     </motion.div>
   );
 });
-
-
