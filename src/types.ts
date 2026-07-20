@@ -119,6 +119,8 @@ export interface Account {
   karat?: '18' | '21' | '24' | 'silver' | null;
   metal?: 'gold' | 'silver' | null;
   is_inventory?: boolean;
+  quantityStep?: number | string;
+  isActive?: boolean;
 }
 
 export interface TransactionRule {
@@ -158,6 +160,3 @@ export interface Category {
   cat: string;
   items: string[];
 }
-
-
-

@@ -1,4 +1,4 @@
-﻿import React, { useState, useMemo, useEffect } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import { motion } from 'framer-motion';
 import { 
   CheckCircle2, 
@@ -34,7 +34,7 @@ import {
 } from '../../lib/accounting';
 import { FormInput } from '../ui/FormInput';
 import { buildGoldEquivalent21Audit, canCalculateGoldEquivalent21, inferGoldKaratFromMultiplier } from '../../lib/goldEquivalent';
-import { getOperationId, rebuildCostTimeline } from '../../lib/weightedAverageCost';
+import { getOperationId, rebuildCostTimeline, isQuantityAlignedToStep } from '../../lib/weightedAverageCost';
 import { buildOpeningCostConfig } from '../../lib/openingCostConfig';
 import { isGoldEquivalentEntry } from '../../utils/accountLogic';
 import { AccountSearchSelect } from '../ui/AccountSearchSelect';
@@ -449,6 +449,12 @@ export const EntryForm = React.memo(() => {
           entry.goldEquivalent21Snapshot = goldAudit.snapshot;
           if (goldAudit.legacyComparison) entry.goldEquivalent21LegacyComparison = goldAudit.legacyComparison;
         }
+      }
+
+      const accessoryAccount = accountsDb.find(acc => acc.type === 'accessory' && (acc.name === entry.debit || acc.name === entry.credit || acc.id === entry.debitAccountId || acc.id === entry.creditAccountId));
+      if (accessoryAccount && !isQuantityAlignedToStep(entry.count, accessoryAccount.quantityStep ?? 1)) {
+        setGlobalError(`كمية الملحقات يجب أن تكون من مضاعفات خطوة الصنف (${accessoryAccount.quantityStep ?? 1}).`);
+        return;
       }
 
       const pendingEntry = { ...entry, id: '__pending_cost_validation__' } as Entry;
@@ -910,4 +916,3 @@ export const EntryForm = React.memo(() => {
     </motion.div>
   );
 });
-

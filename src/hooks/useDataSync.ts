@@ -100,16 +100,21 @@ export const useDataSync = (user: any, isAuthReady: boolean) => {
         const batch = writeBatch(db);
         let count = 0;
         data.forEach(acc => {
-          if (!acc.type && acc.id) {
+          if (acc.id) {
             const seedInfo = SEED_ACCOUNTS.find(s => s.name === acc.name);
-            if (seedInfo) {
+            const updates: Record<string, unknown> = {};
+            if (!acc.type && seedInfo) {
+              updates.type = seedInfo.type;
+              updates.is_inventory = seedInfo.is_inventory;
+              updates.karat = seedInfo.karat;
+              updates.metal = seedInfo.metal;
+            }
+            if ((acc.type === 'accessory' || seedInfo?.type === 'accessory') && acc.quantityStep === undefined) {
+              updates.quantityStep = 1;
+            }
+            if (Object.keys(updates).length > 0) {
               const ref = doc(db, 'accounts', acc.id);
-              batch.update(ref, {
-                type: seedInfo.type,
-                is_inventory: seedInfo.is_inventory,
-                karat: seedInfo.karat,
-                metal: seedInfo.metal
-              });
+              batch.update(ref, updates);
               count++;
             }
           }
@@ -187,3 +192,4 @@ export const useDataSync = (user: any, isAuthReady: boolean) => {
     };
   }, [isAuthReady, user]);
 };
+

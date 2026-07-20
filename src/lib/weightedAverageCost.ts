@@ -1,4 +1,4 @@
-﻿import { Account, AccountingOperationKind, Entry } from '../types';
+import { Account, AccountingOperationKind, Entry } from '../types';
 import { OPERATION_RULES } from '../constants';
 import { normalizeNumerals } from './accounting';
 import { canCalculateGoldEquivalent21, calculateGoldEquivalent21, gramsToCentigramUnits } from './goldEquivalent';
@@ -161,12 +161,30 @@ export const parseMoneyToMinorUnits = (value: string | number | undefined): numb
   return assertSafeSerializableInteger(parseMoneyToMinorBigInt(value), 'money minor units');
 };
 
-const parseCountUnits = (value: string | number | undefined): number => {
+export const ACCESSORY_QUANTITY_SCALE = 1000;
+
+export const parseAccessoryQuantityUnits = (value: string | number | undefined): number => {
   const normalized = normalizeNumerals(String(value ?? '0')).trim();
   if (!normalized) return 0;
-  if (!/^\d+$/.test(normalized)) return 0;
-  return safeInteger(Number(normalized), 'accessory count units');
+  if (!/^\d+(?:\.\d{1,3})?$/.test(normalized)) return 0;
+  const [whole, fraction = ''] = normalized.split('.');
+  return safeInteger(Number(whole) * ACCESSORY_QUANTITY_SCALE + Number(fraction.padEnd(3, '0')), 'accessory quantity units');
 };
+
+export const formatAccessoryQuantityUnits = (units: number): number => units / ACCESSORY_QUANTITY_SCALE;
+
+export const parseQuantityStepUnits = (value: string | number | undefined): number => {
+  const units = parseAccessoryQuantityUnits(value ?? '1');
+  return units > 0 ? units : ACCESSORY_QUANTITY_SCALE;
+};
+
+export const isQuantityAlignedToStep = (quantity: string | number | undefined, step: string | number | undefined): boolean => {
+  const quantityUnits = parseAccessoryQuantityUnits(quantity);
+  const stepUnits = parseQuantityStepUnits(step);
+  return quantityUnits === 0 || quantityUnits % stepUnits === 0;
+};
+
+const parseCountUnits = parseAccessoryQuantityUnits;
 
 const getCreatedAtComparable = (entry: Entry): string => {
   const value: any = entry.createdAt;
@@ -250,7 +268,8 @@ const makeState = (account: Account): CostState => ({
 
 const getAverage = (state: CostState): number | null => {
   if (state.quantityUnits <= 0 || !state.hasReliableCostBasis) return null;
-  return state.totalCostMinor / state.quantityUnits;
+  const perInternalUnit = state.totalCostMinor / state.quantityUnits;
+  return state.unitBasis === 'accessory_count' ? perInternalUnit * ACCESSORY_QUANTITY_SCALE : perInternalUnit;
 };
 
 const multiplyDivideToSafeInteger = (left: number, right: number | bigint, denominator: number, label: string): number => {

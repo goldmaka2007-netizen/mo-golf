@@ -266,7 +266,7 @@ describe('weighted average cost engine MKA-34', () => {
 
   it('calculates accessory weighted average by count', () => {
     const entries = [entry({ id: 'a1', operationKind: 'purchase', debit: 'accessory', debitAccountId: 'accessory', credit: 'cash', creditAccountId: 'cash', count: '2', cash: '100' }), entry({ id: 'a2', operationKind: 'purchase', debit: 'accessory', debitAccountId: 'accessory', credit: 'cash', creditAccountId: 'cash', count: '2', cash: '300', seq: 2 })];
-    expect(op(entries, 'a2')).toMatchObject({ quantityAfterUnits: 4, totalCostAfterMinor: 40000, averageCostAfter: 10000 });
+    expect(op(entries, 'a2')).toMatchObject({ quantityAfterUnits: 4000, totalCostAfterMinor: 40000, averageCostAfter: 10000 });
   });
 
   it('accessory sale calculates COGS by piece count', () => {
@@ -350,7 +350,7 @@ describe('weighted average cost engine MKA-34', () => {
 
   it('supports count-only adjustment', () => {
     const entries = [entry({ id: 'p1', operationKind: 'purchase', debit: 'accessory', debitAccountId: 'accessory', credit: 'cash', creditAccountId: 'cash', count: '5', cash: '500' }), entry({ id: 'sh1', operationKind: 'adjustment', debit: 'adjustment', debitAccountId: 'adjustment', credit: 'accessory', creditAccountId: 'accessory', count: '2', seq: 2 })];
-    expect(op(entries, 'sh1')).toMatchObject({ quantityChangeUnits: -2, adjustmentLossMinor: 20000 });
+    expect(op(entries, 'sh1')).toMatchObject({ quantityChangeUnits: -2000, adjustmentLossMinor: 20000 });
   });
 
   it('orders same-date operations by seq', () => {
@@ -501,8 +501,8 @@ describe('weighted average cost engine MKA-34', () => {
     const timeline = rebuildCostTimeline(entries, localAccounts, cfg);
 
     expect(timeline.resultsByOperationId['transfer-overflow'].status).toBe('invalid_operation');
-    expect(timeline.finalStates['accessory-source']).toMatchObject({ quantityUnits: 1, totalCostMinor: 1 });
-    expect(timeline.finalStates['accessory-destination']).toMatchObject({ quantityUnits: 1, totalCostMinor: Number.MAX_SAFE_INTEGER });
+    expect(timeline.finalStates['accessory-source']).toMatchObject({ quantityUnits: 1000, totalCostMinor: 1 });
+    expect(timeline.finalStates['accessory-destination']).toMatchObject({ quantityUnits: 1000, totalCostMinor: Number.MAX_SAFE_INTEGER });
   });
 
   it('keeps tafiet source unchanged when destination state would overflow', () => {
@@ -517,8 +517,8 @@ describe('weighted average cost engine MKA-34', () => {
     const timeline = rebuildCostTimeline(entries, localAccounts, cfg);
 
     expect(timeline.resultsByOperationId['tafiet-overflow'].status).toBe('invalid_operation');
-    expect(timeline.finalStates['tafiet-source']).toMatchObject({ quantityUnits: 1, totalCostMinor: 1 });
-    expect(timeline.finalStates['tafiet-destination']).toMatchObject({ quantityUnits: 1, totalCostMinor: Number.MAX_SAFE_INTEGER });
+    expect(timeline.finalStates['tafiet-source']).toMatchObject({ quantityUnits: 1000, totalCostMinor: 1 });
+    expect(timeline.finalStates['tafiet-destination']).toMatchObject({ quantityUnits: 1000, totalCostMinor: Number.MAX_SAFE_INTEGER });
   });
 
   it('invalid legacy seq does not produce a NaN comparator result', () => {

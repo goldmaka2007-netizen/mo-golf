@@ -2,7 +2,7 @@ import { Entry, Account, AccountingOperationKind } from '../types';
 import { OPERATION_RULES } from '../constants';
 import { parseWeight, normalizeNumerals } from './accounting';
 import { canCalculateGoldEquivalent21, calculateGoldEquivalent21 } from './goldEquivalent';
-import { rebuildCostTimeline, getOperationId, compareEntriesForCost, type CostTimelineResult, type OperationCostResult, type OpeningCostConfig } from './weightedAverageCost';
+import { rebuildCostTimeline, getOperationId, compareEntriesForCost, ACCESSORY_QUANTITY_SCALE, type CostTimelineResult, type OperationCostResult, type OpeningCostConfig } from './weightedAverageCost';
 
 export const KARAT_MULT: Record<string, number> = { '18': 18 / 21, '21': 1, '24': 24 / 21, silver: 1 };
 
@@ -187,7 +187,7 @@ export interface CostBasisEngine {
 const averageCostForDisplay = (quantityUnits: number, totalCostMinor: number, isAccessory: boolean): number => {
   if (quantityUnits <= 0) return 0;
   const minorPerUnit = totalCostMinor / quantityUnits;
-  return isAccessory ? minorPerUnit / 100 : minorPerUnit;
+  return isAccessory ? (minorPerUnit * ACCESSORY_QUANTITY_SCALE) / 100 : minorPerUnit;
 };
 
 export function processCostBasis(entries: Entry[], accountsDb: Account[], _goldPrice: number, _silverPrice: number, openingConfig: OpeningCostConfig = {}): CostBasisEngine {
