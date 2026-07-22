@@ -1,213 +1,43 @@
 import React, { useMemo, useState } from 'react';
-import { motion, AnimatePresence } from 'framer-motion';
-import { 
-  Wallet, 
-  Scale, 
-  Coins,
-  BookOpen
-} from 'lucide-react';
-import { Entry, AccountNature } from '../../../types';
-import { cn } from '../../../lib/utils';
+import { CheckCircle2, ChevronDown, Download, Scale, Wallet, Coins, XCircle } from 'lucide-react';
+import { Entry } from '../../../types';
 import { useAppStore } from '../../../store';
-import { belongsToMetric, getMetricValue, getDynamicAccountNature, getAccountTypeDetails } from '../../../utils/accountLogic';
+import { LedgerDimension } from '../../../lib/ledgerReport';
+import { buildTrialBalanceCsv, buildTrialBalanceReport, TrialBalanceAmounts, TrialBalanceGroup, TrialBalanceReport, TrialBalanceRow } from '../../../lib/trialBalanceReport';
+
+const today = () => new Date().toISOString().slice(0, 10);
+const yearStart = () => `${new Date().getFullYear()}-01-01`;
+const labels: Record<LedgerDimension, string> = { cash: '\u0645\u064a\u0632\u0627\u0646 \u0627\u0644\u0646\u0642\u062f\u064a\u0629', gold: '\u0645\u064a\u0632\u0627\u0646 \u0627\u0644\u0630\u0647\u0628', silver: '\u0645\u064a\u0632\u0627\u0646 \u0627\u0644\u0641\u0636\u0629' };
+const units: Record<LedgerDimension, string> = { cash: '\u062c\u0646\u064a\u0647 \u0645\u0635\u0631\u064a', gold: '\u062c\u0631\u0627\u0645 \u0645\u0643\u0627\u0641\u0626 \u0639\u064a\u0627\u0631 21', silver: '\u062c\u0631\u0627\u0645' };
+const emptyLabels: Record<LedgerDimension, string> = { cash: '\u0644\u0627 \u062a\u0648\u062c\u062f \u0623\u0631\u0635\u062f\u0629 \u0623\u0648 \u062d\u0631\u0643\u0627\u062a \u0646\u0642\u062f\u064a\u0629 \u062e\u0644\u0627\u0644 \u0627\u0644\u0641\u062a\u0631\u0629', gold: '\u0644\u0627 \u062a\u0648\u062c\u062f \u0623\u0631\u0635\u062f\u0629 \u0623\u0648 \u062d\u0631\u0643\u0627\u062a \u0630\u0647\u0628 \u062e\u0644\u0627\u0644 \u0627\u0644\u0641\u062a\u0631\u0629', silver: '\u0644\u0627 \u062a\u0648\u062c\u062f \u0623\u0631\u0635\u062f\u0629 \u0623\u0648 \u062d\u0631\u0643\u0627\u062a \u0641\u0636\u0629 \u062e\u0644\u0627\u0644 \u0627\u0644\u0641\u062a\u0631\u0629' };
+const columnLabels = ['\u0627\u0644\u062d\u0633\u0627\u0628', '\u0623\u0648\u0644 \u0627\u0644\u0645\u062f\u0629\n\u0645\u062f\u064a\u0646', '\u0623\u0648\u0644 \u0627\u0644\u0645\u062f\u0629\n\u062f\u0627\u0626\u0646', '\u062d\u0631\u0643\u0629 \u0627\u0644\u0641\u062a\u0631\u0629\n\u0645\u062f\u064a\u0646', '\u062d\u0631\u0643\u0629 \u0627\u0644\u0641\u062a\u0631\u0629\n\u062f\u0627\u0626\u0646', '\u0622\u062e\u0631 \u0627\u0644\u0645\u062f\u0629\n\u0645\u062f\u064a\u0646', '\u0622\u062e\u0631 \u0627\u0644\u0645\u062f\u0629\n\u062f\u0627\u0626\u0646'];
+const mobileRows: { label: string; debit: keyof TrialBalanceAmounts; credit: keyof TrialBalanceAmounts }[] = [
+  { label: '\u0623\u0648\u0644 \u0627\u0644\u0645\u062f\u0629', debit: 'openingDebit', credit: 'openingCredit' }, { label: '\u062d\u0631\u0643\u0629 \u0627\u0644\u0641\u062a\u0631\u0629', debit: 'periodDebit', credit: 'periodCredit' }, { label: '\u0622\u062e\u0631 \u0627\u0644\u0645\u062f\u0629', debit: 'closingDebit', credit: 'closingCredit' },
+];
+
+export const formatTrialDisplayAmount = (value: number, dimension: LedgerDimension): string => {
+  if (!value) return '\u2014';
+  return value.toLocaleString('en-US', dimension === 'cash' ? { maximumFractionDigits: 0 } : { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+};
 
 export const TrialBalanceView = React.memo(({ entries }: { entries: Entry[] }) => {
-  const [activeTab, setActiveTab] = useState<'cash' | 'gold' | 'silver'>('cash');
-
   const { accountsDb } = useAppStore();
-  
-  const trialBalanceData = useMemo(() => {
-    const buildLedger = (metric: 'cash' | 'gold' | 'silver') => {
-      const balances: Record<string, { debit: number; credit: number; mainType: string; subType: string }> = {};
-
-      // 1. Accumulate balances from entries
-      entries.forEach(entry => {
-        const val = getMetricValue(entry, metric, accountsDb);
-        if (val === 0) return;
-
-        // Debit side
-        if (belongsToMetric(entry.debit, metric, accountsDb)) {
-          if (!balances[entry.debit]) {
-            const details = getAccountTypeDetails(entry.debit, accountsDb);
-            balances[entry.debit] = { debit: 0, credit: 0, mainType: details.main, subType: details.sub };
-          }
-          balances[entry.debit].debit += val;
-        }
-
-        // Credit side
-        if (belongsToMetric(entry.credit, metric, accountsDb)) {
-          if (!balances[entry.credit]) {
-            const details = getAccountTypeDetails(entry.credit, accountsDb);
-            balances[entry.credit] = { debit: 0, credit: 0, mainType: details.main, subType: details.sub };
-          }
-          balances[entry.credit].credit += val;
-        }
-      });
-
-      // 2. Calculate Net Balances and apply "Adjustment" if needed
-      const resultAccounts: any[] = [];
-      let runningTotalDebit = 0;
-      let runningTotalCredit = 0;
-
-      Object.entries(balances).forEach(([account, data]) => {
-        const net = data.debit - data.credit;
-        if (Math.abs(net) < 0.00001) return; // Skip zero balances
-
-        const row = {
-          account,
-          mainType: data.mainType,
-          subType: data.subType,
-          debit: net > 0 ? net : 0,
-          credit: net < 0 ? Math.abs(net) : 0
-        };
-
-        resultAccounts.push(row);
-        runningTotalDebit += row.debit;
-        runningTotalCredit += row.credit;
-      });
-
-      // 3. Self-Balancing: Calculate Difference (Profit/Loss)
-      const diff = runningTotalDebit - runningTotalCredit;
-      if (Math.abs(diff) > 0.00001) {
-        const isLoss = diff > 0; // If Debit > Credit, we need more Credit (Loss/Adjustment)
-        resultAccounts.push({
-          account: isLoss ? "فارق ميزان (عجز/خسارة)" : "فارق ميزان (زيادة/ربح)",
-          mainType: "تسوية",
-          subType: "ميزان المراجعة",
-          debit: isLoss ? 0 : Math.abs(diff),
-          credit: isLoss ? Math.abs(diff) : 0,
-          isAdjustment: true
-        });
-        
-        if (isLoss) runningTotalCredit += Math.abs(diff);
-        else runningTotalDebit += Math.abs(diff);
-      }
-
-      // Sort: Assets -> Liabilities -> Equity -> Revenue -> Expenses
-      // Within each category, sort by largest balance first
-      const typeOrder: Record<string, number> = { "اصول": 1, "خصوم": 2, "حقوق ملكية": 3, "ايرادات": 4, "مصروفات": 5 };
-      resultAccounts.sort((a, b) => {
-        if (a.isAdjustment) return 1;
-        if (b.isAdjustment) return -1;
-        const mainA = typeOrder[a.mainType] || 99;
-        const mainB = typeOrder[b.mainType] || 99;
-        if (mainA !== mainB) return mainA - mainB;
-        
-        const valA = Math.max(a.debit, a.credit);
-        const valB = Math.max(b.debit, b.credit);
-        if (valA !== valB) return valB - valA;
-        
-        return a.account.localeCompare(b.account, 'ar');
-      });
-
-      return { accounts: resultAccounts, totalDebit: runningTotalDebit, totalCredit: runningTotalCredit };
-    };
-
-    return {
-      cash: buildLedger('cash'),
-      gold: buildLedger('gold'),
-      silver: buildLedger('silver')
-    };
-  }, [entries, accountsDb]);
-
-  const renderTable = () => {
-    const data = trialBalanceData[activeTab];
-    const unit = activeTab === 'cash' ? 'ج.م' : (activeTab === 'gold' ? 'جم عربي' : 'جرام');
-    const colorClass = activeTab === 'cash' ? 'text-[#c9a84c]' : (activeTab === 'gold' ? 'text-[#c9a84c]' : 'text-[#6a8a9e]');
-
-    return (
-      <motion.div 
-        key={activeTab}
-        initial={{ opacity: 0, y: 10 }}
-        animate={{ opacity: 1, y: 0 }}
-        exit={{ opacity: 0, y: -10 }}
-        transition={{ duration: 0.2 }}
-        className="bg-[#0e1018] border border-[#1a1e2a] rounded-2xl p-6 space-y-6 shadow-xl overflow-x-auto"
-      >
-        <div className="flex items-center justify-between border-b border-[#1a1e2a] pb-4">
-          <div className="flex items-center gap-2">
-            <BookOpen className="w-6 h-6 text-[#c9a84c]" />
-            <h3 className="text-lg font-bold text-[#ddd8cc]">ميزان المراجعة بالمجاميع الصافية ({unit})</h3>
-          </div>
-          <div className="text-sm text-[#5a5548] bg-[#1a1e2a] px-3 py-1 rounded-full font-mono uppercase">
-            Double-Entry Verification
-          </div>
-        </div>
-
-        <table className="w-full text-right border-collapse min-w-[400px]">
-          <thead>
-            <tr className="border-b-2 border-[#1a1e2a]">
-              <th className="py-3 px-1 text-sm font-bold text-[#5a5548] uppercase tracking-wider">الحساب</th>
-              <th className="py-3 px-1 text-sm font-bold text-[#6a9e6a] text-left uppercase tracking-wider">أرصدة مدينة (Debit)</th>
-              <th className="py-3 px-1 text-sm font-bold text-[#9e6a6a] text-left uppercase tracking-wider">أرصدة دائنة (Credit)</th>
-            </tr>
-          </thead>
-          <tbody>
-            {data.accounts.map((row, i) => (
-              <tr key={i} className={cn(
-                "border-b border-[#1a1e2a] transition-colors group",
-                row.isAdjustment ? "bg-[#c9a84c08]" : "hover:bg-[#1a1e2a]"
-              )}>
-                <td className="py-3 px-2">
-                  <div className={cn("text-base font-bold", row.isAdjustment ? "text-[#c9a84c]" : "text-[#ddd8cc]")}>
-                    {row.account}
-                  </div>
-                  <div className="text-xs text-[#5a5548] font-medium opacity-60 group-hover:opacity-100 transition-opacity mt-1">
-                    {row.mainType} <span className="mx-1">•</span> {row.subType}
-                  </div>
-                </td>
-                <td className="py-3 px-2 text-base text-[#6a9e6a] text-left font-mono font-medium">
-                  {row.debit > 0 ? row.debit.toLocaleString(undefined, { minimumFractionDigits: activeTab === 'cash' ? 0 : 3, maximumFractionDigits: 3 }) : '-'}
-                </td>
-                <td className="py-3 px-2 text-base text-[#9e6a6a] text-left font-mono font-medium">
-                  {row.credit > 0 ? row.credit.toLocaleString(undefined, { minimumFractionDigits: activeTab === 'cash' ? 0 : 3, maximumFractionDigits: 3 }) : '-'}
-                </td>
-              </tr>
-            ))}
-            {data.accounts.length === 0 && (
-              <tr>
-                <td colSpan={3} className="text-center py-10 text-base text-[#5a5548] italic">
-                  لا توجد حركة مالية مسجلة لهذه الفئة حالياً
-                </td>
-              </tr>
-            )}
-          </tbody>
-          <tfoot>
-            <tr className={cn("bg-[#1a1e2a] border-t-2 border-[#c9a84c33] shadow-[0_-4px_6px_-1px_rgba(0,0,0,0.1)]")}>
-              <td className="py-5 px-3 text-base md:text-lg font-bold text-[#ddd8cc] flex items-center gap-2">
-                <Scale className="w-6 h-6 text-[#c9a84c]" />
-                إجمالي الأرصدة المتزنة
-              </td>
-              <td className={cn("py-5 px-3 text-lg md:text-xl text-left font-bold font-mono", colorClass)}>
-                {data.totalDebit.toLocaleString(undefined, { minimumFractionDigits: activeTab === 'cash' ? 0 : 3, maximumFractionDigits: 3 })}
-              </td>
-              <td className={cn("py-5 px-3 text-lg md:text-xl text-left font-bold font-mono", colorClass)}>
-                {data.totalCredit.toLocaleString(undefined, { minimumFractionDigits: activeTab === 'cash' ? 0 : 3, maximumFractionDigits: 3 })}
-              </td>
-            </tr>
-          </tfoot>
-        </table>
-      </motion.div>
-    );
-  };
-
-  return (
-    <div className="space-y-6 pb-20">
-      <div className="flex gap-2 p-1 bg-[#0e1018] border border-[#1a1e2a] rounded-2xl shadow-lg overflow-x-auto">
-        <button onClick={() => setActiveTab('cash')} className={cn("flex-1 whitespace-nowrap min-w-[100px] py-4 rounded-xl text-sm font-bold transition-all flex items-center justify-center gap-2", activeTab === 'cash' ? "bg-[#c9a84c] text-[#080a0f] shadow-lg" : "text-[#5a5548] hover:text-[#ddd8cc]")}>
-          <Wallet className="w-5 h-5" /> ميزان السيولة
-        </button>
-        <button onClick={() => setActiveTab('gold')} className={cn("flex-1 whitespace-nowrap min-w-[100px] py-4 rounded-xl text-sm font-bold transition-all flex items-center justify-center gap-2", activeTab === 'gold' ? "bg-[#c9a84c] text-[#080a0f] shadow-lg" : "text-[#5a5548] hover:text-[#ddd8cc]")}>
-          <Scale className="w-5 h-5" /> ميزان أوزان الذهب
-        </button>
-        <button onClick={() => setActiveTab('silver')} className={cn("flex-1 whitespace-nowrap min-w-[100px] py-4 rounded-xl text-sm font-bold transition-all flex items-center justify-center gap-2", activeTab === 'silver' ? "bg-[#6a8a9e] text-[#080a0f] shadow-lg" : "text-[#5a5548] hover:text-[#ddd8cc]")}>
-          <Coins className="w-5 h-5" /> ميزان أوزان الفضة
-        </button>
-      </div>
-
-      <AnimatePresence mode="wait">
-        {renderTable()}
-      </AnimatePresence>
-    </div>
-  );
+  const [from, setFrom] = useState(yearStart); const [to, setTo] = useState(today); const [custom, setCustom] = useState(false);
+  const [open, setOpen] = useState<Record<LedgerDimension, boolean>>({ cash: true, gold: false, silver: false });
+  const reports = useMemo(() => (['cash', 'gold', 'silver'] as LedgerDimension[]).map(dimension => buildTrialBalanceReport(entries, accountsDb.filter(account => account.isActive !== false), dimension, from, to)), [entries, accountsDb, from, to]);
+  const exportCsv = () => { const csv = buildTrialBalanceCsv(reports, from, to); const url = URL.createObjectURL(new Blob([csv], { type: 'text/csv;charset=utf-8' })); const link = document.createElement('a'); link.href = url; link.download = `trial-balance_${from}_${to}.csv`; link.click(); URL.revokeObjectURL(url); };
+  return <section className="space-y-3 pb-[calc(var(--bottom-nav-height,5rem)+env(safe-area-inset-bottom)+24px)]" dir="rtl">
+    <section className="space-y-3 rounded-2xl border border-[#1a1e2a] bg-[#0e1018] p-3"><div className="flex items-center justify-between gap-2"><p className="text-xs text-[#8a8172]">{'\u0627\u0644\u0641\u062a\u0631\u0629'}: {from} â€” {to}</p><button type="button" onClick={exportCsv} className="flex min-h-10 items-center gap-1 rounded-lg px-2 text-xs font-bold text-[#c9a84c] focus:outline-none focus:ring-2 focus:ring-[#c9a84c]"><Download className="h-4 w-4" />{'\u062a\u0635\u062f\u064a\u0631 CSV'}</button></div><div className="flex gap-2"><button type="button" onClick={() => { setCustom(false); setFrom(yearStart()); setTo(today()); }} className={`rounded-lg px-3 py-2 text-xs font-bold ${!custom ? 'bg-[#c9a84c] text-[#080a0f]' : 'bg-[#080a0f] text-[#ddd8cc]'}`}>{'\u0627\u0644\u0633\u0646\u0629 \u062d\u062a\u0649 \u0627\u0644\u064a\u0648\u0645'}</button><button type="button" onClick={() => setCustom(true)} className={`rounded-lg px-3 py-2 text-xs font-bold ${custom ? 'bg-[#c9a84c] text-[#080a0f]' : 'bg-[#080a0f] text-[#ddd8cc]'}`}>{'\u0641\u062a\u0631\u0629 \u0645\u062e\u0635\u0635\u0629'}</button></div>{custom && <div className="grid grid-cols-2 gap-2"><label className="text-xs text-[#8a8172]">{'\u0645\u0646'}<input type="date" value={from} max={to} onChange={event => setFrom(event.target.value)} className="mt-1 w-full rounded-lg bg-[#080a0f] p-2 text-[#ddd8cc]" /></label><label className="text-xs text-[#8a8172]">{'\u0625\u0644\u0649'}<input type="date" value={to} min={from} onChange={event => setTo(event.target.value)} className="mt-1 w-full rounded-lg bg-[#080a0f] p-2 text-[#ddd8cc]" /></label></div>}</section>
+    {reports.map(report => <BalanceSection key={report.dimension} report={report} open={open[report.dimension]} onToggle={() => setOpen(value => ({ ...value, [report.dimension]: !value[report.dimension] }))} />)}
+  </section>;
 });
+
+const iconFor = (dimension: LedgerDimension) => dimension === 'cash' ? <Wallet className="h-5 w-5" /> : dimension === 'gold' ? <Scale className="h-5 w-5" /> : <Coins className="h-5 w-5" />;
+const numericKeys: (keyof TrialBalanceAmounts)[] = ['openingDebit', 'openingCredit', 'periodDebit', 'periodCredit', 'closingDebit', 'closingCredit'];
+const Cells = ({ item, dimension }: { item: TrialBalanceAmounts; dimension: LedgerDimension }) => <>{numericKeys.map(key => <td key={key} className="whitespace-nowrap p-2 text-left font-mono tabular-nums text-[15px] text-[#ddd8cc]">{formatTrialDisplayAmount(item[key], dimension)}</td>)}</>;
+const BalanceSection = ({ report, open, onToggle }: { key?: React.Key; report: TrialBalanceReport; open: boolean; onToggle: () => void }) => <section className="overflow-hidden rounded-2xl border border-[#1a1e2a] bg-[#0e1018]"><button type="button" aria-expanded={open} onClick={onToggle} className="flex min-h-14 w-full items-center gap-2 px-3 text-right focus:outline-none focus:ring-2 focus:ring-inset focus:ring-[#c9a84c]"><span className="text-[#c9a84c]">{iconFor(report.dimension)}</span><span className="flex-1"><span className="block font-black text-[#f5f1e8]">{labels[report.dimension]}</span><span className="block pt-0.5 text-xs font-medium text-[#8a8172]">{'\u0627\u0644\u0648\u062d\u062f\u0629'}: {units[report.dimension]}</span></span><ChevronDown className={`h-5 w-5 text-[#c9a84c] transition-transform ${open ? '' : '-rotate-90'}`} /></button>{open && <div className="space-y-4 border-t border-[#1a1e2a] p-3">{report.groups.length === 0 ? <p className="py-8 text-center text-sm text-[#8a8172]">{emptyLabels[report.dimension]}</p> : <><div className="md:hidden"><MobileReport report={report} /></div><div className="hidden md:block"><DesktopTable report={report} /></div><BalanceStatus report={report} /></>}</div>}</section>;
+const DesktopTable = ({ report }: { report: TrialBalanceReport }) => <div className="overflow-x-auto"><table className="min-w-[860px] w-full text-right text-xs"><thead className="bg-[#080a0f] text-[#c9a84c]"><tr>{columnLabels.map((label, index) => <th key={label} className={`whitespace-pre-line p-2 ${index === 0 ? 'sticky right-0 z-10 min-w-44 bg-[#080a0f]' : ''}`}>{label}</th>)}</tr></thead><tbody>{report.groups.map(group => <DesktopGroup key={group.id} group={group} dimension={report.dimension} />)}<tr className="border-t-2 border-[#c9a84c] bg-[#1a1e2a] font-black"><td className="sticky right-0 bg-[#1a1e2a] p-2 text-[#f5f1e8]">{'\u0625\u062c\u0645\u0627\u0644\u064a \u0627\u0644\u0645\u064a\u0632\u0627\u0646'}</td><Cells item={report} dimension={report.dimension} /></tr></tbody></table></div>;
+const DesktopGroup = ({ group, dimension }: { key?: React.Key; group: TrialBalanceGroup; dimension: LedgerDimension }) => <><tr className="border-t border-[#1a1e2a] bg-[#1a1e2a]/50"><td colSpan={7} className="p-2 font-black text-[#c9a84c]">{group.label}</td></tr>{group.rows.map(row => <tr key={row.entityId} className="border-t border-[#1a1e2a]/70"><td className="sticky right-0 bg-[#0e1018] p-2"><p className="font-bold text-[#f5f1e8]">{row.accountName}</p><p className="mt-0.5 text-[10px] text-[#8a8172]">{row.description}</p></td><Cells item={row} dimension={dimension} /></tr>)}<tr className="border-t border-[#1a1e2a] font-bold"><td className="sticky right-0 bg-[#0e1018] p-2 text-[#ddd8cc]">{'\u0625\u062c\u0645\u0627\u0644\u064a'} {group.label}</td><Cells item={group} dimension={dimension} /></tr></>;
+const MobileReport = ({ report }: { report: TrialBalanceReport }) => <div className="space-y-5">{report.groups.map(group => <section key={group.id} aria-labelledby={`group-${report.dimension}-${group.id}`} className="space-y-3"><h4 id={`group-${report.dimension}-${group.id}`} className="px-1 text-sm font-black text-[#c9a84c]">{group.label}</h4>{group.rows.map(row => <MobileCard key={row.entityId} item={row} dimension={report.dimension} />)}<MobileCard item={group} dimension={report.dimension} title={`\u0625\u062c\u0645\u0627\u0644\u064a ${group.label}`} summary /></section>)}<MobileCard item={report} dimension={report.dimension} title={'\u0625\u062c\u0645\u0627\u0644\u064a \u0627\u0644\u0645\u064a\u0632\u0627\u0646'} summary strong /></div>;
+const MobileCard = ({ item, dimension, title, summary, strong }: { key?: React.Key; item: TrialBalanceAmounts; dimension: LedgerDimension; title?: string; summary?: boolean; strong?: boolean }) => <article className={`rounded-xl border p-3 ${strong ? 'border-[#c9a84c] bg-[#c9a84c]/10' : summary ? 'border-[#c9a84c]/50 bg-[#1a1e2a]/60' : 'border-[#1a1e2a] bg-[#080a0f]'}`}><div className="mb-3"><h5 className="text-base font-black text-[#f5f1e8]">{title || (item as TrialBalanceRow).accountName}</h5>{!title && <p className="mt-0.5 text-xs text-[#8a8172]">{(item as TrialBalanceRow).description}</p>}</div><div className="grid grid-cols-[1fr_1fr_1fr] gap-x-2 border-b border-[#1a1e2a] pb-2 text-xs font-bold text-[#c9a84c]"><span>{'\u0627\u0644\u0628\u064a\u0627\u0646'}</span><span className="text-left">{'\u0645\u062f\u064a\u0646'}</span><span className="text-left">{'\u062f\u0627\u0626\u0646'}</span></div>{mobileRows.map(row => <div key={row.debit} className="grid grid-cols-[1fr_1fr_1fr] gap-x-2 border-b border-[#1a1e2a]/70 py-2 last:border-b-0"><span className="text-sm text-[#ddd8cc]">{row.label}</span><span className="text-left font-mono tabular-nums text-[15px] text-[#f5f1e8]">{formatTrialDisplayAmount(item[row.debit], dimension)}</span><span className="text-left font-mono tabular-nums text-[15px] text-[#f5f1e8]">{formatTrialDisplayAmount(item[row.credit], dimension)}</span></div>)}</article>;
+const BalanceStatus = ({ report }: { report: TrialBalanceReport }) => <div className={`flex items-center gap-2 rounded-xl p-3 text-sm ${report.balanced ? 'bg-emerald-500/10 text-emerald-300' : 'bg-red-500/10 text-red-300'}`}>{report.balanced ? <CheckCircle2 className="h-5 w-5" /> : <XCircle className="h-5 w-5" />}<span className="font-bold">{report.balanced ? '\u0627\u0644\u0645\u064a\u0632\u0627\u0646 \u0645\u062a\u0632\u0646' : `\u0627\u0644\u0645\u064a\u0632\u0627\u0646 \u063a\u064a\u0631 \u0645\u062a\u0632\u0646 â€” \u0641\u0631\u0642 ${formatTrialDisplayAmount(report.difference, report.dimension)} ${report.differenceSide === 'debit' ? '\u0645\u062f\u064a\u0646' : '\u062f\u0627\u0626\u0646'}`}</span></div>;

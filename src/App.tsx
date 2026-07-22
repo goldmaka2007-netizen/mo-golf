@@ -6,8 +6,9 @@ import { db, logOut } from './firebase';
 import { Entry } from './types';
 import { buildGoldEquivalent21Audit, canCalculateGoldEquivalent21, inferGoldKaratFromMultiplier } from './lib/goldEquivalent';
 import { isGoldEquivalentEntry } from './utils/accountLogic';
+import { resolveEntryIdentity } from './lib/entryIdentity';
 
-import { Home, BookOpenCheck, PlusCircle, BarChart3, Menu, RefreshCw } from 'lucide-react';
+import { Home, BookOpenCheck, PlusCircle, BarChart3, Menu, RefreshCw, Gem } from 'lucide-react';
 
 import { MainDashboard } from './components/views/MainDashboard';
 import { EntryForm } from './components/views/EntryForm';
@@ -22,6 +23,7 @@ import { MoreView } from './components/views/MoreView';
 
 import { ErrorBoundary } from './components/ErrorBoundary';
 import { NavButton } from './components/ui/NavButton';
+import { AppBottomNavigation } from './components/ui/AppBottomNavigation';
 import { LoadingView } from './components/views/LoadingView';
 import { LoginView } from './components/views/LoginView';
 import { GlobalErrorView } from './components/views/GlobalErrorView';
@@ -151,6 +153,12 @@ export default function App() {
     setIsUpdatingEntry(true);
     try {
       const { id, ...rawData } = entryToUpdate;
+      const identity = resolveEntryIdentity({ ...rawData, tx: rawData.tx || '', debit: rawData.debit || '', credit: rawData.credit || '' }, accountsDb);
+      if (identity.ok === false) {
+        setGlobalError(identity.message);
+        return;
+      }
+      Object.assign(rawData, identity.value);
       const calculationKarat = rawData.karat ?? inferGoldKaratFromMultiplier(rawData.multiplier);
       if (isGoldEquivalentEntry(rawData, accountsDb) && canCalculateGoldEquivalent21(rawData.weight || '', calculationKarat)) {
         const goldAudit = buildGoldEquivalent21Audit(rawData.weight || '', calculationKarat, rawData.arabicWeight);
@@ -211,7 +219,7 @@ export default function App() {
   ];
 
   const pageTitle = (() => {
-    if (view === 'entry') return 'عملية جديدة';
+    if (view === 'entry') return 'العمليات';
     if (view === 'journal' || view === 'database') return 'اليومية';
     if (reportViews.includes(view)) return 'التقارير';
     if (view === 'story') return 'حالة واتساب';
@@ -243,18 +251,33 @@ export default function App() {
 
   return (
     <ErrorBoundary>
-      <div className="min-h-screen bg-[#020408] pb-28 font-sans text-[#f5f1e8]" dir="rtl">
-        <div className="mx-auto max-w-2xl px-4 pt-4 sm:pt-6">
-          <header className="sticky top-0 z-30 -mx-4 mb-4 border-b border-[#1a1e2a]/80 bg-[#020408]/92 px-4 py-3 backdrop-blur-xl">
+      <div
+        className={`min-h-[100dvh] pb-[calc(var(--bottom-nav-height)+env(safe-area-inset-bottom)+16px)] font-sans ${view === 'entry' ? 'bg-[#fffdf7] text-[#15203b]' : 'bg-[#020408] text-[#f5f1e8]'}`}
+        dir="rtl"
+      >
+        <main className="mx-auto max-w-2xl px-4 pt-4 sm:pt-6">
+          <header className={`sticky top-0 z-30 -mx-4 mb-4 border-b px-4 py-3 backdrop-blur-xl ${view === 'entry' ? 'border-[#15203b]/10 bg-[#fffdf7]/94' : 'border-[#1a1e2a]/80 bg-[#020408]/92'}`}>
             <div className="flex items-center justify-between gap-3">
               <div className="min-w-0">
-                <div className="text-[10px] font-black uppercase tracking-[0.22em] text-[#c9a84c]">نظام مؤسسة مكة</div>
-                <h1 className="mt-1 truncate text-lg font-black text-[#f5f1e8]">{pageTitle}</h1>
+                {view === 'entry' ? (
+                  <div className="flex items-center gap-2.5">
+                    <span className="flex h-10 w-10 items-center justify-center rounded-2xl bg-[#c99a2e]/12 text-[#b17f1d]">
+                      <Gem className="h-6 w-6" aria-hidden="true" />
+                    </span>
+                    <h1 className="truncate text-[30px] font-black leading-none text-[#15203b]">{pageTitle}</h1>
+                  </div>
+                ) : (
+                  <>
+                    <div className="text-[10px] font-black uppercase tracking-[0.22em] text-[#c9a84c]">نظام مؤسسة مكة</div>
+                    <h1 className="mt-1 truncate text-lg font-black text-[#f5f1e8]">{pageTitle}</h1>
+                  </>
+                )}
               </div>
               <button
                 type="button"
                 onClick={refreshData}
-                className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl border border-[#1a1e2a] bg-[#0e1018] text-[#c9a84c] transition-all active:scale-95"
+                aria-label="تحديث البيانات"
+                className={`flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl border text-[#c9a84c] transition-all active:scale-95 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#c99a2e] ${view === 'entry' ? 'border-[#15203b]/10 bg-white shadow-sm' : 'border-[#1a1e2a] bg-[#0e1018]'}`}
                 title="تحديث البيانات"
               >
                 <RefreshCw className="h-5 w-5" />
@@ -280,22 +303,20 @@ export default function App() {
               {view === 'settings' && <SettingsView />}
             </motion.div>
           </AnimatePresence>
-        </div>
+        </main>
 
-        <div className="fixed inset-x-0 bottom-0 z-50 px-3 pb-[calc(env(safe-area-inset-bottom)+10px)]">
-          <nav className="mx-auto grid h-[76px] max-w-2xl grid-cols-5 items-end gap-1 rounded-[28px] border border-[#1a1e2a] bg-[#0e1018]/96 px-2 pb-2 pt-3 shadow-[0_-18px_44px_rgba(0,0,0,0.42)] backdrop-blur-2xl">
-            {navItems.map((item) => (
-              <NavButton
-                key={item.id}
-                active={item.active}
-                onClick={item.onClick}
-                icon={item.icon}
-                label={item.label}
-                variant={item.variant}
-              />
-            ))}
-          </nav>
-        </div>
+        <AppBottomNavigation>
+          {navItems.map((item) => (
+            <NavButton
+              key={item.id}
+              active={item.active}
+              onClick={item.onClick}
+              icon={item.icon}
+              label={item.label}
+              variant={item.variant}
+            />
+          ))}
+        </AppBottomNavigation>
 
         <AnimatePresence>
           {editingEntry && (editingEntry as any).id && (

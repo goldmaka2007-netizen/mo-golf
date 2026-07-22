@@ -7,9 +7,24 @@ coverage/
 *.log
 .env*
 !.env.example
+
+# Secrets and credentials
+.secrets/
+secrets/
+.npmrc
+.netrc
 *.pem
 *.key
+*.p8
+*.p12
+*.pfx
+*.jks
+*.keystore
+id_rsa*
 serviceAccount*.json
+service-account*.json
+*firebase-adminsdk*.json
 credentials*.json
+secrets*.json
 firebase-applet-config.json
 firebase-blueprint.json

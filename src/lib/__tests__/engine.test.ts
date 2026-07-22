@@ -1,5 +1,5 @@
-﻿import { describe, expect, it } from 'vitest';
-import { analyzeProfitability, processCostBasis, processInventory } from '../engine';
+import { describe, expect, it } from 'vitest';
+import { analyzeProfitability, calculateGoldOwnershipPosition, processCostBasis, processInventory } from '../engine';
 import { compareEntriesForCost, parseMoneyToMinorBigInt, parseMoneyToMinorUnits, rebuildCostTimeline } from '../weightedAverageCost';
 import { buildOpeningCostConfig, parseEgpToMinorUnits } from '../openingCostConfig';
 import { buildGoldEquivalent21Audit, calculateGoldEquivalent21, compareLegacyGoldEquivalent21, GOLD_EQUIVALENT_21_CALCULATION_VERSION } from '../goldEquivalent';
@@ -14,8 +14,11 @@ const accounts: Account[] = [
   { id: 'silver', name: 'silver', mainType: 'asset', subType: 'inventory', balanceNature: 'silver', type: 'silver', is_inventory: true, karat: null, metal: 'silver', userId: 'u1' },
   { id: 'accessory', name: 'accessory', mainType: 'asset', subType: 'inventory', balanceNature: 'piece', type: 'accessory', is_inventory: true, karat: null, metal: null, userId: 'u1' },
   { id: 'merchant-gold', name: 'merchant-gold', mainType: 'liability', subType: 'merchant', balanceNature: 'gold', type: 'merchant', is_inventory: false, karat: '18', metal: 'gold', userId: 'u1' },
+  { id: 'supplier-gold', name: 'supplier-gold', mainType: 'liability', subType: 'supplier', balanceNature: 'gold', type: 'other', is_inventory: false, karat: '21', metal: 'gold', userId: 'u1' },
+  { id: 'deposit-gold', name: 'deposit-gold', mainType: 'liability', subType: 'deposit', balanceNature: 'gold', type: 'other', is_inventory: false, karat: '21', metal: 'gold', userId: 'u1' },
   { id: 'merchant-silver', name: 'merchant-silver', mainType: 'liability', subType: 'merchant', balanceNature: 'silver', type: 'merchant', is_inventory: false, karat: null, metal: 'silver', userId: 'u1' },
   { id: 'equity-draw', name: 'equity-draw', mainType: 'equity', subType: 'drawings', balanceNature: 'cash', type: 'other', is_inventory: false, karat: null, metal: null, userId: 'u1' },
+  { id: 'equity-gold', name: 'equity-gold', mainType: 'equity', subType: 'retained earnings', balanceNature: 'gold', type: 'other', is_inventory: false, karat: null, metal: 'gold', userId: 'u1' },
   { id: 'adjustment', name: 'adjustment', mainType: 'expense', subType: 'adjustment', balanceNature: 'gold', type: 'other', is_inventory: false, karat: null, metal: null, userId: 'u1' },
 ];
 
@@ -118,6 +121,65 @@ describe('engine inventory movements', () => {
     expect(result.merchantWeightLiabilities['merchant-gold'].arabicWeight).toBeCloseTo(5.14, 5);
   });
 
+
+  it('calculates positive net gold liabilities as gold owed by the shop', () => {
+    const result = processInventory([
+      entry({ operationKind: 'opening', debit: 'gold21-product', debitAccountId: 'gold21-product', credit: 'equity-draw', creditAccountId: 'equity-draw', weight: '100' }),
+      entry({ operationKind: 'purchase', debit: 'gold21-product', debitAccountId: 'gold21-product', credit: 'supplier-gold', creditAccountId: 'supplier-gold', weight: '10' }),
+    ], accounts);
+
+    expect(result.goldPosition.physicalGoldInventory21).toBe(110);
+    expect(result.goldPosition.netGoldLiabilities21).toBe(10);
+    expect(result.goldPosition.netShopGoldOwnership21).toBe(100);
+  });
+
+  it('keeps negative net gold liabilities algebraic as gold owed to the shop', () => {
+    const result = processInventory([
+      entry({ operationKind: 'transfer', debit: 'supplier-gold', debitAccountId: 'supplier-gold', credit: 'equity-draw', creditAccountId: 'equity-draw', weight: '5' }),
+    ], accounts);
+
+    expect(result.goldPosition.physicalGoldInventory21).toBe(0);
+    expect(result.goldPosition.netGoldLiabilities21).toBe(-5);
+    expect(result.goldPosition.netShopGoldOwnership21).toBe(5);
+  });
+
+  it('includes non-merchant gold deposit liability accounts in net gold liabilities', () => {
+    const result = processInventory([
+      entry({ operationKind: 'purchase', debit: 'gold21-product', debitAccountId: 'gold21-product', credit: 'deposit-gold', creditAccountId: 'deposit-gold', weight: '7.5' }),
+    ], accounts);
+
+    expect(result.merchantWeightLiabilities['deposit-gold']).toBeUndefined();
+    expect(result.goldWeightLiabilities['deposit-gold'].arabicWeight).toBe(7.5);
+    expect(result.goldPosition).toMatchObject({
+      physicalGoldInventory21: 7.5,
+      netGoldLiabilities21: 7.5,
+      netShopGoldOwnership21: 0,
+    });
+  });
+
+  it('exposes the same gold ownership result for dashboard and financial position consumers', () => {
+    const entries = [
+      entry({ operationKind: 'purchase', debit: 'gold21-product', debitAccountId: 'gold21-product', credit: 'supplier-gold', creditAccountId: 'supplier-gold', weight: '12' }),
+    ];
+
+    const inventoryResult = processInventory(entries, accounts).goldPosition;
+    const sharedSelectorResult = calculateGoldOwnershipPosition(entries, accounts);
+
+    expect(sharedSelectorResult).toEqual(inventoryResult);
+  });
+
+  it('excludes non-inventory gold equity and expense accounts from net gold liabilities', () => {
+    const result = processInventory([
+      entry({ operationKind: 'opening', debit: 'gold21-product', debitAccountId: 'gold21-product', credit: 'equity-gold', creditAccountId: 'equity-gold', weight: '9' }),
+      entry({ operationKind: 'adjustment', debit: 'adjustment', debitAccountId: 'adjustment', credit: 'gold21-product', creditAccountId: 'gold21-product', weight: '2' }),
+    ], accounts);
+
+    expect(result.goldWeightLiabilities['equity-gold']).toBeUndefined();
+    expect(result.goldWeightLiabilities.adjustment).toBeUndefined();
+    expect(result.goldPosition.netGoldLiabilities21).toBe(0);
+    expect(result.goldPosition.physicalGoldInventory21).toBe(7);
+    expect(result.goldPosition.netShopGoldOwnership21).toBe(7);
+  });
   it('routes merchant weight accounts into the gold liability ledger by metadata', () => {
     expect(belongsToMetric('merchant-gold', 'gold', accounts)).toBe(true);
     expect(belongsToMetric('merchant-gold', 'cash', accounts)).toBe(false);

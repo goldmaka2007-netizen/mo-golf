@@ -16,12 +16,15 @@ import { cn } from '../../../lib/utils';
 import { getDynamicAccountNature, belongsToMetric, getMetricValue, getAccountTypeDetails, getMetricActualValue } from '../../../utils/accountLogic';
 import { parseWeight } from '../../../lib/accounting';
 import { exportToExcel } from '../../../utils/exportUtils';
+import { calculateGoldOwnershipPosition } from '../../../lib/engine';
 
 type LedgerType = 'cash' | 'gold' | 'silver' | 'accs';
 
 export const BalanceSheetView = React.memo(({ entries }: { entries: Entry[] }) => {
   const { accountCategories, accountsDb } = useAppStore();
   const [activeTab, setActiveTab] = useState<LedgerType>('gold');
+
+  const goldPosition = useMemo(() => calculateGoldOwnershipPosition(entries, accountsDb), [entries, accountsDb]);
 
   const balanceSheet = useMemo(() => {
     const createLedger = (metric: LedgerType) => {
@@ -331,9 +334,39 @@ export const BalanceSheetView = React.memo(({ entries }: { entries: Entry[] }) =
             هذا الجرد مخصص لحركة <span className={cn("font-bold", accent)}>{title}</span> المعزولة في الأصول، الخصوم وحقوق الملكية
           </div>
         </div>
+        {activeTab === 'gold' && (
+          <div className="bg-[#0e1018] border border-[#c9a84c44] rounded-2xl p-4 shadow-lg">
+            <div className="flex items-start justify-between gap-3">
+              <div>
+                <div className="text-xs font-black text-[#8a8172]">صافي ملكية المحل</div>
+                <div className="mt-1 text-3xl font-black font-mono text-[#c9a84c]">{goldPosition.netShopGoldOwnership21.toFixed(2)} جم</div>
+              </div>
+              <div className="rounded-xl border border-[#c9a84c33] bg-[#c9a84c11] px-2 py-1 text-[10px] font-bold text-[#c9a84c]">
+                عيار 21 مكافئ
+              </div>
+            </div>
+            <div className="mt-3 grid grid-cols-2 gap-2 text-xs font-bold">
+              <div className="rounded-xl border border-[#1a1e2a] bg-[#080a0f] p-3">
+                <div className="text-[#5a5548]">مخزون فعلي</div>
+                <div className="mt-1 font-mono text-[#ddd8cc]">{goldPosition.physicalGoldInventory21.toFixed(2)} جم</div>
+              </div>
+              <div className="rounded-xl border border-[#1a1e2a] bg-[#080a0f] p-3">
+                <div className="flex items-center justify-between gap-2 text-[#5a5548]">
+                  <span>صافي التزامات</span>
+                  <span className="rounded-md bg-[#1a1e2a] px-1.5 py-0.5 text-[10px] text-[#c9a84c]">
+                    {goldPosition.netGoldLiabilities21 > 0 ? 'على المحل' : goldPosition.netGoldLiabilities21 < 0 ? 'لصالح المحل' : 'متوازن'}
+                  </span>
+                </div>
+                <div className="mt-1 font-mono text-[#ddd8cc]">{goldPosition.netGoldLiabilities21.toFixed(2)} جم</div>
+              </div>
+            </div>
+          </div>
+        )}
 
         {renderSection("الأصول (Assets)", data.assets, <Briefcase className="w-5 h-5" />, accent, unit)}
+
         {renderSection("الخصوم / الالتزامات (Liabilities)", data.liabilities, <ShieldCheck className="w-5 h-5" />, "text-[#9e6a6a]", unit)}
+
         {renderSection("حقوق الملكية (Equity)", data.equity, <Landmark className="w-5 h-5" />, "text-[#8a6820]", unit)}
 
         {data.uncategorized.length > 0 && (

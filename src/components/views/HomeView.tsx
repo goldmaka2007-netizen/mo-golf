@@ -21,11 +21,12 @@ import {
 import { format } from 'date-fns';
 import { ar } from 'date-fns/locale';
 import { Entry } from '../../types';
-import { GOLD_ORDER, CATS, ACCOUNT_CATEGORIES } from '../../constants';
+import { CATS, ACCOUNT_CATEGORIES } from '../../constants';
 import { cn } from '../../lib/utils';
 import { db, auth } from '../../firebase';
 import { doc, setDoc } from 'firebase/firestore';
 import { useAppStore } from '../../store';
+import { calculateGoldOwnershipPosition, type GoldOwnershipPosition } from '../../lib/engine';
 
 interface KPICardProps {
   icon: React.ReactNode;
@@ -45,6 +46,49 @@ const KPICard = React.memo(({ icon, title, value, subValue, color }: KPICardProp
     {subValue && <div className="text-xs text-[#3a3530] mt-0.5">{subValue}</div>}
   </div>
 ));
+interface GoldSummaryCardProps {
+  position: GoldOwnershipPosition;
+  onClick: () => void;
+}
+
+const formatGold21 = (value: number) => `${value.toFixed(2)} جم`;
+
+const GoldSummaryCard = React.memo(({ position, onClick }: GoldSummaryCardProps) => {
+  const liabilityContext = position.netGoldLiabilities21 > 0 ? 'على المحل' : position.netGoldLiabilities21 < 0 ? 'لصالح المحل' : 'متوازن';
+
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className="bg-[#0e1018] border border-[#c9a84c33] rounded-2xl p-4 text-right shadow-lg transition-all hover:border-[#c9a84c66] active:scale-[0.99]"
+    >
+      <div className="flex items-start justify-between gap-3">
+        <div className="min-w-0">
+          <div className="text-xs font-black text-[#8a8172]">صافي ملكية المحل</div>
+          <div className="mt-1 text-3xl font-black font-mono leading-tight text-[#c9a84c]">
+            {formatGold21(position.netShopGoldOwnership21)}
+          </div>
+        </div>
+        <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl border border-[#c9a84c33] bg-[#c9a84c11]">
+          <Scale className="h-6 w-6 text-[#c9a84c]" />
+        </div>
+      </div>
+      <div className="mt-3 grid grid-cols-2 gap-2 text-[11px] font-bold">
+        <div className="rounded-xl border border-[#1a1e2a] bg-[#080a0f] p-2">
+          <div className="text-[#5a5548]">مخزون فعلي</div>
+          <div className="mt-0.5 font-mono text-[#ddd8cc]">{formatGold21(position.physicalGoldInventory21)}</div>
+        </div>
+        <div className="rounded-xl border border-[#1a1e2a] bg-[#080a0f] p-2">
+          <div className="flex items-center justify-between gap-2 text-[#5a5548]">
+            <span>صافي التزامات</span>
+            <span className="rounded-md bg-[#1a1e2a] px-1.5 py-0.5 text-[9px] text-[#c9a84c]">{liabilityContext}</span>
+          </div>
+          <div className="mt-0.5 font-mono text-[#ddd8cc]">{formatGold21(position.netGoldLiabilities21)}</div>
+        </div>
+      </div>
+    </button>
+  );
+});
 
 interface StatsCardProps {
   value: number | string;
@@ -264,8 +308,7 @@ export const HomeView = React.memo(({
     silverPrice, setSilverPrice, 
     silverBuyPrice, setSilverBuyPrice,
     silverSpread, setSilverSpread,
-    isUpdatingPrice, 
-    goldKarat, setGoldKarat,
+    isUpdatingPrice,
     accountsDb,
     accountCategories,
     setGlobalError,
@@ -326,20 +369,16 @@ export const HomeView = React.memo(({
   const todayISO = format(new Date(), 'yyyy-MM-dd');
   const todayCount = entries.filter(e => e.date === todayISO).length;
 
+  const goldPosition = useMemo(() => calculateGoldOwnershipPosition(entries, accountsDb), [entries, accountsDb]);
+
   const totals = useMemo(() => {
     let cash = 0;
-    let gold21 = 0;
     let silver = 0;
 
     const cashAccNames = accountsDb.filter(a => 
       a.mainType === 'اصول' && (a.subType === 'النقدية بالخزنة' || a.name === 'الخزنة')
     ).map(a => a.name);
     if (cashAccNames.length === 0) cashAccNames.push('الخزنة');
-
-    const goldAccNames = accountsDb.filter(a => 
-      a.mainType === 'اصول' && (a.subType === 'مخزون ذهب' || a.balanceNature === 'جرام ذهب') && !a.subType.includes('ذمم')
-    ).map(a => a.name);
-    if (goldAccNames.length === 0) goldAccNames.push(...GOLD_ORDER);
 
     const silverAccNames = accountsDb.filter(a => 
       a.mainType === 'اصول' && (a.subType === 'مخزون فضة' || a.balanceNature === 'جرام فضة') && !a.subType.includes('ذمم')
@@ -351,39 +390,24 @@ export const HomeView = React.memo(({
     entries.forEach(e => {
       const c = parseFloat(e.cash || '0');
       const w = parseFloat(e.weight || '0');
-      
-      // Fallback for arabic weight calculation
-      let aw = parseFloat(e.arabicWeight || '0');
-      if (aw === 0 && w > 0) {
-        const multipliers: Record<string|number, number> = { 18: 18/21, 21: 1, 24: 24/21 };
-        const m = multipliers[e.karat || ""] || (e.multiplier || 1);
-        aw = w * m;
-      }
 
       if (cashAccNames.includes(e.debit)) cash += c;
       if (cashAccNames.includes(e.credit)) cash -= c;
 
-      let goldFactorDebit = 1;
-      let goldFactorCredit = -1;
       let silverFactorDebit = 1;
       let silverFactorCredit = -1;
 
       if (e.tx?.startsWith("حساب تاجر")) {
-        goldFactorDebit = -1;
-        goldFactorCredit = 1;
         silverFactorDebit = -1;
         silverFactorCredit = 1;
       }
-
-      if (goldAccNames.includes(e.debit)) gold21 += aw * goldFactorDebit;
-      if (goldAccNames.includes(e.credit)) gold21 += aw * goldFactorCredit;
 
       if (silverAccNames.includes(e.debit)) silver += w * silverFactorDebit;
       if (silverAccNames.includes(e.credit)) silver += w * silverFactorCredit;
     });
 
-    return { cash, gold21, silver };
-  }, [entries, accountsDb]);
+    return { cash, silver };
+  }, [entries, accountsDb, accountCategories]);
 
 
   const reportShortcuts = [
@@ -427,12 +451,12 @@ export const HomeView = React.memo(({
             value={`${Math.round(totals.cash).toLocaleString()} ج`}
             color="text-[#6a9e6a]"
           />
-          <KPICard
-            icon={<Scale className="w-5 h-5" />}
-            title="رصيد الذهب"
-            value={`${(totals.gold21 * (goldKarat === 18 ? 21/18 : 1)).toFixed(2)} جم`}
-            subValue={goldKarat === 18 ? "عيار 18" : "عيار 21"}
-            color="text-[#c9a84c]"
+          <GoldSummaryCard
+            position={goldPosition}
+            onClick={() => {
+              setReportsTab('balance');
+              setView('reports');
+            }}
           />
           <KPICard
             icon={<Database className="w-5 h-5" />}
@@ -492,36 +516,12 @@ export const HomeView = React.memo(({
 
       {/* KPI cards and gold karat toggle */}
       <div className="space-y-3">
-        <div className="flex justify-center gap-3 p-1.5 bg-[#0e1018] border border-[#1a1e2a] rounded-2xl">
-          {[21, 18].map((k) => (
-            <button
-              key={k}
-              onClick={() => setGoldKarat(k as 18 | 21)}
-              className={cn(
-                "flex-1 py-4 rounded-xl text-sm font-bold transition-all",
-                goldKarat === k 
-                  ? "bg-[#c9a84c] text-[#080a0f] shadow-lg" 
-                  : "text-[#5a5548] hover:text-[#ddd8cc]"
-              )}
-            >
-              توحيد عيار {k}
-            </button>
-          ))}
-        </div>
-
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
           <KPICard 
             icon={<Wallet className="w-4 h-4" />} 
             title="رصيد الخزنة" 
             value={`${Math.round(totals.cash).toLocaleString()} ج`} 
             color="text-[#6a9e6a]" 
-          />
-          <KPICard 
-            icon={<Scale className="w-4 h-4" />} 
-            title="مخزون الذهب" 
-            value={`${(totals.gold21 * (goldKarat === 18 ? 21/18 : 1)).toFixed(2)} جم`} 
-            subValue={goldKarat === 18 ? "عيار 18" : "عيار 21"}
-            color="text-[#c9a84c]" 
           />
           <KPICard 
             icon={<Database className="w-4 h-4" />} 

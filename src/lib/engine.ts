@@ -1,8 +1,9 @@
-import { Entry, Account, AccountingOperationKind } from '../types';
+import { Entry, Account, AccountingOperationKind, AccountNature } from '../types';
 import { OPERATION_RULES } from '../constants';
 import { parseWeight, normalizeNumerals } from './accounting';
 import { canCalculateGoldEquivalent21, calculateGoldEquivalent21 } from './goldEquivalent';
 import { rebuildCostTimeline, getOperationId, compareEntriesForCost, ACCESSORY_QUANTITY_SCALE, type CostTimelineResult, type OperationCostResult, type OpeningCostConfig } from './weightedAverageCost';
+import { getAccountTypeDetails } from '../utils/accountLogic';
 
 export const KARAT_MULT: Record<string, number> = { '18': 18 / 21, '21': 1, '24': 24 / 21, silver: 1 };
 
@@ -24,10 +25,61 @@ const textIncludesAny = (value: string | undefined, needles: string[]): boolean 
 
 export const isMerchantWeightAccount = (account?: Account | null): boolean => {
   if (account?.type !== 'merchant') return false;
-  if (account.metal === 'gold' || account.metal === 'silver') return true;
+  return getMerchantMetadataMetal(account) !== undefined;
+};
 
-  return textIncludesAny(account.balanceNature, ['\u062C\u0631\u0627\u0645 \u0630\u0647\u0628', '\u062C\u0631\u0627\u0645 \u0641\u0636\u0629'])
-    || textIncludesAny(account.subType, ['\u062A\u062C\u0627\u0631 \u0630\u0647\u0628', '\u062A\u062C\u0627\u0631 \u0641\u0636\u0629']);
+type MerchantMetal = 'gold' | 'silver';
+type AccountWithLegacyMetal = Account & Record<string, unknown>;
+
+export const getMerchantMetadataMetal = (account?: Account | null): MerchantMetal | undefined => {
+  if (account?.type !== 'merchant') return undefined;
+  const raw = account as AccountWithLegacyMetal;
+  const explicit = [raw.metal, raw.metalType, raw.weightMetal, raw.inventoryMetal, raw.legacyMetal].map(value => String(value ?? '').toLowerCase()).find(value => value === 'gold' || value === 'silver');
+  if (explicit === 'gold' || explicit === 'silver') return explicit;
+  if (textIncludesAny(account.balanceNature, ['\u062C\u0631\u0627\u0645 \u0630\u0647\u0628']) || textIncludesAny(account.subType, ['\u062A\u062C\u0627\u0631 \u0630\u0647\u0628'])) return 'gold';
+  if (textIncludesAny(account.balanceNature, ['\u062C\u0631\u0627\u0645 \u0641\u0636\u0629']) || textIncludesAny(account.subType, ['\u062A\u062C\u0627\u0631 \u0641\u0636\u0629'])) return 'silver';
+  return undefined;
+};
+
+const accountMatchesMerchant = (entry: Entry, side: 'debit' | 'credit', merchant: Account): boolean => {
+  const id = side === 'debit' ? entry.debitAccountId : entry.creditAccountId;
+  const name = side === 'debit' ? entry.debit : entry.credit;
+  return (!!id && id === merchant.id) || (!id && name === merchant.name);
+};
+
+const entryMetal = (entry: Entry, opposite?: Account): MerchantMetal | undefined => {
+  const raw = entry as Entry & Record<string, unknown>;
+  const explicit = [raw.metal, raw.metalType, raw.weightMetal, raw.inventoryMetal].map(value => String(value ?? '').toLowerCase()).find(value => value === 'gold' || value === 'silver');
+  if (explicit === 'gold' || explicit === 'silver') return explicit;
+  if (String(entry.karat ?? '').toLowerCase() === 'silver') return 'silver';
+  if (opposite?.metal === 'gold' || opposite?.metal === 'silver') return opposite.metal;
+  if (entry.tx === '\u062D\u0633\u0627\u0628 \u062A\u0627\u062C\u0631 \u0641\u0636\u0629') return 'silver';
+  if (entry.tx === '\u062D\u0633\u0627\u0628 \u062A\u0627\u062C\u0631 \u0630\u0647\u0628') return 'gold';
+  return undefined;
+};
+
+export const getMerchantMetals = (merchant: Account, entries: Entry[] = [], accounts: Account[] = []): MerchantMetal[] => {
+  if (merchant.type !== 'merchant') return [];
+  const metals = new Set<MerchantMetal>();
+  const metadataMetal = getMerchantMetadataMetal(merchant);
+  if (metadataMetal) metals.add(metadataMetal);
+  const index = buildAccountIndex(accounts);
+  entries.forEach(entry => {
+    const debitMatch = accountMatchesMerchant(entry, 'debit', merchant);
+    const creditMatch = accountMatchesMerchant(entry, 'credit', merchant);
+    if (!debitMatch && !creditMatch) return;
+    const opposite = debitMatch ? resolveAccount(entry, 'credit', index) : resolveAccount(entry, 'debit', index);
+    const metal = entryMetal(entry, opposite);
+    if (metal) metals.add(metal);
+  });
+  return [...metals];
+};
+export const isGoldWeightLiabilityAccount = (account?: Account | null): boolean => {
+  if (!account || account.is_inventory) return false;
+
+  const details = getAccountTypeDetails(account.name, [account]);
+  return details.main === 'liabilities'
+    && [AccountNature.GOLD, AccountNature.MIXED_GOLD].includes(details.nature);
 };
 
 export interface AccountIndex {
@@ -116,12 +168,21 @@ export interface InventorySnapshot {
 export interface InventoryEngineResult {
   snapshots: Record<string, InventorySnapshot>;
   merchantWeightLiabilities: Record<string, InventorySnapshot>;
+  goldWeightLiabilities: Record<string, InventorySnapshot>;
+  goldPosition: GoldOwnershipPosition;
+}
+
+export interface GoldOwnershipPosition {
+  physicalGoldInventory21: number;
+  netGoldLiabilities21: number;
+  netShopGoldOwnership21: number;
 }
 
 export function processInventory(entries: Entry[], accountsDb: Account[]): InventoryEngineResult {
   const index = buildAccountIndex(accountsDb);
   const snapshots: Record<string, InventorySnapshot> = {};
   const merchantWeightLiabilities: Record<string, InventorySnapshot> = {};
+  const goldWeightLiabilities: Record<string, InventorySnapshot> = {};
 
   accountsDb.forEach(account => {
     const karat = account.karat || (account.metal === 'silver' ? 'silver' : '21');
@@ -137,6 +198,15 @@ export function processInventory(entries: Entry[], accountsDb: Account[]): Inven
 
     if (isMerchantWeightAccount(account)) {
       merchantWeightLiabilities[account.name] = {
+        weight: 0,
+        arabicWeight: 0,
+        count: 0,
+        karat,
+      };
+    }
+
+    if (isGoldWeightLiabilityAccount(account)) {
+      goldWeightLiabilities[account.name] = {
         weight: 0,
         arabicWeight: 0,
         count: 0,
@@ -165,14 +235,33 @@ export function processInventory(entries: Entry[], accountsDb: Account[]): Inven
         merchantWeightLiabilities[account.name].weight -= weight * sign;
         merchantWeightLiabilities[account.name].arabicWeight -= getEntryArabicWeight(entry, account) * sign;
       }
+
+      if (isGoldWeightLiabilityAccount(account) && goldWeightLiabilities[account.name]) {
+        goldWeightLiabilities[account.name].weight -= weight * sign;
+        goldWeightLiabilities[account.name].arabicWeight -= getEntryArabicWeight(entry, account) * sign;
+      }
     };
 
     apply(debitAcc, 1);
     apply(creditAcc, -1);
   });
 
-  return { snapshots, merchantWeightLiabilities };
+  const physicalGoldInventory21 = Object.entries(snapshots).reduce((total, [accountName, snapshot]) => {
+    const account = index.byName.get(accountName);
+    return account?.metal === 'gold' ? total + snapshot.arabicWeight : total;
+  }, 0);
+  const netGoldLiabilities21 = Object.values(goldWeightLiabilities).reduce((total, snapshot) => total + snapshot.arabicWeight, 0);
+  const goldPosition = {
+    physicalGoldInventory21,
+    netGoldLiabilities21,
+    netShopGoldOwnership21: physicalGoldInventory21 - netGoldLiabilities21,
+  };
+
+  return { snapshots, merchantWeightLiabilities, goldWeightLiabilities, goldPosition };
 }
+
+export const calculateGoldOwnershipPosition = (entries: Entry[], accountsDb: Account[]): GoldOwnershipPosition =>
+  processInventory(entries, accountsDb).goldPosition;
 
 export interface CostBasisEngine {
   getCost: (accNameOrId: string) => number;
@@ -468,4 +557,3 @@ export function analyzeProfitability(
 
   return { karatData, accData, flowData, costBasis, profitStatus, missingOpeningCostBasisCount, missingCostBasisCount, invalidCostOperationCount, affectedSalesCount };
 }
-

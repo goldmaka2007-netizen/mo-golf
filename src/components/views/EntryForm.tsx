@@ -1,23 +1,7 @@
 import React, { useState, useMemo, useEffect } from 'react';
 import { motion } from 'framer-motion';
 import { 
-  CheckCircle2, 
-  ChevronRight,
-  BookOpen,
-  BarChart3,
-  Plus,
-  LogIn,
-  LogOut,
-  Search,
-  ShoppingCart,
-  ArrowRightLeft,
-  Users,
-  Wallet,
-  Settings,
-  Scale,
-  Banknote,
-  History,
-  Info
+  CheckCircle2,
 } from 'lucide-react';
 import { format, isValid } from 'date-fns';
 import { ar } from 'date-fns/locale';
@@ -38,6 +22,8 @@ import { getOperationId, rebuildCostTimeline, isQuantityAlignedToStep } from '..
 import { buildOpeningCostConfig } from '../../lib/openingCostConfig';
 import { isGoldEquivalentEntry } from '../../utils/accountLogic';
 import { AccountSearchSelect } from '../ui/AccountSearchSelect';
+import { resolveEntryIdentity } from '../../lib/entryIdentity';
+import { OperationSelector } from '../ui/OperationSelector';
 
 export const EntryForm = React.memo(() => {
   const { 
@@ -115,73 +101,14 @@ export const EntryForm = React.memo(() => {
     return combined;
   }, [customRules, transactionRules]);
 
-  const CATS_DYNAMIC = useMemo(() => {
-    try {
-      const seenTx = new Set<string>();
-      let finalGroups: Record<string, string[]> = {};
-
-      const dynamicTxToCat: Record<string, string> = {};
-      if (Array.isArray(transactionRules)) {
-        transactionRules.forEach(r => {
-          if (r && r.category && r.tx) {
-            dynamicTxToCat[r.tx] = r.category;
-          }
-        });
-      }
-
-      Object.entries(dynamicTxToCat).forEach(([tx, cat]) => {
-        if (!finalGroups[cat]) finalGroups[cat] = [];
-        if (!seenTx.has(tx)) {
-          finalGroups[cat].push(tx);
-          seenTx.add(tx);
-        }
-      });
-
-      if (Array.isArray(CATS)) {
-        CATS.forEach(c => {
-          if (!c || !c.cat || !Array.isArray(c.items)) return;
-          if (!finalGroups[c.cat]) finalGroups[c.cat] = [];
-          c.items.forEach(item => {
-            if (!seenTx.has(item)) {
-              finalGroups[c.cat].push(item);
-              seenTx.add(item);
-            }
-          });
-        });
-      }
-
-      const icons: Record<string, any> = {
-        'مبيعات': <ShoppingCart className="w-3.5 h-3.5" />,
-        'شراء': <LogIn className="w-3.5 h-3.5" />,
-        'تحويل': <ArrowRightLeft className="w-3.5 h-3.5" />,
-        'عملاء': <Users className="w-3.5 h-3.5" />,
-        'مصروفات': <Wallet className="w-3.5 h-3.5" />,
-        'اعدادات': <Settings className="w-3.5 h-3.5" />
-      };
-
-      return Object.entries(finalGroups)
-        .filter(([_, items]) => items && items.length > 0)
-        .map(([cat, items]) => ({
-          cat,
-          icon: Object.entries(icons).find(([k]) => cat.includes(k))?.[1] || <Plus className="w-3.5 h-3.5" />,
-          items: sortByUsage(items, i => i)
-        }))
-        .sort((a, b) => {
-          const getPriority = (name: string): number => {
-            const n = name || '';
-            if (n.includes('مبيعات')) return 0;
-            if (n.includes('مشتريات')) return 1;
-            if (n.includes('عملاء')) return 2;
-            if (n.includes('موردين')) return 3;
-            if (n.includes('مصروفات')) return 4;
-            return 100;
-          };
-          return getPriority(a.cat) - getPriority(b.cat);
-        });
-    } catch (err) {
-      return CATS || [];
-    }
-  }, [transactionRules, usageStats]);
+  const availableOperationTypes = useMemo(() => {
+    const operationTypes = new Set<string>();
+    CATS.forEach(category => category.items.forEach(item => operationTypes.add(item)));
+    transactionRules.forEach(rule => {
+      if (rule.category && rule.tx) operationTypes.add(rule.tx);
+    });
+    return Array.from(operationTypes);
+  }, [transactionRules]);
 
   const initialFormState = {
     tx: '',
@@ -412,8 +339,6 @@ export const EntryForm = React.memo(() => {
       }
     }
 
-    setIsSaving(true);
-    
     // Preparation of entry data
     const entry: any = {
       tx: formData.tx || '',
@@ -434,6 +359,14 @@ export const EntryForm = React.memo(() => {
       createdAt: serverTimestamp()
     };
 
+    const identity = resolveEntryIdentity(entry, accountsDb);
+    if (identity.ok === false) {
+      setGlobalError(identity.message);
+      return;
+    }
+    Object.assign(entry, identity.value);
+
+    setIsSaving(true);
     if (formData.karat) entry.karat = formData.karat;
     if (formData.marketPrice !== undefined) entry.marketPrice = formData.marketPrice;
     try {
@@ -512,45 +445,20 @@ export const EntryForm = React.memo(() => {
   };
 
   const renderStep1 = () => (
-    <div className="space-y-5 animate-in fade-in duration-300">
-      <div className="text-center space-y-2">
-        <h2 className="text-2xl font-black text-[#f5f1e8]">ما هي العملية؟</h2>
-        <p className="text-[10px] text-[#5a5548] font-black uppercase tracking-widest">اختر نوع الحركة المالية</p>
-      </div>
-      <div className="grid gap-6">
-        {CATS_DYNAMIC.map(cat => (
-          <div key={cat.cat} className="space-y-3">
-            <div className="flex items-center gap-2 text-[#c9a84c] text-[10px] font-black uppercase tracking-widest">
-              {cat.icon} {cat.cat}
-            </div>
-            <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
-              {cat.items.map(item => (
-                <button 
-                  key={item} 
-                  onClick={() => handleTxSelect(item)} 
-                  className={cn(
-                    "px-4 py-4 rounded-xl border-2 text-[11px] font-black transition-all text-center flex items-center justify-center min-h-[60px] relative overflow-hidden group tracking-tight",
-                    formData.tx === item 
-                      ? "bg-[#c9a84c] border-[#c9a84c] text-[#080a0f] shadow-[0_0_20px_rgba(201,168,76,0.3)]" 
-                      : "bg-[#080a0f] border-[#1a1e2a] text-[#ddd8cc] hover:border-[#c9a84c66] hover:bg-[#c9a84c0a] hover:text-[#c9a84c]"
-                  )}
-                >
-                  <div className="absolute inset-0 bg-gradient-to-tr from-white/5 to-transparent opacity-0 group-hover:opacity-100 transition-opacity" />
-                  <span className="relative z-10 leading-tight">{item}</span>
-                </button>
-              ))}
-            </div>
-          </div>
-        ))}
-      </div>
+    <div className="animate-in fade-in space-y-4 duration-300">
+      <OperationSelector
+        availableOperations={availableOperationTypes}
+        selected={formData.tx}
+        onSelect={handleTxSelect}
+      />
 
       {formData.tx === 'قيد افتتاحي' && (
-        <div className="mt-8 space-y-4 p-4 border border-[#c9a84c] rounded-xl bg-black/20">
-          <label className="block text-[#c9a84c] text-sm font-bold">نوع القيد الافتتاحي</label>
+        <div className="space-y-4 rounded-[20px] border border-[#c99a2e]/45 bg-white p-4 shadow-sm">
+          <label className="block text-sm font-bold text-[#8a6519]">نوع القيد الافتتاحي</label>
           <select 
             value={formData.subTx || ''} 
             onChange={(e) => setFormData(p => ({ ...p, subTx: e.target.value }))}
-            className="w-full bg-[#080a0f] border-2 border-[#1a1e2a] rounded-xl py-3 px-4 text-[#ddd8cc] outline-none focus:border-[#c9a84c] focus:ring-1 focus:ring-[#c9a84c] transition-all"
+            className="w-full rounded-xl border-2 border-[#15203b]/15 bg-white px-4 py-3 text-[#15203b] outline-none transition-all focus:border-[#c99a2e] focus:ring-1 focus:ring-[#c99a2e]"
           >
             <option value="">عام</option>
             <option value="ذهب">ذهب</option>
@@ -562,7 +470,7 @@ export const EntryForm = React.memo(() => {
           </select>
           <button 
             onClick={() => setStep(2)}
-            className="w-full bg-[#c9a84c] text-[#080a0f] font-black py-4 rounded-xl hover:bg-[#d4b55b] transition-all relative overflow-hidden"
+            className="relative min-h-12 w-full overflow-hidden rounded-xl bg-[#c99a2e] py-3 font-black text-white transition-all hover:bg-[#b48725] active:scale-[0.98] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#15203b]"
           >
             متابعة
           </button>
@@ -893,10 +801,20 @@ export const EntryForm = React.memo(() => {
   };
 
   return (
-    <motion.div initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} onKeyDown={handleKeyDown} className="bg-[#0e1018] border border-[#1a1e2a] rounded-2xl p-4 sm:p-6 shadow-2xl space-y-5 relative overflow-hidden">
-      <div className="absolute top-0 left-0 w-full h-1.5 bg-[#1a1e2a]"><motion.div animate={{ width: `${(step / 4) * 100}%` }} className="h-full bg-gradient-to-r from-[#c9a84c] to-[#9a7830]" /></div>
+    <motion.div
+      initial={{ opacity: 0, x: 20 }}
+      animate={{ opacity: 1, x: 0 }}
+      onKeyDown={handleKeyDown}
+      className={cn(
+        'relative space-y-5 overflow-hidden',
+        step === 1
+          ? '-mx-4 bg-[radial-gradient(circle_at_85%_0%,rgba(201,154,46,0.13),transparent_34%),radial-gradient(circle_at_0%_32%,rgba(201,154,46,0.07),transparent_28%),#fffdf7] px-4 pb-5'
+          : 'rounded-2xl border border-[#1a1e2a] bg-[#0e1018] p-4 shadow-2xl sm:p-6',
+      )}
+    >
+      {step > 1 && <div className="absolute left-0 top-0 h-1.5 w-full bg-[#1a1e2a]"><motion.div animate={{ width: `${(step / 4) * 100}%` }} className="h-full bg-gradient-to-r from-[#c9a84c] to-[#9a7830]" /></div>}
       
-      <div className="flex justify-between items-center bg-[#11141d]/50 p-3 rounded-2xl border border-[#1a1e2a] gap-3">
+      {step > 1 && <div className="flex justify-between items-center bg-[#11141d]/50 p-3 rounded-2xl border border-[#1a1e2a] gap-3">
         <div className="flex items-center gap-2">
           <button onClick={() => setView('guide')} className="px-3 py-2 bg-[#c9a84c0a] border border-[#c9a84c22] rounded-xl text-[10px] font-black text-[#c9a84c] hover:bg-[#c9a84c22] transition-all">دليل العمليات</button>
           {formData.tx && step > 1 && (
@@ -907,7 +825,7 @@ export const EntryForm = React.memo(() => {
           <div className="flex gap-1">{[1,2,3].map(s => <div key={s} className={cn("w-1.5 h-1.5 rounded-full", s === step ? "bg-[#c9a84c]" : s < step ? "bg-green-500" : "bg-[#1a1e2a]")} />)}</div>
           <span className="text-[10px] font-black text-[#5a5548]">الخطوة {step}</span>
         </div>
-      </div>
+      </div>}
 
       {step === 1 && renderStep1()}
       {step === 2 && renderStep2()}
