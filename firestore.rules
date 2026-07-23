@@ -47,6 +47,13 @@ service cloud.firestore {
       allow delete: if ownsExisting();
     }
 
+    match /canonicalAccounts/{accountId} {
+      allow read: if ownsExisting();
+      allow create: if ownsIncoming();
+      allow update: if ownsExisting() && ownsIncoming() && preservesOwner();
+      allow delete: if false;
+    }
+
     match /entries/{entryId} {
       allow read: if ownsExisting();
       allow create: if ownsIncoming();

@@ -32,6 +32,11 @@ export interface Entry {
   credit: string;
   debitAccountId?: string;
   creditAccountId?: string;
+  /** Immutable legacy labels retained after the ID migration. */
+  debitLegacySnapshot?: string;
+  creditLegacySnapshot?: string;
+  accountMigrationVersion?: number;
+  accountMigratedAt?: string;
   date: string;
   cash: string;
   weight: string;
@@ -121,6 +126,73 @@ export interface Account {
   is_inventory?: boolean;
   quantityStep?: number | string;
   isActive?: boolean;
+}
+
+export type AccountingDimension = 'cash' | 'gold' | 'silver';
+export type AccountTrackingDimension = AccountingDimension | 'quantity';
+export type CanonicalMainGroup = 'assets' | 'liabilities' | 'equity' | 'revenue' | 'expenses';
+export type CanonicalAccountType =
+  | 'cash' | 'gold_inventory' | 'silver_inventory' | 'accessory_inventory'
+  | 'merchant' | 'customer' | 'debtor' | 'creditor' | 'capital'
+  | 'retained_earnings' | 'withdrawals' | 'revenue' | 'expense'
+  | 'gold_surplus' | 'gold_shortage' | 'silver_surplus' | 'silver_shortage'
+  | 'fixed_asset' | 'adjustment' | 'historical' | 'other';
+export type ClassificationSource = 'legacy_code' | 'manual';
+export type ReviewStatus = 'discovered' | 'needs_review' | 'reviewed';
+export type ApprovalStatus = 'draft' | 'approved' | 'rejected';
+export type ReportParticipation = 'incomeStatement' | 'financialPosition' | 'equityStatement' | 'inventoryReports';
+
+export interface ClassificationEvidence {
+  source: 'account_document' | 'entry_id' | 'entry_name' | 'migration_data' | 'legacy_rule' | 'manual';
+  field?: string;
+  value?: string;
+  file?: string;
+  rule?: string;
+}
+
+/** Central account definition used only by the new shadow accounting path. */
+export interface CanonicalAccountDefinition {
+  id: string;
+  entityId: string;
+  sourceAccountId?: string;
+  userId?: string;
+  canonicalName: string;
+  displayName: string;
+  legacyNames: string[];
+  aliases: string[];
+  code?: string;
+  description?: string;
+  entityType: CanonicalAccountType;
+  mainGroup: CanonicalMainGroup;
+  allowedDimensions: AccountTrackingDimension[];
+  normalBalanceByDimension: Record<AccountTrackingDimension, 'debit' | 'credit' | null>;
+  metal: 'gold' | 'silver' | 'accessory' | null;
+  karat: 18 | 21 | 24 | null;
+  trackingMode: 'value' | 'weight' | 'quantity' | 'weight_and_quantity' | 'value_and_weight';
+  tracksCash: boolean;
+  tracksGold: boolean;
+  tracksSilver: boolean;
+  tracksQuantity: boolean;
+  tracksWeight: boolean;
+  tracksValue: boolean;
+  tracksCost: boolean;
+  isInventory: boolean;
+  isMerchant: boolean;
+  isHistoricalOnly: boolean;
+  isActive: boolean;
+  reportParticipation: ReportParticipation[];
+  allowedOperationKinds: AccountingOperationKind[];
+  classificationSource: ClassificationSource;
+  classificationConfidence: number;
+  classificationEvidence: ClassificationEvidence[];
+  classificationConflicts: string[];
+  reviewStatus: ReviewStatus;
+  approvalStatus: ApprovalStatus;
+  createdAt: string;
+  updatedAt: string;
+  approvedAt?: string;
+  version: number;
+  audit: { createdBy: string; updatedBy: string; lastReason?: string };
 }
 
 export interface TransactionRule {

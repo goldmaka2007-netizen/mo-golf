@@ -6,6 +6,7 @@ import { db, handleFirestoreError } from '../../firebase';
 import { OperationType } from '../../types';
 import { useAppStore } from '../../store';
 import { cn } from '../../lib/utils';
+import { CanonicalAccountsPanel } from './CanonicalAccountsPanel';
 
 const TOP_LEVEL_CATEGORIES = [
   { id: 'assets', label: 'الأصول' },
@@ -128,6 +129,7 @@ export const ChartOfAccountsSettings = React.memo(() => {
 
   return (
     <div className="space-y-6">
+      <CanonicalAccountsPanel />
       <div className="flex gap-2 overflow-x-auto pb-2 no-scrollbar">
         {TOP_LEVEL_CATEGORIES.map(tab => (
           <button

@@ -1,4 +1,4 @@
-import { Account, Entry } from '../types';
+import { Account, CanonicalAccountDefinition, Entry } from '../types';
 import { formatLedgerAmount, LedgerDimension } from './ledgerReport';
 import { buildCanonicalAccountRegistry, buildCanonicalAccountingLegs } from './canonicalAccounting';
 import { splitLegsByPeriod } from './periodLegs';
@@ -48,8 +48,8 @@ export const getTrialBalanceDescription = (account: Account): string => {
   const group = groupMeta(account.mainType).id;
   return group === 'revenue' ? '\u0625\u064a\u0631\u0627\u062f' : group === 'expenses' ? '\u0645\u0635\u0631\u0648\u0641' : group === 'equity' ? arabic.equity : group === 'liabilities' ? arabic.liability : arabic.asset;
 };
-export const buildTrialBalanceReport = (entries: Entry[], accounts: Account[], dimension: LedgerDimension, startDate: string, endDate: string): TrialBalanceReport => {
-  const registry = buildCanonicalAccountRegistry(accounts, entries);
+export const buildTrialBalanceReport = (entries: Entry[], accounts: Account[], dimension: LedgerDimension, startDate: string, endDate: string, canonicalDefinitions?: CanonicalAccountDefinition[]): TrialBalanceReport => {
+  const registry = buildCanonicalAccountRegistry(accounts, entries, canonicalDefinitions);
   const legs = buildCanonicalAccountingLegs(entries, registry).filter(leg => leg.dimension === dimension);
   const groupRows = new Map<TrialBalanceGroupId, TrialBalanceRow[]>();
   registry.entities.forEach((entity, order) => {

@@ -1,5 +1,5 @@
 ﻿import React from 'react';
-import { Image, BookOpen, Settings, Maximize2, Minimize2, LogOut, ChevronLeft } from 'lucide-react';
+import { Image, BookOpen, Settings, Maximize2, Minimize2, LogOut, ChevronLeft, Landmark } from 'lucide-react';
 import { useAppStore } from '../../store';
 
 export const MoreView = React.memo(({
@@ -16,6 +16,7 @@ export const MoreView = React.memo(({
   const tools = [
     { label: 'حالة واتساب', detail: 'تجهيز الحالة اليومية بسرعة', icon: <Image className="h-5 w-5" />, onClick: () => setView('story') },
     { label: 'الدليل المحاسبي', detail: 'الحسابات والقواعد المرجعية', icon: <BookOpen className="h-5 w-5" />, onClick: () => setView('guide') },
+    { label: 'دليل الحسابات', detail: 'الدليل المركزي والاكتشاف وMigration وParity', icon: <Landmark className="h-5 w-5" />, onClick: () => setView('chart-of-accounts') },
     { label: 'الإعدادات', detail: 'الأسعار والحسابات وإعدادات النظام', icon: <Settings className="h-5 w-5" />, onClick: () => setView('settings') },
     { label: isFullscreen ? 'الخروج من ملء الشاشة' : 'ملء الشاشة', detail: 'على iOS استخدم تعليمات Safari عند الحاجة', icon: isFullscreen ? <Minimize2 className="h-5 w-5" /> : <Maximize2 className="h-5 w-5" />, onClick: onToggleFullscreen },
   ];

@@ -3,12 +3,14 @@ import { renderToStaticMarkup } from 'react-dom/server';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { SettingsView } from '../SettingsView';
 import { ProfitAnalysisView } from '../ProfitAnalysisView';
+import { MoreView } from '../MoreView';
+import { CanonicalAccountsView } from '../CanonicalAccountsView';
 import type { Account, Entry } from '../../../types';
 
 const mockStore = vi.hoisted(() => ({ value: {} as any }));
 
 vi.mock('../../../store', () => ({
-  useAppStore: () => mockStore.value,
+  useAppStore: (selector?: (state: any) => unknown) => selector ? selector(mockStore.value) : mockStore.value,
 }));
 
 vi.mock('../../../firebase', () => ({
@@ -74,6 +76,7 @@ describe('MKA-34 UI integration', () => {
       view: 'settings',
       globalError: null,
       customRules: [],
+      canonicalAccounts: [],
       setView: vi.fn(),
       setOpeningCostConfig: vi.fn(),
       setGlobalError: vi.fn(),
@@ -95,5 +98,18 @@ describe('MKA-34 UI integration', () => {
     const html = renderToStaticMarkup(<ProfitAnalysisView />);
 
     expect(html).toContain('تكلفة المخزون الافتتاحي غير مكتملة');
+  });
+
+  it('exposes the central chart from More and renders every required mobile section', () => {
+    const moreHtml = renderToStaticMarkup(<MoreView isFullscreen={false} onToggleFullscreen={vi.fn()} onLogOut={vi.fn()} />);
+    expect(moreHtml).toContain('دليل الحسابات');
+
+    const chartHtml = renderToStaticMarkup(<CanonicalAccountsView />);
+    expect(chartHtml).toContain('دليل الحسابات');
+    expect(chartHtml).toContain('الحسابات المكتشفة');
+    expect(chartHtml).toContain('Aliases الغامضة');
+    expect(chartHtml).toContain('Migration');
+    expect(chartHtml).toContain('Parity Report');
+    expect(chartHtml).toContain('اعتماد دليل الحسابات');
   });
 });

@@ -1,6 +1,6 @@
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
-import { Entry, FirebaseUser, AccountCategories, Account, TransactionRule, CustomRule, InventoryCheck, AnnualOpeningCostConfig } from './types';
+import { Entry, FirebaseUser, AccountCategories, Account, TransactionRule, CustomRule, InventoryCheck, AnnualOpeningCostConfig, CanonicalAccountDefinition } from './types';
 import { ACCOUNT_CATEGORIES } from './constants';
 
 interface AppState {
@@ -21,6 +21,9 @@ interface AppState {
 
   accountsDb: Account[];
   setAccountsDb: (accounts: Account[]) => void;
+
+  canonicalAccounts: CanonicalAccountDefinition[];
+  setCanonicalAccounts: (accounts: CanonicalAccountDefinition[]) => void;
 
   transactionRules: TransactionRule[];
   setTransactionRules: (rules: TransactionRule[]) => void;
@@ -49,8 +52,8 @@ interface AppState {
   goldKarat: 18 | 21;
   setGoldKarat: (karat: 18 | 21) => void;
 
-  view: 'home' | 'entry' | 'database' | 'reports' | 'settings' | 'journal' | 'guide' | 'inventory' | 'story' | 'profit-analysis' | 'advanced-analytics' | 'more';
-  setView: (view: 'home' | 'entry' | 'database' | 'reports' | 'settings' | 'journal' | 'guide' | 'inventory' | 'story' | 'profit-analysis' | 'advanced-analytics' | 'more') => void;
+  view: 'home' | 'entry' | 'database' | 'reports' | 'settings' | 'chart-of-accounts' | 'journal' | 'guide' | 'inventory' | 'story' | 'profit-analysis' | 'advanced-analytics' | 'more';
+  setView: (view: 'home' | 'entry' | 'database' | 'reports' | 'settings' | 'chart-of-accounts' | 'journal' | 'guide' | 'inventory' | 'story' | 'profit-analysis' | 'advanced-analytics' | 'more') => void;
 
   printEntry: Entry | null;
   setPrintEntry: (entry: Entry | null) => void;
@@ -104,6 +107,8 @@ export const useAppStore = create<AppState>()(
   setCustomRules: (customRules) => set({ customRules }),
 
   accountsDb: [],
+  canonicalAccounts: [],
+  setCanonicalAccounts: (canonicalAccounts) => set({ canonicalAccounts }),
   setAccountsDb: (accountsDb) => {
     // Derive accountCategories from accounts database
     const categories: AccountCategories = {

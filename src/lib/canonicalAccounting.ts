@@ -1,5 +1,6 @@
-import { Account, Entry } from '../types';
+import { Account, CanonicalAccountDefinition, Entry } from '../types';
 import { getEntryArabicWeight, parseCash, resolveOperationKind } from './engine';
+import { buildAccountRegistry as buildCentralAccountRegistry } from './accountRegistry';
 
 export type AccountingDimension = 'cash' | 'gold' | 'silver';
 export type AccountingGroup = 'assets' | 'liabilities' | 'equity' | 'revenue' | 'expenses';
@@ -9,8 +10,16 @@ export interface CanonicalAccountEntity {
   mainGroup: AccountingGroup; allowedDimensions: AccountingDimension[]; metal: 'gold' | 'silver' | 'accessory' | null; trackingMode: 'value' | 'weight' | 'quantity';
   normalBalance: 'debit' | 'credit'; isInventory: boolean; isMerchant: boolean; isHistoricalOnly: boolean; displayDescription: string;
   sourceAccount?: Account;
+  aliases?: string[];
+  tracksQuantity?: boolean;
+  normalBalanceByDimension?: Record<'cash' | 'gold' | 'silver' | 'quantity', 'debit' | 'credit' | null>;
+  classificationSource?: 'legacy_code' | 'manual';
+  classificationConfidence?: number;
+  classificationEvidence?: unknown[];
+  reviewStatus?: 'discovered' | 'needs_review' | 'reviewed';
+  approvalStatus?: 'draft' | 'approved' | 'rejected';
 }
-export interface CanonicalAccountRegistry { entities: CanonicalAccountEntity[]; byId: Map<string, CanonicalAccountEntity>; byLegacyName: Map<string, CanonicalAccountEntity>; }
+export interface CanonicalAccountRegistry { entities: CanonicalAccountEntity[]; byId: Map<string, CanonicalAccountEntity>; byLegacyName: Map<string, CanonicalAccountEntity>; ambiguousAliases?: Map<string, CanonicalAccountEntity[]>; }
 export interface AccountingLeg { entityId: string; accountName: string; dimension: AccountingDimension; side: 'debit' | 'credit'; amount: number; sourceEntryId: string; operationKind: string; date: string; isOpening: boolean; group: AccountingGroup; entity: CanonicalAccountEntity; entry: Entry; oppositeAccount: string; }
 
 const normalized = (value: string | undefined) => String(value ?? '').trim().replace(/\s+/g, ' ');
@@ -54,7 +63,73 @@ const explicitMetalFor = (account: Account): CanonicalAccountEntity['metal'] => 
 const descriptionFor = (entity: Pick<CanonicalAccountEntity, 'entityType' | 'metal' | 'mainGroup' | 'isInventory'>) => entity.entityType === 'cash' ? 'خزنة' : entity.entityType === 'merchant' ? 'تاجر' : entity.isInventory ? `مخزون ${entity.metal === 'silver' ? 'فضة' : 'ذهب'}` : entity.mainGroup === 'liabilities' ? 'خصوم' : entity.mainGroup === 'equity' ? 'حقوق ملكية' : entity.mainGroup === 'revenue' ? 'إيراد' : entity.mainGroup === 'expenses' ? 'مصروف' : 'حساب أصل';
 
 /** Registry identity comes from stable document IDs first, then legacy names only for historical records. */
-export const buildCanonicalAccountRegistry = (accounts: Account[], entries: Entry[] = []): CanonicalAccountRegistry => {
+export const buildCanonicalAccountRegistry = (accounts: Account[], entries: Entry[] = [], manualDefinitions?: CanonicalAccountDefinition[]): CanonicalAccountRegistry => {
+  if (manualDefinitions) {
+  const central = buildCentralAccountRegistry(accounts, entries, manualDefinitions);
+  const entities = central.accounts.map(definition => {
+    const sourceAccount = definition.sourceAccountId ? accounts.find(account => account.id === definition.sourceAccountId) : undefined;
+    const financialDimensions = definition.allowedDimensions.filter((dimension): dimension is AccountingDimension => dimension !== 'quantity');
+    const primaryDimension = financialDimensions[0] ?? 'cash';
+    const normalBalance = definition.normalBalanceByDimension[primaryDimension] ?? (['liabilities', 'equity', 'revenue'].includes(definition.mainGroup) ? 'credit' : 'debit');
+    const entityType: CanonicalEntityType = definition.entityType === 'gold_inventory' || definition.entityType === 'silver_inventory' || definition.entityType === 'accessory_inventory' ? 'inventory'
+      : definition.entityType === 'cash' ? 'cash'
+      : definition.entityType === 'merchant' ? 'merchant'
+      : definition.entityType === 'creditor' ? 'creditor'
+      : definition.entityType === 'debtor' || definition.entityType === 'customer' ? 'debtor'
+      : definition.entityType === 'capital' || definition.entityType === 'retained_earnings' || definition.entityType === 'withdrawals' ? 'equity'
+      : definition.entityType === 'revenue' || definition.entityType.endsWith('_surplus') ? 'revenue'
+      : definition.entityType === 'expense' || definition.entityType.endsWith('_shortage') ? 'expense'
+      : definition.entityType === 'fixed_asset' ? 'fixed_asset'
+      : definition.entityType === 'adjustment' ? 'adjustment' : sourceAccount?.is_inventory ? 'product' : 'debtor';
+    const entity: CanonicalAccountEntity = {
+      entityId: definition.id,
+      canonicalName: definition.canonicalName,
+      legacyNames: definition.legacyNames,
+      aliases: definition.aliases,
+      entityType,
+      mainGroup: definition.mainGroup,
+      allowedDimensions: financialDimensions,
+      metal: definition.metal,
+      trackingMode: definition.trackingMode === 'quantity' ? 'quantity' : definition.tracksWeight ? 'weight' : 'value',
+      normalBalance,
+      normalBalanceByDimension: definition.normalBalanceByDimension,
+      tracksQuantity: definition.tracksQuantity,
+      isInventory: definition.isInventory,
+      isMerchant: definition.isMerchant,
+      isHistoricalOnly: definition.isHistoricalOnly,
+      displayDescription: definition.description || definition.displayName,
+      sourceAccount,
+      classificationSource: definition.classificationSource,
+      classificationConfidence: definition.classificationConfidence,
+      classificationEvidence: definition.classificationEvidence,
+      reviewStatus: definition.reviewStatus,
+      approvalStatus: definition.approvalStatus,
+    };
+    return entity;
+  });
+  const byId = new Map(entities.map(entity => [entity.entityId, entity]));
+  const byLegacyName = new Map<string, CanonicalAccountEntity>();
+  central.aliases.forEach((candidates, alias) => {
+    if (candidates.length !== 1) return;
+    const entity = byId.get(candidates[0].id);
+    if (entity) byLegacyName.set(alias, entity);
+  });
+  central.accounts.forEach(definition => {
+    const entity = byId.get(definition.id);
+    if (!entity) return;
+    [...definition.legacyNames, ...definition.aliases, definition.canonicalName].forEach(alias => {
+      if (!byLegacyName.has(normalized(alias))) byLegacyName.set(normalized(alias), entity);
+    });
+  });
+  const ambiguousAliases = new Map<string, CanonicalAccountEntity[]>();
+  central.ambiguousAliases.forEach((candidates, alias) => ambiguousAliases.set(alias, candidates.map(candidate => byId.get(candidate.id)).filter((entity): entity is CanonicalAccountEntity => !!entity)));
+  return { entities, byId, byLegacyName, ambiguousAliases };
+  }
+
+  /* Legacy builder intentionally retained below during Parallel Run. */
+  /* c8 ignore start */
+  // eslint-disable-next-line no-unreachable
+  {
   const entities: CanonicalAccountEntity[] = []; const byId = new Map<string, CanonicalAccountEntity>(); const byLegacyName = new Map<string, CanonicalAccountEntity>();
   accounts.filter(account => account.isActive !== false).forEach((account, index) => {
     const group = groupFor(account); const entityType = entityTypeFor(account, group); const identityType = entityType === 'cash' ? 'account' : entityType; const entityId = `${identityType}:${account.id || `${normalized(account.name)}:${index}`}`;
@@ -72,6 +147,8 @@ export const buildCanonicalAccountRegistry = (accounts: Account[], entries: Entr
     const entity: CanonicalAccountEntity = { entityId: `historical:${reference?.canonicalName ?? name}`, canonicalName: reference?.canonicalName ?? name, legacyNames: [...new Set([name, ...(reference?.aliases ?? [])])], entityType: reference?.entityType ?? (group === 'liabilities' ? 'creditor' : group === 'equity' ? 'equity' : 'debtor'), mainGroup: group, allowedDimensions: reference?.allowedDimensions ?? [dimension], metal: reference?.metal ?? (dimension === 'cash' ? null : dimension), trackingMode: dimension === 'cash' ? 'value' : 'weight', normalBalance: reference?.normalBalance ?? (group === 'assets' ? 'debit' : 'credit'), isInventory: false, isMerchant: false, isHistoricalOnly: true, displayDescription: group === 'liabilities' ? 'خصوم تاريخية' : group === 'equity' ? 'حقوق ملكية تاريخية' : 'حساب تاريخي' };
     entities.push(entity); byId.set(entity.entityId, entity); entity.legacyNames.forEach(alias => byLegacyName.set(normalized(alias), entity));  }));
   return { entities, byId, byLegacyName };
+  }
+  /* c8 ignore stop */
 };
 
 const entityFor = (entry: Entry, side: 'debit' | 'credit', registry: CanonicalAccountRegistry) => registry.entities.find(entity => entity.sourceAccount?.id && entity.sourceAccount.id === entry[side === 'debit' ? 'debitAccountId' : 'creditAccountId']) ?? registry.byLegacyName.get(normalized(entry[side]));
@@ -100,12 +177,16 @@ export const buildCanonicalAccountingLegs = (entries: Entry[], registry: Canonic
   }); return out;
 };
 
-export interface AccountingCoverageAudit { totalUniqueNames: number; totalRegistryEntities: number; totalHistoricalOnlyEntities: number; namesWithValidMovementButNoLeg: string[]; conflictingClassifications: string[]; namesInMultipleDimensions: string[]; excluded: { id: string; reason: string }[]; unhandledOperationKinds: string[]; zeroLegRecords: string[]; debitCreditDifference: Record<AccountingDimension, number>; }
+export interface AccountingCoverageAudit { totalUniqueNames: number; totalRegistryEntities: number; totalHistoricalOnlyEntities: number; namesWithValidMovementButNoLeg: string[]; resolvedAliases: string[]; unknownNames: string[]; ambiguousAliases: string[]; knownAccountsWithoutLeg: string[]; disallowedDimensionRecords: string[]; zeroOrInvalidAmountRecords: string[]; postingMatrixMisses: string[]; conflictingClassifications: string[]; namesInMultipleDimensions: string[]; excluded: { id: string; reason: string }[]; unhandledOperationKinds: string[]; zeroLegRecords: string[]; debitCreditDifference: Record<AccountingDimension, number>; }
 export const auditAccountingCoverage = (entries: Entry[], registry: CanonicalAccountRegistry, legs: AccountingLeg[]): AccountingCoverageAudit => {
-  const names = new Set(entries.filter(isValidAccountingEntry).flatMap(e => [normalized(e.debit), normalized(e.credit)]).filter(Boolean)); const legNames = new Set(legs.map(l => normalized(l.accountName)));
+  const names = new Set(entries.filter(isValidAccountingEntry).flatMap(e => [normalized(e.debit), normalized(e.credit)]).filter(Boolean)); const legEntityIds = new Set(legs.map(l => l.entityId));
   const dimensions = new Map<string, Set<string>>(); legs.forEach(l => { const s = dimensions.get(l.entityId) || new Set(); s.add(l.dimension); dimensions.set(l.entityId, s); });
   const diff: Record<AccountingDimension, number> = { cash: 0, gold: 0, silver: 0 }; legs.forEach(l => diff[l.dimension] += l.side === 'debit' ? l.amount : -l.amount);
-  return { totalUniqueNames: names.size, totalRegistryEntities: registry.entities.length, totalHistoricalOnlyEntities: registry.entities.filter(e => e.isHistoricalOnly).length, namesWithValidMovementButNoLeg: [...names].filter(n => !legNames.has(n)), conflictingClassifications: registry.entities.filter(e => e.legacyNames.some(n => registry.entities.filter(x => x.legacyNames.includes(n)).length > 1)).map(e => e.canonicalName), namesInMultipleDimensions: [...dimensions].filter(([, v]) => v.size > 1).map(([id]) => registry.byId.get(id)?.canonicalName || id), excluded: entries.filter(e => !isValidAccountingEntry(e)).map(e => ({ id: e.id || String(e.seq), reason: 'deleted/voided/reversed/excluded/invalid' })), unhandledOperationKinds: [...new Set(entries.filter(isValidAccountingEntry).filter(e => !['opening','purchase','sale','transfer','tifeet','adjustment','merchant_settlement','personal_withdrawal','expense','other'].includes(resolveOperationKind(e))).map(e => resolveOperationKind(e)))], zeroLegRecords: entries.filter(isValidAccountingEntry).filter(e => (parseCash(e) > 0 || Number(e.weight) > 0) && !legs.some(l => l.entry === e)).map(e => e.id || String(e.seq)), debitCreditDifference: diff };
+  const resolved = [...names].map(name => ({ name, entity: registry.byLegacyName.get(name) }));
+  const zeroLegRecords = entries.filter(isValidAccountingEntry).filter(e => (parseCash(e) > 0 || Number(e.weight) > 0 || Number(e.count) > 0) && !legs.some(l => l.entry === e)).map(e => e.id || String(e.seq));
+  const zeroOrInvalidAmountRecords = entries.filter(isValidAccountingEntry).filter(e => ![parseCash(e), Number(e.weight), Number(e.arabicWeight), Number(e.count)].some(value => Number.isFinite(value) && value > 0)).map(e => e.id || String(e.seq));
+  const disallowedDimensionRecords = entries.filter(isValidAccountingEntry).flatMap(entry => (['debit', 'credit'] as const).flatMap(side => { const entity = registry.byLegacyName.get(normalized(entry[side])); if (!entity) return []; const cash = parseCash(entry) > 0 && !entity.allowedDimensions.includes('cash'); const metal = (Number(entry.weight) > 0 || Number(entry.arabicWeight) > 0) && entity.metal && !entity.allowedDimensions.includes(entity.metal === 'silver' ? 'silver' : 'gold'); return cash || metal ? [entry.id || String(entry.seq)] : []; }));
+  return { totalUniqueNames: names.size, totalRegistryEntities: registry.entities.length, totalHistoricalOnlyEntities: registry.entities.filter(e => e.isHistoricalOnly).length, namesWithValidMovementButNoLeg: resolved.filter(item => item.entity && !legEntityIds.has(item.entity.entityId)).map(item => item.name), resolvedAliases: resolved.filter(item => item.entity && normalized(item.entity.canonicalName) !== item.name).map(item => item.name), unknownNames: resolved.filter(item => !item.entity).map(item => item.name), ambiguousAliases: [...(registry.ambiguousAliases?.keys() ?? [])], knownAccountsWithoutLeg: resolved.filter(item => item.entity && !legEntityIds.has(item.entity.entityId)).map(item => item.entity!.canonicalName), disallowedDimensionRecords: [...new Set(disallowedDimensionRecords)], zeroOrInvalidAmountRecords, postingMatrixMisses: zeroLegRecords, conflictingClassifications: registry.entities.filter(e => e.legacyNames.some(n => registry.entities.filter(x => x.entityId !== e.entityId && x.legacyNames.map(normalized).includes(normalized(n))).length > 0)).map(e => e.canonicalName), namesInMultipleDimensions: [...dimensions].filter(([, v]) => v.size > 1).map(([id]) => registry.byId.get(id)?.canonicalName || id), excluded: entries.filter(e => !isValidAccountingEntry(e)).map(e => ({ id: e.id || String(e.seq), reason: 'deleted/voided/reversed/excluded/invalid' })), unhandledOperationKinds: [...new Set(entries.filter(isValidAccountingEntry).filter(e => !['opening','purchase','sale','transfer','tifeet','adjustment','merchant_settlement','personal_withdrawal','expense','other'].includes(resolveOperationKind(e))).map(e => resolveOperationKind(e)))], zeroLegRecords, debitCreditDifference: diff };
 };
 
 export interface EntityClassificationAudit {

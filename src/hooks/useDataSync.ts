@@ -2,7 +2,7 @@ import { useEffect } from 'react';
 import { collection, query, where, onSnapshot, doc } from 'firebase/firestore';
 import { db } from '../firebase';
 import { useAppStore } from '../store';
-import { Entry, Account, TransactionRule, CustomRule, InventoryCheck } from '../types';
+import { Entry, Account, TransactionRule, CustomRule, InventoryCheck, CanonicalAccountDefinition } from '../types';
 import { SEED_ACCOUNTS, SEED_RULES } from '../migrationData';
 import { writeBatch } from 'firebase/firestore';
 import { handleFirestoreError, OperationType } from '../firebase';
@@ -11,6 +11,7 @@ export const useDataSync = (user: any, isAuthReady: boolean) => {
   const { 
     setEntries,
     setAccountsDb,
+    setCanonicalAccounts,
     setTransactionRules,
     setCustomRules,
     setInventoryChecks,
@@ -127,6 +128,14 @@ export const useDataSync = (user: any, isAuthReady: boolean) => {
       console.warn("Accounts snapshot error:", error);
     });
 
+    // --- Canonical Account Registry (shadow path only) ---
+    const canonicalAccountsQuery = query(collection(db, 'canonicalAccounts'), where('userId', '==', user.uid));
+    const unsubscribeCanonicalAccounts = onSnapshot(canonicalAccountsQuery, (snapshot) => {
+      setCanonicalAccounts(snapshot.docs.map(item => ({ id: item.id, ...item.data() } as CanonicalAccountDefinition)));
+    }, (error) => {
+      console.warn('Canonical accounts snapshot error:', error);
+    });
+
     // --- Transaction Rules Listener ---
     const trQuery = query(collection(db, 'transactionRules'), where('userId', '==', user.uid));
     const unsubscribeTR = onSnapshot(trQuery, (snapshot) => {
@@ -185,6 +194,7 @@ export const useDataSync = (user: any, isAuthReady: boolean) => {
     return () => {
       unsubscribeEntries();
       unsubscribeAccounts();
+      unsubscribeCanonicalAccounts();
       unsubscribeTR();
       unsubscribeRules();
       unsubscribeInventory();

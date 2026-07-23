@@ -1,4 +1,4 @@
-import { Account, AccountNature, Entry } from '../types';
+import { Account, AccountNature, CanonicalAccountDefinition, Entry } from '../types';
 import { getEntryArabicWeight, getMerchantMetals, resolveOperationKind } from './engine';
 import { getDynamicAccountNature, getMetricActualValue, getMetricValue } from '../utils/accountLogic';
 import { buildCanonicalAccountRegistry, buildCanonicalAccountingLegs } from './canonicalAccounting';
@@ -104,8 +104,9 @@ export const buildLedgerReport = (
   dimension: LedgerDimension,
   startDate: string,
   endDate: string,
+  canonicalDefinitions?: CanonicalAccountDefinition[],
 ): LedgerReport => {
-  const registry = buildCanonicalAccountRegistry(accounts, entries);
+  const registry = buildCanonicalAccountRegistry(accounts, entries, canonicalDefinitions);
   const entity = registry.entities.find(item => item.sourceAccount === account || (!!account.id && item.sourceAccount?.id === account.id)) ?? registry.byLegacyName.get(account.name);
   if (entity) {
     const legs = buildCanonicalAccountingLegs(entries, registry).filter(leg => leg.entityId === entity.entityId && leg.dimension === dimension).sort((a, b) => (a.date || '').localeCompare(b.date || ''));

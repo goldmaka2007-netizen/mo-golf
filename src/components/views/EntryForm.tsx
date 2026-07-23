@@ -24,6 +24,8 @@ import { isGoldEquivalentEntry } from '../../utils/accountLogic';
 import { AccountSearchSelect } from '../ui/AccountSearchSelect';
 import { resolveEntryIdentity } from '../../lib/entryIdentity';
 import { OperationSelector } from '../ui/OperationSelector';
+import { buildAccountRegistry } from '../../lib/accountRegistry';
+import { buildCanonicalPosting } from '../../lib/postingMatrix';
 
 export const EntryForm = React.memo(() => {
   const { 
@@ -39,6 +41,7 @@ export const EntryForm = React.memo(() => {
     goldPrice, 
     silverPrice,
     openingCostConfig
+    ,canonicalAccounts
   } = useAppStore();
   
   const normalize = normalizeNumerals;
@@ -365,6 +368,16 @@ export const EntryForm = React.memo(() => {
       return;
     }
     Object.assign(entry, identity.value);
+
+    // The legacy engine remains authoritative, while the central matrix acts
+    // as a save-time guard once the shadow registry has been initialized.
+    if (canonicalAccounts.length > 0) {
+      const shadowPosting = buildCanonicalPosting(entry as Entry, buildAccountRegistry(accountsDb, entries, canonicalAccounts));
+      if (!shadowPosting.valid) {
+        setGlobalError(`رفض Posting Matrix: ${shadowPosting.issues.map(issue => issue.message).join(' — ')}`);
+        return;
+      }
+    }
 
     setIsSaving(true);
     if (formData.karat) entry.karat = formData.karat;

@@ -20,6 +20,7 @@ import { ReportsView } from './components/views/ReportsView';
 import { StoryBuilderView } from './components/views/StoryBuilderView';
 import { InvoicePrintModal } from './components/views/InvoicePrintModal';
 import { MoreView } from './components/views/MoreView';
+import { CanonicalAccountsView } from './components/views/CanonicalAccountsView';
 
 import { ErrorBoundary } from './components/ErrorBoundary';
 import { NavButton } from './components/ui/NavButton';
@@ -34,7 +35,7 @@ import { useDataSync } from './hooks/useDataSync';
 type AppView = ReturnType<typeof useAppStore.getState>['view'];
 
 const reportViews: AppView[] = ['reports', 'inventory', 'profit-analysis', 'advanced-analytics'];
-const moreViews: AppView[] = ['more', 'story', 'guide', 'settings'];
+const moreViews: AppView[] = ['more', 'story', 'guide', 'settings', 'chart-of-accounts'];
 
 export default function App() {
   const {
@@ -52,6 +53,9 @@ export default function App() {
   const [isUpdatingEntry, setIsUpdatingEntry] = useState(false);
   const [deleteConfirmId, setDeleteConfirmId] = useState<string | null>(null);
   const [isFullscreen, setIsFullscreen] = useState(false);
+  // Local UI-only preview for responsive navigation checks. Vite removes this
+  // branch from production because import.meta.env.DEV is false in builds.
+  const isUiNavigationPreview = import.meta.env.DEV && typeof window !== 'undefined' && new URLSearchParams(window.location.search).get('ui-preview') === '1';
 
   const isIOS = typeof window !== 'undefined' && /iPhone|iPad|iPod/.test(navigator.userAgent);
 
@@ -225,6 +229,7 @@ export default function App() {
     if (view === 'story') return 'حالة واتساب';
     if (view === 'guide') return 'الدليل المحاسبي';
     if (view === 'settings') return 'الإعدادات';
+    if (view === 'chart-of-accounts') return 'دليل الحسابات';
     if (view === 'more') return 'المزيد';
     return 'الرئيسية';
   })();
@@ -233,11 +238,11 @@ export default function App() {
     return <GlobalErrorView globalError={globalError} setGlobalError={setGlobalError} />;
   }
 
-  if (loading) {
+  if (loading && !isUiNavigationPreview) {
     return <LoadingView authHangError={false} authStage="فحص الحساب..." handleHardReset={handleHardReset} />;
   }
 
-  if (!user) {
+  if (!user && !isUiNavigationPreview) {
     return (
       <LoginView
         authError={authError}
@@ -301,6 +306,7 @@ export default function App() {
               {view === 'story' && <StoryBuilderView />}
               {view === 'guide' && <AccountingGuideView />}
               {view === 'settings' && <SettingsView />}
+              {view === 'chart-of-accounts' && <CanonicalAccountsView />}
             </motion.div>
           </AnimatePresence>
         </main>
