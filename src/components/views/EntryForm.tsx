@@ -8,7 +8,7 @@ import { ar } from 'date-fns/locale';
 import { collection, addDoc, serverTimestamp, query, orderBy, limit, getDocs, where } from 'firebase/firestore';
 import { db, handleFirestoreError } from '../../firebase';
 import { Entry, FirebaseUser, OperationType, AccountCategories } from '../../types';
-import { CATS, ACCOUNTS, GOLD_ORDER, RAW_DATA, VALUATION_PRICES, OPERATION_RULES } from '../../constants';
+import { CATS, ACCOUNTS, GOLD_ORDER, RAW_DATA, OPERATION_RULES } from '../../constants';
 import { useAppStore } from '../../store';
 import { cn } from '../../lib/utils';
 import { 
@@ -18,8 +18,10 @@ import {
 } from '../../lib/accounting';
 import { FormInput } from '../ui/FormInput';
 import { buildGoldEquivalent21Audit, canCalculateGoldEquivalent21, inferGoldKaratFromMultiplier } from '../../lib/goldEquivalent';
-import { getOperationId, rebuildCostTimeline, isQuantityAlignedToStep } from '../../lib/weightedAverageCost';
+import { isQuantityAlignedToStep } from '../../lib/weightedAverageCost';
 import { buildOpeningCostConfig } from '../../lib/openingCostConfig';
+import { rebuildInventoryCostTimeline } from '../../lib/inventoryCostEngine';
+import { areOperationWritesLocked } from '../../lib/costRecalculation';
 import { isGoldEquivalentEntry } from '../../utils/accountLogic';
 import { AccountSearchSelect } from '../ui/AccountSearchSelect';
 import { resolveEntryIdentity } from '../../lib/entryIdentity';
@@ -40,7 +42,8 @@ export const EntryForm = React.memo(() => {
     entries, 
     goldPrice, 
     silverPrice,
-    openingCostConfig
+    openingCostConfig,
+    costCalculationRun
     ,canonicalAccounts
   } = useAppStore();
   
@@ -321,6 +324,10 @@ export const EntryForm = React.memo(() => {
 
   const handleSave = async () => {
     if (isSaving) return;
+    if (areOperationWritesLocked(costCalculationRun)) {
+      setGlobalError('العمليات مقفلة حتى يكتمل احتساب التكلفة بنجاح.');
+      return;
+    }
 
     // Check inventory balance for weight-based credit transactions
     if (formData.tx?.includes('بيع') || formData.credit?.startsWith('12') || formData.credit?.startsWith('13')) {
@@ -405,18 +412,10 @@ export const EntryForm = React.memo(() => {
 
       const pendingEntry = { ...entry, id: '__pending_cost_validation__' } as Entry;
       const openingConfig = buildOpeningCostConfig(openingCostConfig);
-      const costValidation = rebuildCostTimeline([...entries, pendingEntry], accountsDb, openingConfig).resultsByOperationId[getOperationId(pendingEntry)];
-      const isOpeningEntry = pendingEntry.operationKind === 'opening' || OPERATION_RULES[pendingEntry.tx || '']?.isOpening || OPERATION_RULES[pendingEntry.subTx ? `رصيد افتتاحي ${pendingEntry.subTx}` : '']?.isOpening;
-      const canSaveIncompleteOpening = isOpeningEntry && costValidation?.status === 'missing_cost_basis';
-      if (costValidation && costValidation.status !== 'valid' && !canSaveIncompleteOpening) {
-        const messages = {
-          missing_cost_basis: 'Missing Cost Basis: لا توجد تكلفة مخزون موثوقة لهذه العملية.',
-          insufficient_inventory: 'Insufficient Inventory: العملية ستؤدي إلى مخزون سالب.',
-          invalid_operation: 'Invalid Operation: الكمية أو نوع العملية غير صالح لمحرك التكلفة.',
-          quantity_mismatch: 'Quantity Mismatch: كمية المصدر لا تساوي كمية الوجهة.',
-          valid: '',
-        } as const;
-        setGlobalError(messages[costValidation.status] || 'تعذر اعتماد تكلفة العملية.');
+      const costValidation = rebuildInventoryCostTimeline([...entries, pendingEntry], accountsDb, openingConfig);
+      if (!costValidation.valid) {
+        const diagnostic = costValidation.diagnostics[0];
+        setGlobalError(`رفض محرك التكلفة: ${diagnostic?.code || 'unknown'} — ${diagnostic?.message || 'تعذر اعتماد تكلفة العملية.'}`);
         return;
       }
       await addDoc(collection(db, 'entries'), entry);
