@@ -10,6 +10,7 @@ import {
   ReportParticipation,
 } from '../types';
 import { getEntryArabicWeight, parseCash, resolveOperationKind } from './engine';
+import { applyApprovedCanonicalEquityTaxonomy } from './canonicalEquityCatalog';
 
 export type AccountResolution =
   | { status: 'resolved'; account: CanonicalAccountDefinition; via: 'id' | 'alias' }
@@ -96,8 +97,15 @@ const typeFor = (account: Account | undefined, group: CanonicalMainGroup, metal:
   if (group === 'revenue') return 'revenue';
   if (group === 'expenses') return 'expense';
   if (group === 'equity') {
-    if (/مسحوبات/.test(account?.subType ?? '') || /مسحوبات/.test(account?.name ?? '')) return 'withdrawals';
-    if (/ارباح|أرباح|خساير|خسائر/.test(`${account?.subType ?? ''} ${account?.name ?? ''}`)) return 'retained_earnings';
+    const subtype = normalizeAccountName(account?.subType);
+    if (subtype === normalizeAccountName('\u0645\u0633\u062d\u0648\u0628\u0627\u062a')) return 'withdrawals';
+    if ([
+      '\u0627\u0644\u0627\u0631\u0628\u0627\u062d \u0648 \u0627\u0644\u062e\u0633\u0627\u064a\u0631',
+      '\u0627\u0644\u0623\u0631\u0628\u0627\u062d \u0648\u0627\u0644\u062e\u0633\u0627\u0626\u0631',
+      '\u0627\u0644\u0623\u0631\u0628\u0627\u062d \u0648 \u0627\u0644\u062e\u0633\u0627\u0626\u0631',
+      'retained earnings',
+      'accumulated profit and loss',
+    ].map(normalizeAccountName).includes(subtype)) return 'retained_earnings';
     return 'capital';
   }
   if (group === 'liabilities') return 'creditor';
@@ -106,10 +114,20 @@ const typeFor = (account: Account | undefined, group: CanonicalMainGroup, metal:
   return 'other';
 };
 
-const dimensionsFor = (account: Account | undefined, type: CanonicalAccountType, metal: CanonicalAccountDefinition['metal']): AccountTrackingDimension[] => {
+const dimensionsFor = (
+  account: Account | undefined,
+  type: CanonicalAccountType,
+  metal: CanonicalAccountDefinition['metal'],
+  group: CanonicalMainGroup,
+): AccountTrackingDimension[] => {
   const dimensions: AccountTrackingDimension[] = [];
   if (type === 'merchant') dimensions.push('cash');
-  if (type === 'cash' || (!metal && type !== 'historical')) dimensions.push('cash');
+  const explicitCash = /\u062c\u0646\u064a\u0647|\u062c\u0646\u064a\u0629|cash|egp/i.test(
+    `${account?.balanceNature ?? ''} ${account?.subType ?? ''}`,
+  );
+  if (type === 'cash' || (explicitCash && metal !== 'accessory') || (!metal && type !== 'historical' && group !== 'equity')) {
+    dimensions.push('cash');
+  }
   if (metal === 'gold') dimensions.push('gold');
   if (metal === 'silver') dimensions.push('silver');
   if (metal === 'accessory' || account?.quantityStep !== undefined) dimensions.push('quantity');
@@ -137,7 +155,7 @@ const createDefinition = (account: Account | undefined, name: string, historical
   const group = groupFor(account);
   const metal = metalFor(account);
   const entityType = historical ? 'historical' : typeFor(account, group, metal);
-  const allowedDimensions = dimensionsFor(account, entityType, metal);
+  const allowedDimensions = dimensionsFor(account, entityType, metal, group);
   const baseBalance = normalBalance(group);
   const timestamp = now();
   const sourceId = account?.id;
@@ -210,10 +228,42 @@ const mergeManual = (generated: CanonicalAccountDefinition, manual: CanonicalAcc
 export const buildAccountRegistry = (accounts: Account[], entries: Entry[] = [], manualDefinitions: CanonicalAccountDefinition[] = []): AccountRegistry => {
   const manualBySource = new Map(manualDefinitions.filter(item => item.sourceAccountId).map(item => [item.sourceAccountId!, item]));
   const manualByName = new Map(manualDefinitions.map(item => [normalizeAccountName(item.canonicalName), item]));
-  const definitions = accounts.filter(account => account.isActive !== false).map(account => {
-    const generated = createDefinition(account, account.name, false, 'account_document');
+  const definitions = accounts.filter(account => account.isActive !== false).map((account): CanonicalAccountDefinition => {
+    const generated = applyApprovedCanonicalEquityTaxonomy(
+      createDefinition(account, account.name, false, 'account_document'),
+      account,
+    );
     const manual = (account.id && manualBySource.get(account.id)) || manualByName.get(normalizeAccountName(account.name));
-    return manual ? mergeManual(generated, manual) : generated;
+    if (!manual) return generated;
+    const governed = generated.approvalStatus === 'approved'
+      && generated.mainGroup === 'equity'
+      ? generated
+      : undefined;
+    const conflicts = governed
+      && (manual.mainGroup !== 'equity'
+        || manual.entityType !== governed.entityType
+        || manual.metal !== governed.metal
+        || [...manual.allowedDimensions].sort().join('|')
+          !== [...governed.allowedDimensions].sort().join('|'));
+    if (!conflicts) return mergeManual(generated, manual);
+    return {
+      ...generated,
+      allowedDimensions: [],
+      normalBalanceByDimension: { cash: null, gold: null, silver: null, quantity: null },
+      tracksCash: false,
+      tracksGold: false,
+      tracksSilver: false,
+      tracksQuantity: false,
+      tracksWeight: false,
+      tracksValue: false,
+      trackingMode: 'value',
+      classificationConflicts: [
+        ...generated.classificationConflicts,
+        `approved_equity_taxonomy_conflict:${account.id}`,
+      ],
+      reviewStatus: 'needs_review',
+      approvalStatus: 'draft',
+    };
   });
 
   const knownIds = new Set(accounts.map(account => account.id).filter(Boolean));

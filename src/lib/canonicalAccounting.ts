@@ -130,23 +130,81 @@ export const buildCanonicalAccountRegistry = (accounts: Account[], entries: Entr
   /* c8 ignore start */
   // eslint-disable-next-line no-unreachable
   {
-  const entities: CanonicalAccountEntity[] = []; const byId = new Map<string, CanonicalAccountEntity>(); const byLegacyName = new Map<string, CanonicalAccountEntity>();
+  const entities: CanonicalAccountEntity[] = [];
+  const byId = new Map<string, CanonicalAccountEntity>();
+  const byLegacyName = new Map<string, CanonicalAccountEntity>();
+  const ambiguousAliases = new Map<string, CanonicalAccountEntity[]>();
   accounts.filter(account => account.isActive !== false).forEach((account, index) => {
-    const group = groupFor(account); const entityType = entityTypeFor(account, group); const identityType = entityType === 'cash' ? 'account' : entityType; const entityId = `${identityType}:${account.id || `${normalized(account.name)}:${index}`}`;
+    const group = groupFor(account);
+    const entityType = entityTypeFor(account, group);
+    const identityType = entityType === 'cash' ? 'account' : entityType;
+    const entityId = `${identityType}:${account.id || `${normalized(account.name)}:${index}`}`;
     const metal = explicitMetalFor(account);
-    const reference = referenceForName(account.name); const resolvedMetal = reference?.metal ?? metal; const resolvedGroup = reference?.mainGroup ?? group; const resolvedType = reference?.entityType ?? entityType; const resolvedDimensions = reference?.allowedDimensions ?? dimensionsFor(account);
-    const entity: CanonicalAccountEntity = { entityId, canonicalName: reference?.canonicalName ?? account.name, legacyNames: [...new Set([account.name, ...(reference?.aliases ?? [])])], entityType: resolvedType, mainGroup: resolvedGroup, allowedDimensions: resolvedDimensions, metal: resolvedMetal, normalBalance: reference?.normalBalance ?? (['liabilities', 'equity', 'revenue'].includes(resolvedGroup) ? 'credit' : 'debit'), trackingMode: resolvedMetal === 'accessory' ? 'quantity' : resolvedMetal ? 'weight' : 'value', isInventory: !!account.is_inventory, isMerchant: account.type === 'merchant', isHistoricalOnly: false, displayDescription: '', sourceAccount: account };
-    entity.displayDescription = descriptionFor(entity); entities.push(entity); byId.set(entityId, entity); entity.legacyNames.forEach(alias => { if (!byLegacyName.has(normalized(alias))) byLegacyName.set(normalized(alias), entity); });
+    const reference = referenceForName(account.name);
+    const governedDefinition = account.id
+      ? buildCentralAccountRegistry([account], [], []).bySourceAccountId.get(account.id)
+      : undefined;
+    const governed = governedDefinition?.approvalStatus === 'approved'
+      && governedDefinition.mainGroup === 'equity'
+      ? governedDefinition
+      : undefined;
+    const governedDimensions = governed?.allowedDimensions.filter(
+      (dimension): dimension is AccountingDimension => dimension !== 'quantity',
+    );
+    const resolvedMetal = governed?.metal ?? reference?.metal ?? metal;
+    const resolvedGroup = governed?.mainGroup ?? reference?.mainGroup ?? group;
+    const resolvedType = governed
+      ? 'equity'
+      : reference?.entityType ?? entityType;
+    const resolvedDimensions = governedDimensions ?? reference?.allowedDimensions ?? dimensionsFor(account);
+    const entity: CanonicalAccountEntity = {
+      entityId,
+      canonicalName: governed?.displayName ?? reference?.canonicalName ?? account.name,
+      legacyNames: [...new Set([account.name, ...(reference?.aliases ?? [])])],
+      entityType: resolvedType,
+      mainGroup: resolvedGroup,
+      allowedDimensions: resolvedDimensions,
+      metal: resolvedMetal,
+      normalBalance: reference?.normalBalance
+        ?? (['liabilities', 'equity', 'revenue'].includes(resolvedGroup) ? 'credit' : 'debit'),
+      trackingMode: governed?.tracksWeight
+        ? 'weight'
+        : resolvedMetal === 'accessory' ? 'quantity' : resolvedMetal ? 'weight' : 'value',
+      isInventory: !!account.is_inventory,
+      isMerchant: account.type === 'merchant',
+      isHistoricalOnly: false,
+      displayDescription: governed?.description ?? '',
+      sourceAccount: account,
+      classificationSource: governed?.classificationSource,
+      classificationConfidence: governed?.classificationConfidence,
+      classificationEvidence: governed?.classificationEvidence,
+      reviewStatus: governed?.reviewStatus,
+      approvalStatus: governed?.approvalStatus,
+    };
+    entity.displayDescription ||= descriptionFor(entity);
+    entities.push(entity);
+    byId.set(entityId, entity);
+    entity.legacyNames.forEach(alias => {
+      const key = normalized(alias);
+      const existing = byLegacyName.get(key);
+      const ambiguous = ambiguousAliases.get(key);
+      if (ambiguous) {
+        if (!ambiguous.some(candidate => candidate.entityId === entity.entityId)) ambiguous.push(entity);
+      } else if (existing && existing.entityId !== entity.entityId) {
+        byLegacyName.delete(key);
+        ambiguousAliases.set(key, [existing, entity]);
+      } else if (!existing) byLegacyName.set(key, entity);
+    });
   });
   // A historical entity is admitted only when evidence exists. Classification is derived from its counterpart/leg evidence, never its Arabic spelling.
   entries.filter(isValidAccountingEntry).forEach(entry => (['debit', 'credit'] as const).forEach(side => {
-    const name = normalized(entry[side]); if (!name || byLegacyName.has(name)) return;
+    const name = normalized(entry[side]); if (!name || byLegacyName.has(name) || ambiguousAliases.has(name)) return;
     const opposite = byLegacyName.get(normalized(entry[side === 'debit' ? 'credit' : 'debit'])); const reference = referenceForName(name);
     const kind = resolveOperationKind(entry); const dimension: AccountingDimension = reference?.metal === 'gold' || reference?.metal === 'silver' ? reference.metal : opposite?.metal === 'gold' || opposite?.metal === 'silver' ? opposite.metal : 'cash';
     const group: AccountingGroup = reference?.mainGroup ?? (side === 'credit' ? (kind === 'opening' && opposite?.mainGroup === 'assets' ? 'equity' : 'liabilities') : 'assets');
     const entity: CanonicalAccountEntity = { entityId: `historical:${reference?.canonicalName ?? name}`, canonicalName: reference?.canonicalName ?? name, legacyNames: [...new Set([name, ...(reference?.aliases ?? [])])], entityType: reference?.entityType ?? (group === 'liabilities' ? 'creditor' : group === 'equity' ? 'equity' : 'debtor'), mainGroup: group, allowedDimensions: reference?.allowedDimensions ?? [dimension], metal: reference?.metal ?? (dimension === 'cash' ? null : dimension), trackingMode: dimension === 'cash' ? 'value' : 'weight', normalBalance: reference?.normalBalance ?? (group === 'assets' ? 'debit' : 'credit'), isInventory: false, isMerchant: false, isHistoricalOnly: true, displayDescription: group === 'liabilities' ? 'خصوم تاريخية' : group === 'equity' ? 'حقوق ملكية تاريخية' : 'حساب تاريخي' };
     entities.push(entity); byId.set(entity.entityId, entity); entity.legacyNames.forEach(alias => byLegacyName.set(normalized(alias), entity));  }));
-  return { entities, byId, byLegacyName };
+  return { entities, byId, byLegacyName, ambiguousAliases };
   }
   /* c8 ignore stop */
 };
