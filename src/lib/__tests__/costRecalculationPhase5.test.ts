@@ -39,7 +39,7 @@ const entry = (overrides: Partial<Entry>): Entry => ({
 describe('Phase 5 recalculation coordinator', () => {
   it('does not invalidate cost for a gold count-only edit', () => {
     const before = [entry({ count: '1' })];
-    const after = [entry({ count: '2' })];
+    const after = [{ ...entry({ count: '2' }), updatedAt: '2026-07-24T00:00:00.000Z' } as Entry];
     const config = { gold21PriceByYearMinor: { '2026': 600000 } };
     expect(createCostInputRevision(before, accounts, config))
       .toBe(createCostInputRevision(after, accounts, config));

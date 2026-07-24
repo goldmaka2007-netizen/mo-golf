@@ -64,7 +64,6 @@ const entryCostFingerprint = (entry: Entry) => {
     sourceRow: entry.sourceRow,
     legacyOperationNo: entry.legacyOperationNo,
     createdAt: comparableTimestamp(entry.createdAt),
-    updatedAt: comparableTimestamp((entry as Entry & { updatedAt?: unknown }).updatedAt),
     tx: entry.tx,
     operationKind: entry.operationKind,
     subTx: entry.subTx,
