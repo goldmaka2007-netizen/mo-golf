@@ -226,6 +226,7 @@ export interface AnnualOpeningCostConfig {
   year: number;
   gold21PriceMinorPerGram?: number | string;
   silverPriceMinorPerGram?: number | string;
+  accessoryUnitCostMinorByAccountId?: Record<string, number | string | undefined>;
 }
 
 export interface Category {
