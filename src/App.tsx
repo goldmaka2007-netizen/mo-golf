@@ -229,7 +229,20 @@ export default function App() {
   const navItems = [
     { id: 'home' as AppView, label: 'الرئيسية', icon: <Home className="h-5 w-5" />, active: view === 'home', onClick: () => setView('home') },
     { id: 'journal' as AppView, label: 'اليومية', icon: <BookOpenCheck className="h-5 w-5" />, active: view === 'journal' || view === 'database', onClick: () => setView('journal') },
-    { id: 'entry' as AppView, label: 'عملية', icon: <PlusCircle className="h-8 w-8" />, active: view === 'entry', onClick: () => setView('entry'), variant: 'primary' as const },
+    {
+      id: 'entry' as AppView,
+      label: 'عملية',
+      icon: <PlusCircle className="h-8 w-8" />,
+      active: view === 'entry',
+      onClick: () => {
+        if (areOperationWritesLocked(costCalculationRun)) {
+          setGlobalError('العمليات مقفلة حتى يكتمل احتساب التكلفة بنجاح.');
+          return;
+        }
+        setView('entry');
+      },
+      variant: 'primary' as const,
+    },
     { id: 'reports' as AppView, label: 'التقارير', icon: <BarChart3 className="h-5 w-5" />, active: reportViews.includes(view), onClick: () => setView('reports') },
     { id: 'more' as AppView, label: 'المزيد', icon: <Menu className="h-5 w-5" />, active: moreViews.includes(view), onClick: () => setView('more') },
   ];
