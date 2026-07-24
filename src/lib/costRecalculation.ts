@@ -1,5 +1,10 @@
 import type { Account, Entry } from '../types';
 import {
+  APPROVED_HISTORICAL_INVENTORY_OVERLAY_DIRECTIVES,
+  approvedHistoricalInventoryOverlaysForAccounts,
+  HISTORICAL_INVENTORY_OVERLAY_VERSION,
+} from './historicalInventoryOverlay';
+import {
   CURRENT_DATASET_INVENTORY_BINDINGS,
   INVENTORY_COST_TAXONOMY,
 } from './inventoryCostCatalog';
@@ -15,6 +20,8 @@ import type {
   InventoryCostTimeline,
   Phase5OpeningCostConfig,
 } from './inventoryCostTypes';
+import { resolveRuntimeCostAccountInputs } from './runtimeCostAccountResolver';
+import { resolveApprovedOpeningCostConfig } from './approvedCostDatasetConfig';
 
 const stableStringify = (value: unknown): string => {
   if (value === null || typeof value !== 'object') return JSON.stringify(value);
@@ -40,6 +47,18 @@ const kindByBoundAccountId = new Map(
     return [binding.inventoryAccountId, definition?.kind] as const;
   }),
 );
+
+const boundInventoryAccountIds = new Set(
+  CURRENT_DATASET_INVENTORY_BINDINGS.map(binding => binding.inventoryAccountId),
+);
+
+const prepareCostInputs = (entries: Entry[], accounts: Account[]) => {
+  const needsLegacyResolution = accounts.some(account =>
+    account.is_inventory && (!account.id || !boundInventoryAccountIds.has(account.id)));
+  return needsLegacyResolution
+    ? resolveRuntimeCostAccountInputs(entries, accounts)
+    : { entries, accounts, audit: [], errors: [] };
+};
 
 const comparableTimestamp = (value: any): string => {
   if (!value) return '';
@@ -92,22 +111,36 @@ const accountCostFingerprint = (account: Account) => ({
 });
 
 export const createCostSettingsHash = (openingConfig: Phase5OpeningCostConfig): string =>
-  hashString(stableStringify(openingConfig));
+  hashString(stableStringify({
+    openingConfig,
+    historicalInventoryOverlayVersion: HISTORICAL_INVENTORY_OVERLAY_VERSION,
+    historicalInventoryOverlays: APPROVED_HISTORICAL_INVENTORY_OVERLAY_DIRECTIVES,
+  }));
 
 export const createCostInputRevision = (
   entries: Entry[],
   accounts: Account[],
   openingConfig: Phase5OpeningCostConfig,
-): string => hashString(stableStringify({
+): string => {
+  const prepared = prepareCostInputs(entries, accounts);
+  const openingResolution = resolveApprovedOpeningCostConfig(
+    prepared.entries,
+    openingConfig,
+  );
+  return hashString(stableStringify({
   catalogVersion: PHASE5_COST_CATALOG_VERSION,
   settings: {
-    openingConfig,
+    openingConfig: openingResolution.config,
+    openingConfigSource: openingResolution.source,
+    openingConfigVersion: openingResolution.version,
     historicalInventoryOverlayVersion: HISTORICAL_INVENTORY_OVERLAY_VERSION,
     historicalInventoryOverlays: APPROVED_HISTORICAL_INVENTORY_OVERLAY_DIRECTIVES,
   },
-  entries: [...entries].sort(compareEntriesForPhase5Cost).map(entryCostFingerprint),
-  accounts: [...accounts].sort((left, right) => String(left.id).localeCompare(String(right.id))).map(accountCostFingerprint),
+  entries: [...prepared.entries].sort(compareEntriesForPhase5Cost).map(entryCostFingerprint),
+  accounts: [...prepared.accounts].sort((left, right) => String(left.id).localeCompare(String(right.id))).map(accountCostFingerprint),
+  resolverErrors: prepared.errors,
 }));
+};
 
 export const findEarliestCostAffectedOperationId = (
   previousEntries: Entry[],
@@ -136,12 +169,34 @@ export const executeCostCalculationRun = (args: {
   startedAt?: string;
 }): CostCalculationRun => {
   const startedAt = args.startedAt ?? new Date().toISOString();
-  const timeline = rebuildInventoryCostTimeline(
-    args.entries,
-    args.accounts,
+  const prepared = prepareCostInputs(args.entries, args.accounts);
+  const openingResolution = resolveApprovedOpeningCostConfig(
+    prepared.entries,
     args.openingConfig,
+  );
+  if (prepared.errors.length > 0) {
+    return {
+      generationId: args.generationId,
+      inputRevision: args.inputRevision,
+      catalogVersion: PHASE5_COST_CATALOG_VERSION,
+      startedAt,
+      completedAt: new Date().toISOString(),
+      status: 'failed',
+      earliestAffectedOperationId: args.earliestAffectedOperationId,
+      settingsHash: createCostSettingsHash(openingResolution.config),
+      error: {
+        code: 'unknown_inventory_account',
+        message: prepared.errors[0],
+      },
+    };
+  }
+  const timeline = rebuildInventoryCostTimeline(
+    prepared.entries,
+    prepared.accounts,
+    openingResolution.config,
     {
-      historicalInventoryOverlayDirectives: approvedHistoricalInventoryOverlaysForAccounts(args.accounts),
+      historicalInventoryOverlayDirectives:
+        approvedHistoricalInventoryOverlaysForAccounts(prepared.accounts),
       calculationGenerationId: args.generationId,
     },
   );
@@ -154,7 +209,7 @@ export const executeCostCalculationRun = (args: {
       completedAt: new Date().toISOString(),
       status: 'failed',
       earliestAffectedOperationId: args.earliestAffectedOperationId,
-      settingsHash: createCostSettingsHash(args.openingConfig),
+      settingsHash: createCostSettingsHash(openingResolution.config),
       error: timeline.diagnostics[0] ?? {
         code: 'unknown_inventory_operation',
         message: 'Cost calculation failed without a diagnostic',
@@ -169,7 +224,7 @@ export const executeCostCalculationRun = (args: {
     completedAt: new Date().toISOString(),
     status: 'valid',
     earliestAffectedOperationId: args.earliestAffectedOperationId,
-    settingsHash: createCostSettingsHash(args.openingConfig),
+    settingsHash: createCostSettingsHash(openingResolution.config),
     timeline,
   };
 };
