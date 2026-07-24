@@ -1,6 +1,6 @@
-﻿import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { AlertTriangle, BarChart3, ChevronDown, ChevronUp, Download, RefreshCw, RotateCcw, Settings2 } from 'lucide-react';
-import { Area, AreaChart, CartesianGrid, Line, LineChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts';
+import { Area, AreaChart, CartesianGrid, Line, LineChart, Tooltip, XAxis, YAxis } from 'recharts';
 import { format } from 'date-fns';
 import { Entry } from '../../../types';
 import { useAppStore } from '../../../store';
@@ -17,6 +17,7 @@ import {
   type InventoryCycleItemReport,
   type InventoryCycleTab,
 } from '../../../lib/inventoryCycleReport';
+import { MeasuredChartContainer } from '../../ui/MeasuredChartContainer';
 
 interface Props {
   entries: Entry[];
@@ -69,7 +70,7 @@ const MiniChart = ({ data, color = '#c9a84c', secondLine, marketPrice, tab }: { 
   if (!chartData.length) return <div className="rounded-xl border border-[#1a1e2a] bg-[#080a0f] p-4 text-center text-xs text-[#8a8172]">لا توجد نقاط كافية للرسم</div>;
   return (
     <div className="h-56 rounded-xl border border-[#1a1e2a] bg-[#080a0f] p-2" dir="ltr">
-      <ResponsiveContainer width="100%" height="100%">
+      <MeasuredChartContainer>
         <LineChart data={chartData} margin={{ top: 12, right: 6, bottom: 0, left: 0 }}>
           <CartesianGrid stroke="#1a1e2a" vertical={false} />
           <XAxis dataKey="date" tick={{ fill: '#8a8172', fontSize: 10 }} minTickGap={18} />
@@ -79,14 +80,14 @@ const MiniChart = ({ data, color = '#c9a84c', secondLine, marketPrice, tab }: { 
           {secondLine && <Line type="monotone" dataKey="averageCost" name="المتوسط المرجح" stroke="#6a8a9e" strokeWidth={2} dot={false} yAxisId={0} />}
           {marketPrice !== undefined && <Line type="monotone" dataKey="marketPrice" name="تقييم بسعر اليوم" stroke="#6a9e6a" strokeDasharray="4 4" dot={false} />}
         </LineChart>
-      </ResponsiveContainer>
+      </MeasuredChartContainer>
     </div>
   );
 };
 
 const MoneyChart = ({ data }: { data: any[] }) => (
   <div className="h-56 rounded-xl border border-[#1a1e2a] bg-[#080a0f] p-2" dir="ltr">
-    <ResponsiveContainer width="100%" height="100%">
+    <MeasuredChartContainer>
       <AreaChart data={data} margin={{ top: 12, right: 6, bottom: 0, left: 0 }}>
         <CartesianGrid stroke="#1a1e2a" vertical={false} />
         <XAxis dataKey="date" tick={{ fill: '#8a8172', fontSize: 10 }} minTickGap={18} />
@@ -97,7 +98,7 @@ const MoneyChart = ({ data }: { data: any[] }) => (
         <Area type="monotone" dataKey="cogs" name="COGS" stroke="#6a8a9e" fill="#6a8a9e18" />
         <Area type="monotone" dataKey="grossProfit" name="مجمل الربح" stroke="#d1b35f" fill="#d1b35f18" />
       </AreaChart>
-    </ResponsiveContainer>
+    </MeasuredChartContainer>
   </div>
 );
 

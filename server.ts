@@ -14,6 +14,16 @@ async function startServer() {
   app.use(express.json({ limit: '50mb' }));
   app.use(express.urlencoded({ limit: '50mb', extended: true }));
 
+  // LAN development must always load the current Vite modules. This does not
+  // clear browser databases or affect production hosting.
+  if (process.env.NODE_ENV !== "production") {
+    app.use((_req, res, next) => {
+      res.set('Cache-Control', 'no-store, max-age=0');
+      res.set('Pragma', 'no-cache');
+      next();
+    });
+  }
+
   // API endpoint to export code. Disabled by default because it exposes source files.
   app.get("/api/export-code", (req, res) => {
     const exportEnabled = process.env.ENABLE_CODE_EXPORT === "true";

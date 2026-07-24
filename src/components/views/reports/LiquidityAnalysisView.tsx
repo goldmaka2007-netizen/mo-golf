@@ -1,8 +1,9 @@
 import React, { useMemo } from 'react';
-import { ResponsiveContainer, BarChart, Bar, XAxis, Tooltip, CartesianGrid, Legend } from 'recharts';
+import { BarChart, Bar, XAxis, Tooltip, CartesianGrid, Legend } from 'recharts';
 import { format } from 'date-fns';
 import { ar } from 'date-fns/locale';
 import { Entry } from '../../../types';
+import { MeasuredChartContainer } from '../../ui/MeasuredChartContainer';
 
 export const LiquidityAnalysisView = React.memo(({ entries }: { entries: Entry[] }) => {
   const data = useMemo(() => {
@@ -32,7 +33,7 @@ export const LiquidityAnalysisView = React.memo(({ entries }: { entries: Entry[]
       </div>
       
       <div className="h-64 md:h-80 w-full select-none relative overflow-hidden" dir="ltr" style={{ minHeight: '256px', minWidth: '0' }}>
-        <ResponsiveContainer width="100%" height="100%" debounce={100}>
+        <MeasuredChartContainer debounce={100}>
           <BarChart data={data} margin={{ top: 10, right: 0, left: 0, bottom: 20 }}>
             <CartesianGrid strokeDasharray="3 3" stroke="#1a1e2a" vertical={false} />
             <XAxis 
@@ -69,7 +70,7 @@ export const LiquidityAnalysisView = React.memo(({ entries }: { entries: Entry[]
               barSize={20} 
             />
           </BarChart>
-        </ResponsiveContainer>
+        </MeasuredChartContainer>
       </div>
 
       <div className="bg-[#080a0f] p-4 rounded-xl border border-[#1a1e2a] text-xs text-[#5a5548] leading-relaxed">
