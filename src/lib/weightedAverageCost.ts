@@ -49,6 +49,7 @@ export interface CostTimelineResult {
 export interface OpeningCostConfig {
   gold21PriceByYearMinor?: Record<string, number | string>;
   silverPriceByYearMinor?: Record<string, number | string>;
+  accessoryUnitCostByYearAndAccountMinor?: Record<string, Record<string, number | string | undefined>>;
 }
 
 const isInventoryAccount = (account?: Account | null): boolean => !!account?.is_inventory;

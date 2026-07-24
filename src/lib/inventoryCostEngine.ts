@@ -161,7 +161,6 @@ const orderingNumber = (entry: Entry): number => {
     (entry as Entry & { operationNo?: unknown }).operationNo,
     (entry as Entry & { journalNo?: unknown }).journalNo,
     entry.seq,
-    entry.sourceRow,
   ];
   for (const candidate of candidates) {
     const normalized = normalizeNumerals(String(candidate ?? '')).trim();
@@ -169,6 +168,12 @@ const orderingNumber = (entry: Entry): number => {
       const parsed = Number(normalized);
       if (Number.isSafeInteger(parsed)) return parsed;
     }
+  }
+  const sourceRow = Number(normalizeNumerals(String(entry.sourceRow ?? '')).trim());
+  if (Number.isSafeInteger(sourceRow) && sourceRow > 0) {
+    // The approved legacy CSV is exported newest-first. Within one effective
+    // date, larger source rows therefore represent earlier journal activity.
+    return -sourceRow;
   }
   const legacy = normalizeNumerals(String(entry.legacyOperationNo ?? '')).trim();
   const match = legacy.match(/(\d+)$/);
@@ -181,9 +186,19 @@ const orderingNumber = (entry: Entry): number => {
 
 const compareText = (left: string, right: string): number => left === right ? 0 : left < right ? -1 : 1;
 
+const isOpeningOperation = (entry: Entry): boolean =>
+  entry.operationKind === 'opening'
+  || entry.tx === 'قيد افتتاحي'
+  || entry.subTx?.startsWith('رصيد افتتاحي') === true;
+
 export const compareEntriesForPhase5Cost = (left: Entry, right: Entry): number => {
   const date = compareText(left.date, right.date);
   if (date !== 0) return date;
+  // Opening layers are effective at the start of their date. This is an
+  // explicit accounting order, required because the approved legacy export
+  // has no seq and its source rows are not guaranteed to place openings first.
+  const openingOrder = Number(isOpeningOperation(right)) - Number(isOpeningOperation(left));
+  if (openingOrder !== 0) return openingOrder;
   const order = orderingNumber(left) - orderingNumber(right);
   if (order !== 0) return order;
   const created = compareText(createdAtComparable(left), createdAtComparable(right));

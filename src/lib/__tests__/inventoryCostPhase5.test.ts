@@ -224,6 +224,36 @@ describe('Phase 5 component WAC engine', () => {
     expect(timeline.diagnostics[0].code).toBe('merchant_workmanship_without_weight');
   });
 
+  it('rejects unequal standardized tafyeet weight', () => {
+    const crossKaratAccounts = accounts.map(account =>
+      account.id === 'gold-b' ? { ...account, karat: '18' as const } : account);
+    const crossKaratBindings: InventoryRuntimeBinding[] = bindings.map(binding =>
+      binding.inventoryAccountId === 'gold-b'
+        ? { ...binding, taxonomyKey: 'gold.raw.scrap_foreign' }
+        : binding);
+    const timeline = rebuildInventoryCostTimeline([
+      entry({ id: 'source', seq: 1, tx: 'شراء ذهب', debit: 'ذهب أ', debitAccountId: 'gold-a', credit: 'الخزنة', creditAccountId: 'cash', weight: '10', cash: '1000' }),
+      entry({ id: 'tafyeet', seq: 2, tx: 'تيفيت', debit: 'ذهب ب', debitAccountId: 'gold-b', credit: 'ذهب أ', creditAccountId: 'gold-a', weight: '1' }),
+    ], crossKaratAccounts, config, { bindings: crossKaratBindings });
+    expect(timeline.valid).toBe(false);
+    expect(timeline.diagnostics[0].code).toBe('tafyeet_quantity_mismatch');
+  });
+
+  it('rejects unsupported cost-affecting inventory variants and excessive sales', () => {
+    const unsupported = rebuild([
+      entry({ id: 'unknown', seq: 1, tx: 'عملية غير معتمدة', debit: 'ذهب أ', debitAccountId: 'gold-a', credit: 'الخزنة', creditAccountId: 'cash', weight: '1' }),
+    ]);
+    expect(unsupported.valid).toBe(false);
+    expect(unsupported.diagnostics[0].code).toBe('unknown_inventory_operation');
+
+    const excessive = rebuild([
+      entry({ id: 'purchase', seq: 1, tx: 'شراء ذهب', debit: 'ذهب أ', debitAccountId: 'gold-a', credit: 'الخزنة', creditAccountId: 'cash', weight: '1', cash: '100' }),
+      entry({ id: 'sale', seq: 2, tx: 'بيع ذهب', debit: 'الخزنة', debitAccountId: 'cash', credit: 'ذهب أ', creditAccountId: 'gold-a', weight: '2', cash: '300' }),
+    ]);
+    expect(excessive.valid).toBe(false);
+    expect(excessive.diagnostics[0].code).toBe('insufficient_inventory');
+  });
+
   it('is deterministic regardless of input array order', () => {
     const entries = [
       entry({ id: 'purchase', seq: 1, tx: 'شراء فضة', debit: 'فضة أ', debitAccountId: 'silver-a', credit: 'الخزنة', creditAccountId: 'cash', weight: '10', cash: '1000' }),

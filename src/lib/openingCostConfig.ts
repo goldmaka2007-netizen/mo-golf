@@ -41,6 +41,7 @@ export const normalizeOpeningCostConfigRows = (annualConfig: AnnualOpeningCostCo
 export const buildOpeningCostConfig = (annualConfig: AnnualOpeningCostConfig[] = []): OpeningCostConfig => {
   const gold21PriceByYearMinor: OpeningCostConfig['gold21PriceByYearMinor'] = {};
   const silverPriceByYearMinor: OpeningCostConfig['silverPriceByYearMinor'] = {};
+  const accessoryUnitCostByYearAndAccountMinor: NonNullable<OpeningCostConfig['accessoryUnitCostByYearAndAccountMinor']> = {};
 
   normalizeOpeningCostConfigRows(annualConfig).forEach(config => {
     const year = String(config.year);
@@ -50,7 +51,14 @@ export const buildOpeningCostConfig = (annualConfig: AnnualOpeningCostConfig[] =
     if (/^\d{4}$/.test(year) && config.silverPriceMinorPerGram !== undefined) {
       silverPriceByYearMinor[year] = config.silverPriceMinorPerGram;
     }
+    if (/^\d{4}$/.test(year) && config.accessoryUnitCostMinorByAccountId) {
+      accessoryUnitCostByYearAndAccountMinor[year] = { ...config.accessoryUnitCostMinorByAccountId };
+    }
   });
 
-  return { gold21PriceByYearMinor, silverPriceByYearMinor };
+  return {
+    gold21PriceByYearMinor,
+    silverPriceByYearMinor,
+    accessoryUnitCostByYearAndAccountMinor,
+  };
 };
