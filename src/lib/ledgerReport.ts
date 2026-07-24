@@ -1,7 +1,7 @@
 import { Account, AccountNature, CanonicalAccountDefinition, Entry } from '../types';
 import { getEntryArabicWeight, getMerchantMetals, resolveOperationKind } from './engine';
 import { getDynamicAccountNature, getMetricActualValue, getMetricValue } from '../utils/accountLogic';
-import { buildCanonicalAccountRegistry, buildCanonicalAccountingLegs } from './canonicalAccounting';
+import { buildLegacyLedgerLegs, legacyLedgerEntityId } from './legacyLedger';
 import { splitLegsByPeriod } from './periodLegs';
 
 export type LedgerDimension = 'cash' | 'gold' | 'silver';
@@ -87,14 +87,19 @@ const compareEntries = (a: Entry, b: Entry): number => (a.date || '').localeComp
 export const getVisibleOperationNumber = (entry: Entry): string => entry.invoiceNumber || String(entry.seq || '');
 
 export const getAvailableDimensions = (account: Account, entries: Entry[], accounts: Account[]): LedgerDimension[] => {
-  const relevant = entries.filter(entry => accountMatches(entry, 'debit', account) || accountMatches(entry, 'credit', account));
-  if (account.type === 'merchant') return ['cash', ...getMerchantMetals(account, relevant, accounts)];
-  const dimensions: LedgerDimension[] = [];
-  (['cash', 'gold', 'silver'] as const).forEach(dimension => {
-    if (!supportsDimension(account, dimension, accounts, relevant)) return;
-    if (relevant.some(entry => valueFor(entry, account, dimension, accounts) !== 0)) dimensions.push(dimension);
-  });
-  return dimensions;
+  const historical = new Set(buildLegacyLedgerLegs(entries, accounts).filter(leg => leg.entityId === legacyLedgerEntityId(account)).map(leg => leg.dimension));
+  const configured: LedgerDimension[] = [];
+  if (account.type === 'merchant') configured.push('cash', ...getMerchantMetals(account, entries, accounts));
+  else if (account.type === 'cash') configured.push('cash');
+  else if (account.metal === 'gold' || ['gold_product', 'gold_raw', 'gold_direct'].includes(account.type ?? '')) configured.push('gold');
+  else if (account.metal === 'silver' || account.type === 'silver') configured.push('silver');
+  else if (account.type !== 'accessory') {
+    const nature = getDynamicAccountNature(account.name, accounts);
+    if (nature === AccountNature.MIXED_GOLD) configured.push('cash', 'gold');
+    if (nature === AccountNature.MIXED_SILVER) configured.push('cash', 'silver');
+  }
+  configured.forEach(dimension => historical.add(dimension));
+  return (['cash', 'gold', 'silver'] as const).filter(dimension => historical.has(dimension));
 };
 
 export const buildLedgerReport = (
@@ -106,51 +111,26 @@ export const buildLedgerReport = (
   endDate: string,
   canonicalDefinitions?: CanonicalAccountDefinition[],
 ): LedgerReport => {
-  const registry = buildCanonicalAccountRegistry(accounts, entries, canonicalDefinitions);
-  const entity = registry.entities.find(item => item.sourceAccount === account || (!!account.id && item.sourceAccount?.id === account.id)) ?? registry.byLegacyName.get(account.name);
-  if (entity) {
-    const legs = buildCanonicalAccountingLegs(entries, registry).filter(leg => leg.entityId === entity.entityId && leg.dimension === dimension).sort((a, b) => (a.date || '').localeCompare(b.date || ''));
+  const entityId = legacyLedgerEntityId(account);
+  const legs = buildLegacyLedgerLegs(entries, accounts, canonicalDefinitions)
+    .filter(leg => leg.entityId === entityId && leg.dimension === dimension)
+    .sort((a, b) => (a.date || '').localeCompare(b.date || ''));
+  if (legs.length) {
+    const normalBalance = legs[0].account.normalBalance;
     const { openingLegs, periodLegs } = splitLegsByPeriod(legs, startDate, endDate);
     let openingBalance = 0; let runningBalance = 0; const rows: LedgerRow[] = [];
     openingLegs.forEach(leg => {
-      const change = entity.normalBalance === 'credit' ? (leg.side === 'credit' ? leg.amount : -leg.amount) : (leg.side === 'debit' ? leg.amount : -leg.amount);
+      const change = normalBalance === 'credit' ? (leg.side === 'credit' ? leg.amount : -leg.amount) : (leg.side === 'debit' ? leg.amount : -leg.amount);
       openingBalance += change;
     });
     periodLegs.forEach(leg => {
-      const change = entity.normalBalance === 'credit' ? (leg.side === 'credit' ? leg.amount : -leg.amount) : (leg.side === 'debit' ? leg.amount : -leg.amount);
+      const change = normalBalance === 'credit' ? (leg.side === 'credit' ? leg.amount : -leg.amount) : (leg.side === 'debit' ? leg.amount : -leg.amount);
       runningBalance += change;
       rows.push({ entry: leg.entry, date: leg.date, operationNumber: getVisibleOperationNumber(leg.entry), operationType: leg.entry.tx || leg.operationKind || 'عملية', oppositeAccount: leg.oppositeAccount, debit: leg.side === 'debit' ? leg.amount : 0, credit: leg.side === 'credit' ? leg.amount : 0, balance: openingBalance + runningBalance, originalWeight: originalWeightFor(leg.entry, dimension, accounts), karat: leg.entry.karat });
     });
     return { openingBalance, totalDebit: rows.reduce((total, row) => total + row.debit, 0), totalCredit: rows.reduce((total, row) => total + row.credit, 0), closingBalance: openingBalance + runningBalance, rows };
   }
-  if (!supportsDimension(account, dimension, accounts, entries)) return { openingBalance: 0, totalDebit: 0, totalCredit: 0, closingBalance: 0, rows: [] };
-  const creditNature = isCreditNatureAccount(account);
-  const candidates = [...entries].sort(compareEntries).flatMap(entry => {
-    const raw = entry as Entry & Record<string, unknown>;
-    const excluded = raw.isDeleted === true || raw.deleted === true || raw.isVoided === true || raw.voided === true || raw.isReversed === true || raw.reversed === true || raw.status === 'voided' || raw.status === 'deleted' || raw.status === 'reversed';
-    if (excluded) return [];
-    const debitSide = accountMatches(entry, 'debit', account); const creditSide = accountMatches(entry, 'credit', account);
-    if (!debitSide && !creditSide) return [];
-    const amount = valueFor(entry, account, dimension, accounts);
-    if (amount === 0) return [];
-    const debit = debitSide ? amount : 0; const credit = creditSide ? amount : 0;
-    return [{ entry, date: entry.date, debit, credit, change: creditNature ? credit - debit : debit - credit, oppositeAccount: debitSide ? entry.credit : entry.debit }];
-  });
-  const { openingLegs, periodLegs } = splitLegsByPeriod(candidates, startDate, endDate);
-  let openingBalance = 0; let runningBalance = 0; const rows: LedgerRow[] = [];
-  openingLegs.forEach(item => { openingBalance += item.change; });
-  periodLegs.forEach(item => {
-    runningBalance += item.change;
-    rows.push({ entry: item.entry, date: item.date, operationNumber: getVisibleOperationNumber(item.entry), operationType: item.entry.tx || item.entry.operationKind || 'عملية', oppositeAccount: item.oppositeAccount, debit: item.debit, credit: item.credit, balance: openingBalance + runningBalance, originalWeight: originalWeightFor(item.entry, dimension, accounts), karat: item.entry.karat });
-  });
-
-  return {
-    openingBalance,
-    totalDebit: rows.reduce((total, row) => total + row.debit, 0),
-    totalCredit: rows.reduce((total, row) => total + row.credit, 0),
-    closingBalance: openingBalance + runningBalance,
-    rows,
-  };
+  return { openingBalance: 0, totalDebit: 0, totalCredit: 0, closingBalance: 0, rows: [] };
 };
 
 export const filterLedgerRows = (rows: LedgerRow[], operationType: string, oppositeAccount: string): LedgerRow[] =>

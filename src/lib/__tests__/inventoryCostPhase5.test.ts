@@ -264,4 +264,189 @@ describe('Phase 5 component WAC engine', () => {
     expect(reverse.results).toEqual(forward.results);
     expect(reverse.finalStates).toEqual(forward.finalStates);
   });
+
+  it('batches unsequenced legacy receipts before same-day issues and records a diagnostic', () => {
+    const opening = entry({
+      id: 'legacy-opening',
+      seq: null,
+      imported: true,
+      sourceRow: 30,
+      tx: 'قيد افتتاحي',
+      debit: 'ذهب أ',
+      debitAccountId: 'gold-a',
+      credit: 'رأس المال',
+      creditAccountId: 'equity',
+      weight: '1',
+      arabicWeight: '1',
+    });
+    const sale = entry({
+      id: 'legacy-sale',
+      seq: null,
+      imported: true,
+      sourceRow: 20,
+      date: '2026-01-02',
+      tx: 'بيع ذهب',
+      debit: 'الخزنة',
+      debitAccountId: 'cash',
+      credit: 'ذهب أ',
+      creditAccountId: 'gold-a',
+      weight: '2',
+      arabicWeight: '2',
+      cash: '300',
+    });
+    const purchase = entry({
+      id: 'legacy-purchase',
+      seq: null,
+      imported: true,
+      sourceRow: 10,
+      date: '2026-01-02',
+      tx: 'شراء ذهب',
+      debit: 'ذهب أ',
+      debitAccountId: 'gold-a',
+      credit: 'الخزنة',
+      creditAccountId: 'cash',
+      weight: '2',
+      arabicWeight: '2',
+      cash: '200',
+    });
+    const timeline = rebuild([opening, sale, purchase]);
+    expect(timeline.valid).toBe(true);
+    expect(timeline.orderedOperationIds.indexOf('legacy-purchase'))
+      .toBeLessThan(timeline.orderedOperationIds.indexOf('legacy-sale'));
+    expect(timeline.orderingDiagnostics).toContainEqual(expect.objectContaining({
+      date: '2026-01-02',
+      inventoryAccountId: 'gold-a',
+      changed: true,
+    }));
+  });
+
+  it('orders the 2026-03-10 transfer as destination incoming before the outgoing sale', () => {
+    const sourceOpening = entry({
+      id: '2026-source-opening', seq: null, imported: true, sourceRow: 2168,
+      tx: 'قيد افتتاحي', operationKind: 'opening',
+      debit: 'ذهب أ', debitAccountId: 'gold-a', credit: 'رأس المال', creditAccountId: 'equity',
+      weight: '37.94', arabicWeight: '37.94',
+    });
+    const destinationOpening = entry({
+      id: '2026-destination-opening', seq: null, imported: true, sourceRow: 2167,
+      tx: 'قيد افتتاحي', operationKind: 'opening',
+      debit: 'ذهب ب', debitAccountId: 'gold-b', credit: 'رأس المال', creditAccountId: 'equity',
+      weight: '19.28', arabicWeight: '19.28',
+    });
+    const sale = entry({
+      id: 'csvref-entry-c83e6fbd7b7281ade64971729a973623',
+      seq: null, imported: true, sourceRow: 1274, date: '2026-03-10', tx: 'بيع ذهب',
+      debit: 'الخزنة', debitAccountId: 'cash', credit: 'ذهب ب', creditAccountId: 'gold-b',
+      weight: '20.06', arabicWeight: '20.06', cash: '100',
+    });
+    const transfer = entry({
+      id: 'csvref-entry-70429284f8d0738630b21fc0550da708',
+      seq: null, imported: true, sourceRow: 1254, date: '2026-03-10', tx: 'تحويل',
+      debit: 'ذهب ب', debitAccountId: 'gold-b', credit: 'ذهب أ', creditAccountId: 'gold-a',
+      weight: '5.88', arabicWeight: '5.88',
+    });
+
+    const timeline = rebuild([sourceOpening, destinationOpening, sale, transfer]);
+    const dayDiagnostic = timeline.orderingDiagnostics.find(item =>
+      item.date === '2026-03-10' && item.inventoryAccountId === 'gold-b');
+
+    expect(timeline.valid).toBe(true);
+    expect(dayDiagnostic).toMatchObject({
+      changed: true,
+      incomingOperationIds: [transfer.id],
+      outgoingOperationIds: [sale.id],
+    });
+    expect(timeline.orderedOperationIds.indexOf(transfer.id!))
+      .toBeLessThan(timeline.orderedOperationIds.indexOf(sale.id!));
+    expect(timeline.diagnostics).toEqual([]);
+    expect(timeline.finalStates['gold-b'].standardizedQuantityUnits).toBe(510);
+  });
+  it('does not batch operations that have a reliable sequence or createdAt', () => {
+    const sequenced = rebuild([
+      entry({ id: 'opening', seq: 1, tx: 'قيد افتتاحي', debit: 'ذهب أ', debitAccountId: 'gold-a', credit: 'رأس المال', creditAccountId: 'equity', weight: '1' }),
+      entry({ id: 'sale', seq: 1, date: '2026-01-02', tx: 'بيع ذهب', debit: 'الخزنة', debitAccountId: 'cash', credit: 'ذهب أ', creditAccountId: 'gold-a', weight: '2', cash: '300' }),
+      entry({ id: 'purchase', seq: 2, date: '2026-01-02', tx: 'شراء ذهب', debit: 'ذهب أ', debitAccountId: 'gold-a', credit: 'الخزنة', creditAccountId: 'cash', weight: '2', cash: '200' }),
+    ]);
+    expect(sequenced.valid).toBe(false);
+    expect(sequenced.diagnostics[0].code).toBe('insufficient_inventory');
+    expect(sequenced.orderingDiagnostics.some(item => item.date === '2026-01-02')).toBe(false);
+
+    const timestampedSale = entry({
+      id: 'timestamped-sale',
+      seq: null,
+      imported: true,
+      sourceRow: 20,
+      createdAt: '2026-01-03T08:00:00.000Z',
+      date: '2026-01-03',
+      tx: 'بيع ذهب',
+      debit: 'الخزنة',
+      debitAccountId: 'cash',
+      credit: 'ذهب أ',
+      creditAccountId: 'gold-a',
+      weight: '1',
+      cash: '100',
+    });
+    const timestampedPurchase = entry({
+      id: 'timestamped-purchase',
+      seq: null,
+      imported: true,
+      sourceRow: 10,
+      createdAt: '2026-01-03T09:00:00.000Z',
+      date: '2026-01-03',
+      tx: 'شراء ذهب',
+      debit: 'ذهب أ',
+      debitAccountId: 'gold-a',
+      credit: 'الخزنة',
+      creditAccountId: 'cash',
+      weight: '1',
+      cash: '100',
+    });
+    const timestamped = rebuild([timestampedSale, timestampedPurchase]);
+    expect(timestamped.valid).toBe(false);
+    expect(timestamped.orderingDiagnostics).toEqual([]);
+  });
+
+  it('does not mistake malformed legacy ordering metadata for a reliable order', () => {
+    const timeline = rebuild([
+      entry({
+        id: 'malformed-sale',
+        seq: '' as unknown as number,
+        imported: true,
+        sourceRow: 20,
+        createdAt: 'not-a-timestamp',
+        date: '2026-01-03',
+        tx: 'بيع ذهب',
+        debit: 'الخزنة',
+        debitAccountId: 'cash',
+        credit: 'ذهب أ',
+        creditAccountId: 'gold-a',
+        weight: '1',
+        arabicWeight: '1',
+        cash: '100',
+      }),
+      entry({
+        id: 'malformed-purchase',
+        seq: null,
+        imported: true,
+        sourceRow: 10,
+        createdAt: 'also-invalid',
+        date: '2026-01-03',
+        tx: 'شراء ذهب',
+        debit: 'ذهب أ',
+        debitAccountId: 'gold-a',
+        credit: 'الخزنة',
+        creditAccountId: 'cash',
+        weight: '1',
+        arabicWeight: '1',
+        cash: '100',
+      }),
+    ]);
+    expect(timeline.valid).toBe(true);
+    expect(timeline.orderedOperationIds).toEqual(['malformed-purchase', 'malformed-sale']);
+    expect(timeline.orderingDiagnostics).toContainEqual(expect.objectContaining({
+      date: '2026-01-03',
+      inventoryAccountId: 'gold-a',
+      changed: true,
+    }));
+  });
 });

@@ -100,7 +100,11 @@ export const createCostInputRevision = (
   openingConfig: Phase5OpeningCostConfig,
 ): string => hashString(stableStringify({
   catalogVersion: PHASE5_COST_CATALOG_VERSION,
-  settings: openingConfig,
+  settings: {
+    openingConfig,
+    historicalInventoryOverlayVersion: HISTORICAL_INVENTORY_OVERLAY_VERSION,
+    historicalInventoryOverlays: APPROVED_HISTORICAL_INVENTORY_OVERLAY_DIRECTIVES,
+  },
   entries: [...entries].sort(compareEntriesForPhase5Cost).map(entryCostFingerprint),
   accounts: [...accounts].sort((left, right) => String(left.id).localeCompare(String(right.id))).map(accountCostFingerprint),
 }));
@@ -132,7 +136,15 @@ export const executeCostCalculationRun = (args: {
   startedAt?: string;
 }): CostCalculationRun => {
   const startedAt = args.startedAt ?? new Date().toISOString();
-  const timeline = rebuildInventoryCostTimeline(args.entries, args.accounts, args.openingConfig);
+  const timeline = rebuildInventoryCostTimeline(
+    args.entries,
+    args.accounts,
+    args.openingConfig,
+    {
+      historicalInventoryOverlayDirectives: approvedHistoricalInventoryOverlaysForAccounts(args.accounts),
+      calculationGenerationId: args.generationId,
+    },
+  );
   if (!timeline.valid) {
     return {
       generationId: args.generationId,

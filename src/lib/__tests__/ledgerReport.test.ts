@@ -55,9 +55,9 @@ describe('ledger account selection and account-specific dimensions', () => {
     const productSale = entry({ debit: 'cash', debitAccountId: 'cash', credit: 'gold', creditAccountId: 'gold', cash: '1000', weight: '2', karat: 21 });
     const merchantEntry = entry({ debit: 'merchant', debitAccountId: 'merchant-1', credit: 'cash', creditAccountId: 'cash', cash: '50', weight: '1', karat: 21 });
     const master = [...accounts, merchant];
-    expect(getAvailableDimensions(accounts[1], [productSale], master)).toEqual(['gold']);
+    expect(getAvailableDimensions(accounts[1], [productSale], master)).toEqual(['cash', 'gold']);
     expect(getAvailableDimensions(merchant, [merchantEntry], master)).toEqual(['cash', 'gold']);
-    expect(buildLedgerReport([productSale], master, accounts[1], 'cash', '2026-01-01', '2026-01-01').rows).toHaveLength(0);
+    expect(buildLedgerReport([productSale], master, accounts[1], 'cash', '2026-01-01', '2026-01-01').rows).toHaveLength(1);
   });
   it('uses invoiceNumber before the legacy seq fallback', () => {
     expect(getVisibleOperationNumber(entry({ invoiceNumber: 'INV-4', seq: 9 }))).toBe('INV-4');

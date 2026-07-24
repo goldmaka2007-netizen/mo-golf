@@ -6,6 +6,7 @@ import {
   CURRENT_DATASET_INVENTORY_BINDINGS,
 } from '../inventoryCostCatalog';
 import { rebuildInventoryCostTimeline } from '../inventoryCostEngine';
+import { APPROVED_HISTORICAL_INVENTORY_OVERLAY_DIRECTIVES } from '../historicalInventoryOverlay';
 
 type CsvRow = Record<string, string>;
 
@@ -76,7 +77,7 @@ const accessoryOpeningCosts = Object.fromEntries(
 );
 
 describe('Phase 5 approved dataset regression', () => {
-  it('keeps all 2,169 records immutable and fails closed on the first historical inventory deficit', () => {
+  it('applies legacy same-day batches without mutation and exposes the next genuine day-end deficit', () => {
     const before = JSON.stringify(entries);
     const timeline = rebuildInventoryCostTimeline(entries, accounts, {
       gold21PriceByYearMinor: { '2026': 600000 },
@@ -91,9 +92,110 @@ describe('Phase 5 approved dataset regression', () => {
     expect(timeline.finalStates).toEqual({});
     expect(timeline.diagnostics).toEqual([{
       code: 'insufficient_inventory',
-      message: 'Metal movement exceeds costed inventory: required standardized=3.53g, available=3.45g; required physical=3.53g, available=3.45g',
-      operationId: 'csvref-entry-89c515f70df8e79793ebc8d1482440f9',
+      message: 'Metal movement exceeds costed inventory: required standardized=6.61g, available=6.59g; required physical=6.61g, available=6.59g',
+      operationId: 'csvref-entry-8bac4f51c5f366affbcb8884610f549e',
       inventoryAccountId: 'seed-account-d1216eb4076ccdf40e20',
     }]);
+    expect(timeline.orderingDiagnostics).toHaveLength(137);
+    expect(timeline.orderingDiagnostics.filter(item => item.changed)).toHaveLength(92);
+
+    const scrapArabicId = 'seed-account-d1216eb4076ccdf40e20';
+    const january12 = timeline.orderingDiagnostics.find(item =>
+      item.date === '2026-01-12' && item.inventoryAccountId === scrapArabicId);
+    expect(january12).toBeDefined();
+    expect(january12?.changed).toBe(true);
+
+    const dayEntries = entries.filter(entry => entry.date === '2026-01-12'
+      && (entry.debitAccountId === scrapArabicId || entry.creditAccountId === scrapArabicId));
+    const priorEntries = entries.filter(entry => entry.date < '2026-01-12'
+      && (entry.debitAccountId === scrapArabicId || entry.creditAccountId === scrapArabicId));
+    const movement = (entry: Entry) => Number(entry.arabicWeight || entry.weight || 0);
+    const signed = (entry: Entry) =>
+      (entry.debitAccountId === scrapArabicId ? 1 : -1) * movement(entry);
+    const start = priorEntries.reduce((sum, entry) => sum + signed(entry), 0);
+    const incoming = dayEntries
+      .filter(entry => entry.debitAccountId === scrapArabicId)
+      .reduce((sum, entry) => sum + movement(entry), 0);
+    const outgoing = dayEntries
+      .filter(entry => entry.creditAccountId === scrapArabicId)
+      .reduce((sum, entry) => sum + movement(entry), 0);
+    expect(start).toBeCloseTo(6.51, 8);
+    expect(incoming).toBeCloseTo(9.71, 8);
+    expect(outgoing).toBeCloseTo(8.94, 8);
+    expect(start + incoming - outgoing).toBeCloseTo(7.28, 8);
+
+    let running = start;
+    for (const operationId of january12?.operationIdsAfter ?? []) {
+      const entry = entries.find(item => item.id === operationId)!;
+      running += signed(entry);
+      expect(running).toBeGreaterThanOrEqual(0);
+    }
+    expect(running).toBeCloseTo(7.28, 8);
+
+    for (const diagnostic of timeline.orderingDiagnostics.filter(item => item.changed)) {
+      expect([...diagnostic.operationIdsAfter].sort())
+        .toEqual([...diagnostic.operationIdsBefore].sort());
+      const signedMovement = (operationId: string) => {
+        const entry = entries.find(item => item.id === operationId)!;
+        const amount = Number(entry.arabicWeight || entry.weight || entry.count || 0);
+        return entry.debitAccountId === diagnostic.inventoryAccountId ? amount : -amount;
+      };
+      const beforeNet = diagnostic.operationIdsBefore
+        .reduce((sum, operationId) => sum + signedMovement(operationId), 0);
+      const afterNet = diagnostic.operationIdsAfter
+        .reduce((sum, operationId) => sum + signedMovement(operationId), 0);
+      expect(afterNet).toBeCloseTo(beforeNet, 8);
+    }
+  });
+  it('completes all 2,169 records with the three isolated historical overlays', () => {
+    const before = JSON.stringify(entries);
+    const timeline = rebuildInventoryCostTimeline(entries, accounts, {
+      gold21PriceByYearMinor: { '2026': 600000 },
+      silverPriceByYearMinor: { '2026': 6000 },
+      accessoryUnitCostByYearAndAccountMinor: { '2026': accessoryOpeningCosts },
+    }, {
+      historicalInventoryOverlayDirectives: APPROVED_HISTORICAL_INVENTORY_OVERLAY_DIRECTIVES,
+      calculationGenerationId: 1,
+    });
+
+    expect(entries).toHaveLength(2169);
+    expect(JSON.stringify(entries)).toBe(before);
+    expect(timeline.diagnostics).toEqual([]);
+    expect(timeline.valid).toBe(true);
+    expect(timeline.orderedOperationIds).toHaveLength(2169);
+    expect(timeline.historicalInventoryOverlays).toHaveLength(3);
+    expect(timeline.historicalInventoryOverlays.every(overlay => overlay.totalCostMinor > 0)).toBe(true);
+    expect(timeline.historicalInventoryOverlays.every(overlay =>
+      Math.abs(overlay.metalWacAfter - overlay.metalWacBefore) <= 0.5
+      && Math.abs(overlay.workmanshipWacAfter - overlay.workmanshipWacBefore) <= 0.5)).toBe(true);
+
+    const overlayUnitsByAccount = new Map<string, number>();
+    for (const overlay of timeline.historicalInventoryOverlays) {
+      overlayUnitsByAccount.set(
+        overlay.stableInventoryAccountId,
+        (overlayUnitsByAccount.get(overlay.stableInventoryAccountId) ?? 0) + overlay.quantityUnits,
+      );
+    }
+    const operationNetByAccount = new Map<string, number>();
+    for (const result of timeline.results) {
+      const incomingId = result.destinationInventoryAccountId ?? result.inventoryAccountId;
+      const outgoingId = result.sourceInventoryAccountId ?? result.inventoryAccountId;
+      if (incomingId) operationNetByAccount.set(incomingId,
+        (operationNetByAccount.get(incomingId) ?? 0)
+        + result.incomingStandardizedQuantityUnits + result.incomingAccessoryQuantityUnits);
+      if (outgoingId) operationNetByAccount.set(outgoingId,
+        (operationNetByAccount.get(outgoingId) ?? 0)
+        - result.outgoingStandardizedQuantityUnits - result.outgoingAccessoryQuantityUnits);
+    }
+    for (const [accountId, state] of Object.entries(timeline.finalStates)) {
+      const finalUnits = state.kind === 'accessory'
+        ? state.accessoryQuantityUnits
+        : state.standardizedQuantityUnits;
+      expect(finalUnits).toBe(
+        (operationNetByAccount.get(accountId) ?? 0) + (overlayUnitsByAccount.get(accountId) ?? 0),
+      );
+    }
+    expect(timeline.finalStates['seed-account-d1216eb4076ccdf40e20'].standardizedQuantityUnits).toBe(1833);
+    expect(timeline.finalStates['seed-account-391695330f1733e03bb0'].standardizedQuantityUnits).toBe(3527);
   });
 });

@@ -24,7 +24,20 @@ export enum AccountNature {
 
 export interface Entry {
   id?: string;
-  seq: number;
+  /**
+   * Application sequence for newly-created entries.
+   * Legacy imported entries intentionally keep this null/absent and retain
+   * their original identifiers in the legacy migration fields below.
+   */
+  seq?: number | null;
+  legacyOperationId?: string;
+  legacyOperationNo?: string;
+  sourceRow?: number;
+  sourceFile?: string;
+  imported?: boolean;
+  importVersion?: string;
+  importedAt?: any;
+  legacySourceHash?: string;
   tx: string;
   operationKind?: AccountingOperationKind;
   subTx?: string;

@@ -13,9 +13,9 @@ const entry = (value: Partial<Entry>): Entry => ({ seq: 1, tx: 'بيع', date: '
 
 describe('trial balance report', () => {
   const entries = [
-    entry({ id: 'opening-1', operationKind: 'opening', debit: 'الخزنة', debitAccountId: 'cash', credit: 'تاجر الذهب', creditAccountId: 'gold-merchant', cash: '100', weight: '2', karat: 21 }),
-    entry({ id: 'prior', date: '2026-01-10', debit: 'الخزنة', debitAccountId: 'cash', credit: 'تاجر الذهب', creditAccountId: 'gold-merchant', cash: '20', weight: '1', karat: 21 }),
-    entry({ id: 'period', date: '2026-02-01', debit: 'الخزنة', debitAccountId: 'cash', credit: 'تاجر الذهب', creditAccountId: 'gold-merchant', cash: '30', weight: '3', karat: 21 }),
+    entry({ id: 'opening-1', operationKind: 'opening', debit: 'الخزنة', debitAccountId: 'cash', credit: 'تاجر الذهب', creditAccountId: 'gold-merchant', cash: '100', weight: '2', arabicWeight: '2', karat: 21 }),
+    entry({ id: 'prior', date: '2026-01-10', debit: 'الخزنة', debitAccountId: 'cash', credit: 'تاجر الذهب', creditAccountId: 'gold-merchant', cash: '20', weight: '1', arabicWeight: '1', karat: 21 }),
+    entry({ id: 'period', date: '2026-02-01', debit: 'الخزنة', debitAccountId: 'cash', credit: 'تاجر الذهب', creditAccountId: 'gold-merchant', cash: '30', weight: '3', arabicWeight: '3', karat: 21 }),
     entry({ id: 'void', date: '2026-02-01', debit: 'الخزنة', debitAccountId: 'cash', credit: 'تاجر الذهب', creditAccountId: 'gold-merchant', cash: '999', isVoided: true } as Entry & { isVoided: boolean }),
   ];
   it('reconciles every row with the shared general-ledger summary and keeps openings out of period movement', () => {

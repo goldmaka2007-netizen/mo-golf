@@ -75,13 +75,21 @@ export interface InventoryCostState {
   metalWacMinorPerStandardUnit: number | null;
   workmanshipWacMinorPerPhysicalUnit: number | null;
   totalWacMinorPerDisplayUnit: number | null;
+  lastKnownMetalCostMinor: number;
+  lastKnownStandardizedQuantityUnits: number;
+  lastKnownWorkmanshipCostMinor: number;
+  lastKnownPhysicalQuantityUnits: number;
+  lastKnownAccessoryCostMinor: number;
+  lastKnownAccessoryQuantityUnits: number;
   hasReliableCostBasis: boolean;
   lastProcessedOperationId?: string;
   calculationVersion: typeof INVENTORY_COST_CALCULATION_VERSION;
 }
 
+
 export type InventoryCostDiagnosticCode =
   | 'duplicate_operation'
+  | 'invalid_historical_overlay'
   | 'insufficient_inventory'
   | 'invalid_amount'
   | 'invalid_opening_cost'
@@ -106,6 +114,20 @@ export interface InventoryCostDiagnostic {
   inventoryAccountId?: string;
 }
 
+export interface LegacySameDayOrderingDiagnostic {
+  code: 'legacy_same_day_batch_ordering_applied';
+  date: string;
+  inventoryAccountId: string;
+  displayName: string;
+  changed: boolean;
+  openingOperationIds: string[];
+  incomingOperationIds: string[];
+  outgoingOperationIds: string[];
+  operationIdsBefore: string[];
+  operationIdsAfter: string[];
+  message: string;
+}
+
 export type InventoryCostOperationClassification =
   | 'opening'
   | 'customer_purchase'
@@ -120,6 +142,39 @@ export type InventoryCostOperationClassification =
   | 'quantity_only'
   | 'non_cost';
 
+export type HistoricalOverlayOwnerApprovalStatus =
+  | 'pending_final_approval'
+  | 'approved'
+  | 'rejected'
+  | 'revoked'
+  | 'superseded';
+
+export interface HistoricalInventoryOverlayDirective {
+  overlayId: string;
+  stableInventoryAccountId: string;
+  effectiveDate: string;
+  quantityUnits: number;
+  unitBasis: InventoryCostUnitBasis;
+  reasonCode: 'historical_inventory_reconciliation';
+  sourceDeficitOperationId: string;
+  ownerApprovalStatus: HistoricalOverlayOwnerApprovalStatus;
+  approvedAt: string | null;
+  supersedesOverlayId: string | null;
+  revokedAt: string | null;
+  revocationReason: string | null;
+}
+
+export interface AppliedHistoricalInventoryOverlay extends HistoricalInventoryOverlayDirective {
+  metalCostMinor: number;
+  workmanshipCostMinor: number;
+  totalCostMinor: number;
+  calculationGenerationId: number;
+  auditHash: string;
+  metalWacBefore: number;
+  metalWacAfter: number;
+  workmanshipWacBefore: number;
+  workmanshipWacAfter: number;
+}
 export interface OperationCostResultV2 {
   operationId: string;
   classification: InventoryCostOperationClassification;
@@ -156,6 +211,8 @@ export interface InventoryCostTimeline {
   resultsByOperationId: Record<string, OperationCostResultV2>;
   finalStates: Record<string, InventoryCostState>;
   diagnostics: InventoryCostDiagnostic[];
+  orderingDiagnostics: LegacySameDayOrderingDiagnostic[];
+  historicalInventoryOverlays: AppliedHistoricalInventoryOverlay[];
   valid: boolean;
 }
 

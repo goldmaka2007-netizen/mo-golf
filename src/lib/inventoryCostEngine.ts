@@ -1,4 +1,8 @@
 import type { Account, Entry } from '../types';
+import {
+  isHistoricalOverlayActive,
+  sealAppliedHistoricalInventoryOverlay,
+} from './historicalInventoryOverlay';
 import { normalizeNumerals } from './accounting';
 import {
   buildInventoryRuntimeCatalog,
@@ -8,7 +12,10 @@ import {
 } from './inventoryCostCatalog';
 import {
   INVENTORY_COST_CALCULATION_VERSION,
+  type AppliedHistoricalInventoryOverlay,
+  type HistoricalInventoryOverlayDirective,
   type InventoryCostDiagnostic,
+  type LegacySameDayOrderingDiagnostic,
   type InventoryCostOperationClassification,
   type InventoryCostState,
   type InventoryCostTimeline,
@@ -236,6 +243,12 @@ const emptyState = (account: ResolvedInventoryAccount): InventoryCostState => ({
   workmanshipWacMinorPerPhysicalUnit: null,
   totalWacMinorPerDisplayUnit: null,
   hasReliableCostBasis: false,
+  lastKnownMetalCostMinor: 0,
+  lastKnownStandardizedQuantityUnits: 0,
+  lastKnownWorkmanshipCostMinor: 0,
+  lastKnownPhysicalQuantityUnits: 0,
+  lastKnownAccessoryCostMinor: 0,
+  lastKnownAccessoryQuantityUnits: 0,
   calculationVersion: INVENTORY_COST_CALCULATION_VERSION,
 });
 
@@ -253,6 +266,18 @@ const updateDerivedState = (state: InventoryCostState): void => {
     && state.hasReliableCostBasis
     ? state.remainingWorkmanshipCostMinor / state.actualPhysicalWeightUnits
     : null;
+  if (state.hasReliableCostBasis && state.standardizedQuantityUnits > 0) {
+    state.lastKnownMetalCostMinor = state.remainingMetalCostMinor;
+    state.lastKnownStandardizedQuantityUnits = state.standardizedQuantityUnits;
+  }
+  if (state.hasReliableCostBasis && state.actualPhysicalWeightUnits > 0) {
+    state.lastKnownWorkmanshipCostMinor = state.remainingWorkmanshipCostMinor;
+    state.lastKnownPhysicalQuantityUnits = state.actualPhysicalWeightUnits;
+  }
+  if (state.hasReliableCostBasis && state.accessoryQuantityUnits > 0) {
+    state.lastKnownAccessoryCostMinor = state.remainingAccessoryCostMinor;
+    state.lastKnownAccessoryQuantityUnits = state.accessoryQuantityUnits;
+  }
   if (!state.hasReliableCostBasis) {
     state.totalWacMinorPerDisplayUnit = null;
   } else if (state.kind === 'accessory') {
@@ -458,42 +483,49 @@ const calculateAtCurrentWac = (
   quantity: MovementQuantity,
   entry: Entry,
 ): RemovedCost => {
-  if (!state.hasReliableCostBasis) fail('missing_wac', 'Inventory account has no reliable WAC', entry, state.inventoryAccountId);
   if (state.kind === 'accessory') {
-    if (quantity.accessoryUnits <= 0 || state.accessoryQuantityUnits <= 0) {
+    if (quantity.accessoryUnits <= 0) {
       fail('invalid_quantity', 'Accessory surplus quantity must be positive', entry, state.inventoryAccountId);
     }
+    const basisCost = state.hasReliableCostBasis && state.accessoryQuantityUnits > 0
+      ? state.remainingAccessoryCostMinor
+      : state.lastKnownAccessoryCostMinor;
+    const basisQuantity = state.hasReliableCostBasis && state.accessoryQuantityUnits > 0
+      ? state.accessoryQuantityUnits
+      : state.lastKnownAccessoryQuantityUnits;
+    if (basisQuantity <= 0) fail('missing_wac', 'Inventory account has no reliable WAC', entry, state.inventoryAccountId);
     const accessoryCostMinor = toSafeInteger(
-      roundDivide(
-        BigInt(state.remainingAccessoryCostMinor) * BigInt(quantity.accessoryUnits),
-        BigInt(state.accessoryQuantityUnits),
-      ),
+      roundDivide(BigInt(basisCost) * BigInt(quantity.accessoryUnits), BigInt(basisQuantity)),
       'accessory surplus cost',
       entry,
     );
     return { metalCostMinor: 0, workmanshipCostMinor: 0, accessoryCostMinor, totalCostMinor: accessoryCostMinor };
   }
-  if (
-    quantity.standardizedUnits <= 0
-    || quantity.physicalUnits <= 0
-    || state.standardizedQuantityUnits <= 0
-    || state.actualPhysicalWeightUnits <= 0
-  ) {
+  if (quantity.standardizedUnits <= 0 || quantity.physicalUnits <= 0) {
     fail('invalid_quantity', 'Metal surplus weight must be positive', entry, state.inventoryAccountId);
   }
+  const metalBasisCost = state.hasReliableCostBasis && state.standardizedQuantityUnits > 0
+    ? state.remainingMetalCostMinor
+    : state.lastKnownMetalCostMinor;
+  const metalBasisQuantity = state.hasReliableCostBasis && state.standardizedQuantityUnits > 0
+    ? state.standardizedQuantityUnits
+    : state.lastKnownStandardizedQuantityUnits;
+  const workmanshipBasisCost = state.hasReliableCostBasis && state.actualPhysicalWeightUnits > 0
+    ? state.remainingWorkmanshipCostMinor
+    : state.lastKnownWorkmanshipCostMinor;
+  const workmanshipBasisQuantity = state.hasReliableCostBasis && state.actualPhysicalWeightUnits > 0
+    ? state.actualPhysicalWeightUnits
+    : state.lastKnownPhysicalQuantityUnits;
+  if (metalBasisQuantity <= 0 || workmanshipBasisQuantity <= 0) {
+    fail('missing_wac', 'Inventory account has no reliable WAC', entry, state.inventoryAccountId);
+  }
   const metalCostMinor = toSafeInteger(
-    roundDivide(
-      BigInt(state.remainingMetalCostMinor) * BigInt(quantity.standardizedUnits),
-      BigInt(state.standardizedQuantityUnits),
-    ),
+    roundDivide(BigInt(metalBasisCost) * BigInt(quantity.standardizedUnits), BigInt(metalBasisQuantity)),
     'metal surplus cost',
     entry,
   );
   const workmanshipCostMinor = toSafeInteger(
-    roundDivide(
-      BigInt(state.remainingWorkmanshipCostMinor) * BigInt(quantity.physicalUnits),
-      BigInt(state.actualPhysicalWeightUnits),
-    ),
+    roundDivide(BigInt(workmanshipBasisCost) * BigInt(quantity.physicalUnits), BigInt(workmanshipBasisQuantity)),
     'workmanship surplus cost',
     entry,
   );
@@ -504,7 +536,6 @@ const calculateAtCurrentWac = (
     totalCostMinor: metalCostMinor + workmanshipCostMinor,
   };
 };
-
 const applyRemoval = (
   state: InventoryCostState,
   quantity: MovementQuantity,
@@ -595,6 +626,186 @@ const classify = (
   return debitInventory || creditInventory ? 'non_cost' : 'non_cost';
 };
 
+const hasReliableLegacyOrder = (entry: Entry): boolean => {
+  const hasSequence = typeof entry.seq === 'number'
+    && Number.isSafeInteger(entry.seq)
+    && entry.seq >= 0;
+  const createdAt: any = entry.createdAt;
+  let hasTimestamp = false;
+  if (createdAt instanceof Date) hasTimestamp = Number.isFinite(createdAt.getTime());
+  else if (typeof createdAt === 'number') hasTimestamp = Number.isFinite(createdAt);
+  else if (typeof createdAt === 'string') hasTimestamp = Number.isFinite(Date.parse(createdAt));
+  else if (createdAt && typeof createdAt.seconds === 'number') {
+    hasTimestamp = Number.isFinite(createdAt.seconds)
+      && (createdAt.nanoseconds === undefined || Number.isFinite(createdAt.nanoseconds));
+  } else if (createdAt && typeof createdAt.toMillis === 'function') {
+    try {
+      hasTimestamp = Number.isFinite(createdAt.toMillis());
+    } catch {
+      hasTimestamp = false;
+    }
+  }
+  return hasSequence || hasTimestamp;
+};
+
+const isLegacyBatchEligible = (entry: Entry): boolean =>
+  isLegacyEntry(entry) && !hasReliableLegacyOrder(entry);
+
+type LegacyBatchPhase = 'opening' | 'incoming' | 'outgoing' | 'none';
+
+const legacyBatchPhaseForAccount = (
+  entry: Entry,
+  accountId: string,
+  catalog: InventoryRuntimeCatalog,
+): LegacyBatchPhase => {
+  const debitInventory = resolveInventorySide(entry, 'debit', catalog);
+  const creditInventory = resolveInventorySide(entry, 'credit', catalog);
+  const classification = classify(entry, debitInventory, creditInventory);
+  if (classification === 'opening' && debitInventory?.inventoryAccountId === accountId) return 'opening';
+  if (classification === 'transfer') {
+    if (debitInventory?.inventoryAccountId === accountId) return 'incoming';
+    if (creditInventory?.inventoryAccountId === accountId) return 'outgoing';
+    return 'none';
+  }
+  if (
+    ['customer_purchase', 'merchant_receipt', 'surplus'].includes(classification)
+    && debitInventory?.inventoryAccountId === accountId
+  ) return 'incoming';
+  if (
+    debitInventory?.inventoryAccountId === accountId
+    || creditInventory?.inventoryAccountId === accountId
+  ) return classification === 'non_cost' || classification === 'quantity_only' ? 'none' : 'outgoing';
+  return 'none';
+};
+
+const inventoryAccountIdsForEntry = (
+  entry: Entry,
+  catalog: InventoryRuntimeCatalog,
+): string[] => [
+  resolveInventorySide(entry, 'debit', catalog)?.inventoryAccountId,
+  resolveInventorySide(entry, 'credit', catalog)?.inventoryAccountId,
+].filter((value, index, values): value is string => !!value && values.indexOf(value) === index);
+
+const reorderLegacySegment = (
+  segment: Entry[],
+  catalog: InventoryRuntimeCatalog,
+): Entry[] => {
+  if (segment.length < 2) return segment;
+  const edges = segment.map(() => new Set<number>());
+  const indegree = segment.map(() => 0);
+  const accountIds = new Set(segment.flatMap(entry => inventoryAccountIdsForEntry(entry, catalog)));
+
+  const addEdge = (from: number, to: number) => {
+    if (from === to || edges[from].has(to)) return;
+    edges[from].add(to);
+    indegree[to] += 1;
+  };
+
+  for (const accountId of accountIds) {
+    const phases = segment.map(entry => legacyBatchPhaseForAccount(entry, accountId, catalog));
+    const openings = phases.flatMap((phase, index) => phase === 'opening' ? [index] : []);
+    const incoming = phases.flatMap((phase, index) => phase === 'incoming' ? [index] : []);
+    const outgoing = phases.flatMap((phase, index) => phase === 'outgoing' ? [index] : []);
+    for (const opening of openings) {
+      for (const later of [...incoming, ...outgoing]) addEdge(opening, later);
+    }
+    for (const receipt of incoming) {
+      for (const issue of outgoing) addEdge(receipt, issue);
+    }
+  }
+
+  const ready = segment.map((_, index) => index).filter(index => indegree[index] === 0);
+  const ordered: Entry[] = [];
+  while (ready.length > 0) {
+    ready.sort((left, right) => left - right);
+    const index = ready.shift()!;
+    ordered.push(segment[index]);
+    for (const target of edges[index]) {
+      indegree[target] -= 1;
+      if (indegree[target] === 0) ready.push(target);
+    }
+  }
+  if (ordered.length !== segment.length) {
+    fail('invalid_ordering', 'Legacy same-day inventory ordering constraints contain a cycle');
+  }
+  return ordered;
+};
+
+const orderEntriesWithLegacySameDayPolicy = (
+  entries: Entry[],
+  catalog: InventoryRuntimeCatalog,
+): { ordered: Entry[]; diagnostics: LegacySameDayOrderingDiagnostic[] } => {
+  const base = [...entries].sort(compareEntriesForPhase5Cost);
+  const byDate = new Map<string, Entry[]>();
+  for (const entry of base) {
+    const day = byDate.get(entry.date) ?? [];
+    day.push(entry);
+    byDate.set(entry.date, day);
+  }
+
+  const ordered: Entry[] = [];
+  const diagnostics: LegacySameDayOrderingDiagnostic[] = [];
+  for (const [date, day] of byDate) {
+    const reorderedDay: Entry[] = [];
+    let segment: Entry[] = [];
+    const flush = () => {
+      if (segment.length > 0) reorderedDay.push(...reorderLegacySegment(segment, catalog));
+      segment = [];
+    };
+    for (const entry of day) {
+      const touchesInventory = inventoryAccountIdsForEntry(entry, catalog).length > 0;
+      if (touchesInventory && !isLegacyBatchEligible(entry)) {
+        flush();
+        reorderedDay.push(entry);
+      } else {
+        segment.push(entry);
+      }
+    }
+    flush();
+
+    const accountIds = new Set(day.flatMap(entry => inventoryAccountIdsForEntry(entry, catalog)));
+    for (const accountId of accountIds) {
+      const relevantBefore = day.filter(entry =>
+        isLegacyBatchEligible(entry)
+        && legacyBatchPhaseForAccount(entry, accountId, catalog) !== 'none');
+      const phases = relevantBefore.map(entry => legacyBatchPhaseForAccount(entry, accountId, catalog));
+      const hasPolicyWork = phases.includes('outgoing')
+        && (phases.includes('opening') || phases.includes('incoming'));
+      if (!hasPolicyWork) continue;
+      const relevantAfter = reorderedDay.filter(entry =>
+        isLegacyBatchEligible(entry)
+        && legacyBatchPhaseForAccount(entry, accountId, catalog) !== 'none');
+      const beforeIds = relevantBefore.map(getPhase5OperationId);
+      const afterIds = relevantAfter.map(getPhase5OperationId);
+      const changed = beforeIds.some((id, index) => id !== afterIds[index]);
+      const account = catalog.byAccountId.get(accountId)!;
+      diagnostics.push({
+        code: 'legacy_same_day_batch_ordering_applied',
+        date,
+        inventoryAccountId: accountId,
+        displayName: account.displayName,
+        changed,
+        openingOperationIds: relevantBefore
+          .filter(entry => legacyBatchPhaseForAccount(entry, accountId, catalog) === 'opening')
+          .map(getPhase5OperationId),
+        incomingOperationIds: relevantBefore
+          .filter(entry => legacyBatchPhaseForAccount(entry, accountId, catalog) === 'incoming')
+          .map(getPhase5OperationId),
+        outgoingOperationIds: relevantBefore
+          .filter(entry => legacyBatchPhaseForAccount(entry, accountId, catalog) === 'outgoing')
+          .map(getPhase5OperationId),
+        operationIdsBefore: beforeIds,
+        operationIdsAfter: afterIds,
+        message: changed
+          ? `Applied legacy same-day batch ordering for ${account.displayName} on ${date}`
+          : `Legacy same-day batch ordering already satisfied for ${account.displayName} on ${date}`,
+      });
+    }
+    ordered.push(...reorderedDay);
+  }
+  return { ordered, diagnostics };
+};
+
 const cloneState = (state: InventoryCostState): InventoryCostState => ({ ...state });
 
 const validateSameMovement = (
@@ -656,8 +867,66 @@ const openingCosts = (
   };
 };
 
+const applyHistoricalOverlayDirective = (
+  directive: HistoricalInventoryOverlayDirective,
+  entry: Entry,
+  account: ResolvedInventoryAccount,
+  state: InventoryCostState,
+  calculationGenerationId: number,
+): AppliedHistoricalInventoryOverlay => {
+  if (directive.effectiveDate !== entry.date
+    || directive.sourceDeficitOperationId !== getPhase5OperationId(entry)
+    || directive.stableInventoryAccountId !== account.inventoryAccountId) {
+    fail('invalid_historical_overlay', `Overlay ${directive.overlayId} does not match its source deficit operation`, entry, account.inventoryAccountId);
+  }
+  if (directive.unitBasis !== account.unitBasis) {
+    fail('invalid_historical_overlay', `Overlay ${directive.overlayId} unit basis does not match inventory account`, entry, account.inventoryAccountId);
+  }
+  if (!Number.isSafeInteger(directive.quantityUnits) || directive.quantityUnits <= 0) {
+    fail('invalid_historical_overlay', `Overlay ${directive.overlayId} quantityUnits must be a positive integer`, entry, account.inventoryAccountId);
+  }
+  if (account.kind === 'gold' && account.karat !== 21) {
+    fail('invalid_historical_overlay', `Overlay ${directive.overlayId} requires an explicit physical quantity for non-E21 gold`, entry, account.inventoryAccountId);
+  }
+  if (!state.hasReliableCostBasis || state.remainingTotalCostMinor <= 0) {
+    fail('invalid_historical_overlay', `Overlay ${directive.overlayId} cannot use zero or missing current WAC`, entry, account.inventoryAccountId);
+  }
+
+  const quantity: MovementQuantity = account.kind === 'accessory'
+    ? { standardizedUnits: 0, physicalUnits: 0, accessoryUnits: directive.quantityUnits }
+    : { standardizedUnits: directive.quantityUnits, physicalUnits: directive.quantityUnits, accessoryUnits: 0 };
+  const metalWacBefore = state.metalWacMinorPerStandardUnit ?? 0;
+  const workmanshipWacBefore = state.workmanshipWacMinorPerPhysicalUnit ?? 0;
+  const currentCost = calculateAtCurrentWac(state, quantity, entry);
+  if (currentCost.totalCostMinor <= 0 || (account.kind !== 'accessory' && currentCost.metalCostMinor <= 0)) {
+    fail('invalid_historical_overlay', `Overlay ${directive.overlayId} resolved to zero cost`, entry, account.inventoryAccountId);
+  }
+  addIncoming(
+    state,
+    quantity,
+    currentCost.metalCostMinor,
+    currentCost.workmanshipCostMinor,
+    currentCost.accessoryCostMinor,
+    entry,
+  );
+
+  return sealAppliedHistoricalInventoryOverlay({
+    ...directive,
+    metalCostMinor: currentCost.metalCostMinor,
+    workmanshipCostMinor: currentCost.workmanshipCostMinor,
+    totalCostMinor: currentCost.totalCostMinor,
+    calculationGenerationId,
+    metalWacBefore,
+    metalWacAfter: state.metalWacMinorPerStandardUnit ?? 0,
+    workmanshipWacBefore,
+    workmanshipWacAfter: state.workmanshipWacMinorPerPhysicalUnit ?? 0,
+  });
+};
 export interface RebuildInventoryCostOptions {
   bindings?: readonly InventoryRuntimeBinding[];
+  historicalInventoryOverlayDirectives?: readonly HistoricalInventoryOverlayDirective[];
+  allowPendingFinalApprovalForSimulation?: boolean;
+  calculationGenerationId?: number;
 }
 
 export const rebuildInventoryCostTimeline = (
@@ -667,6 +936,8 @@ export const rebuildInventoryCostTimeline = (
   options: RebuildInventoryCostOptions = {},
 ): InventoryCostTimeline => {
   const diagnostics: InventoryCostDiagnostic[] = [];
+  let orderingDiagnostics: LegacySameDayOrderingDiagnostic[] = [];
+  const historicalInventoryOverlays: AppliedHistoricalInventoryOverlay[] = [];
   const catalog = buildInventoryRuntimeCatalog(
     accounts,
     options.bindings ?? CURRENT_DATASET_INVENTORY_BINDINGS,
@@ -687,6 +958,8 @@ export const rebuildInventoryCostTimeline = (
       resultsByOperationId: {},
       finalStates: {},
       diagnostics,
+      orderingDiagnostics,
+      historicalInventoryOverlays,
       valid: false,
     };
   }
@@ -700,9 +973,58 @@ export const rebuildInventoryCostTimeline = (
   let ordered: Entry[] = [];
 
   try {
+    const suppliedOverlayDirectives = options.historicalInventoryOverlayDirectives ?? [];
+    const overlayIds = new Set<string>();
+    const sourceOperationIds = new Set<string>();
+    for (const directive of suppliedOverlayDirectives) {
+      if (overlayIds.has(directive.overlayId)) {
+        fail('invalid_historical_overlay', `Duplicate historical overlayId: ${directive.overlayId}`);
+      }
+      overlayIds.add(directive.overlayId);
+      if (directive.ownerApprovalStatus === 'pending_final_approval'
+        && !options.allowPendingFinalApprovalForSimulation) {
+        fail('invalid_historical_overlay', `Overlay ${directive.overlayId} is pending final owner approval`);
+      }
+      if (directive.ownerApprovalStatus === 'approved' && !directive.approvedAt) {
+        fail('invalid_historical_overlay', `Approved overlay ${directive.overlayId} is missing approvedAt`);
+      }
+      if (isHistoricalOverlayActive(directive, options.allowPendingFinalApprovalForSimulation === true)) {
+        if (sourceOperationIds.has(directive.sourceDeficitOperationId)) {
+          fail('invalid_historical_overlay', `Multiple active overlays target ${directive.sourceDeficitOperationId}`);
+        }
+        sourceOperationIds.add(directive.sourceDeficitOperationId);
+      }
+    }
+    const activeOverlayBySourceOperationId = new Map(
+      suppliedOverlayDirectives
+        .filter(directive => isHistoricalOverlayActive(
+          directive,
+          options.allowPendingFinalApprovalForSimulation === true,
+        ))
+        .map(directive => [directive.sourceDeficitOperationId, directive]),
+    );
+
     validateOrdering(entries);
-    ordered = [...entries].sort(compareEntriesForPhase5Cost);
+    const ordering = orderEntriesWithLegacySameDayPolicy(entries, catalog);
+    ordered = ordering.ordered;
+    orderingDiagnostics = ordering.diagnostics;
     for (const entry of ordered) {
+      const sourceOperationId = getPhase5OperationId(entry);
+      const overlayDirective = activeOverlayBySourceOperationId.get(sourceOperationId);
+      if (overlayDirective) {
+        const overlayAccount = catalog.byAccountId.get(overlayDirective.stableInventoryAccountId);
+        if (!overlayAccount || entry.creditAccountId !== overlayDirective.stableInventoryAccountId) {
+          fail('invalid_historical_overlay', `Overlay ${overlayDirective.overlayId} does not target an outgoing movement from its inventory account`, entry, overlayDirective.stableInventoryAccountId);
+        }
+        historicalInventoryOverlays.push(applyHistoricalOverlayDirective(
+          overlayDirective,
+          entry,
+          overlayAccount,
+          states[overlayAccount.inventoryAccountId],
+          options.calculationGenerationId ?? 0,
+        ));
+      }
+
       const debitInventory = resolveInventorySide(entry, 'debit', catalog);
       const creditInventory = resolveInventorySide(entry, 'credit', catalog);
       const debitLooksInventory = sideLooksLikeInventory(entry, 'debit', accountsByName);
@@ -956,6 +1278,13 @@ export const rebuildInventoryCostTimeline = (
         results.push(result);
       }
     }
+    const appliedOverlayIds = new Set(historicalInventoryOverlays.map(item => item.overlayId));
+    for (const sourceOperationId of activeOverlayBySourceOperationId.keys()) {
+      const directive = activeOverlayBySourceOperationId.get(sourceOperationId)!;
+      if (!appliedOverlayIds.has(directive.overlayId)) {
+        fail('invalid_historical_overlay', `Overlay ${directive.overlayId} source deficit operation was not found`);
+      }
+    }
   } catch (error) {
     diagnostics.push(error instanceof CostEngineError
       ? error.diagnostic
@@ -970,6 +1299,8 @@ export const rebuildInventoryCostTimeline = (
     resultsByOperationId: valid ? Object.fromEntries(results.map(result => [result.operationId, result])) : {},
     finalStates: valid ? states : {},
     diagnostics,
+    orderingDiagnostics,
+    historicalInventoryOverlays: valid ? historicalInventoryOverlays : [],
     valid,
   };
 };
