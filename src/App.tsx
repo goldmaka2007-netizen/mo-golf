@@ -31,6 +31,8 @@ import { GlobalErrorView } from './components/views/GlobalErrorView';
 
 import { useAuthInit } from './hooks/useAuthInit';
 import { useDataSync } from './hooks/useDataSync';
+import { useCostRecalculation } from './hooks/useCostRecalculation';
+import { areOperationWritesLocked } from './lib/costRecalculation';
 
 type AppView = ReturnType<typeof useAppStore.getState>['view'];
 
@@ -41,7 +43,8 @@ export default function App() {
   const {
     user, isAuthReady, setEntries, view, setView, setReportsTab,
     globalError, setGlobalError, setIsUpdatingPrice,
-    editingEntry, setEditingEntry, accountsDb
+    editingEntry, setEditingEntry, accountsDb,
+    costCalculationRun, requestCostRetry
   } = useAppStore();
 
   const {
@@ -49,6 +52,7 @@ export default function App() {
   } = useAuthInit();
 
   useDataSync(user, isAuthReady);
+  useCostRecalculation();
 
   const [isUpdatingEntry, setIsUpdatingEntry] = useState(false);
   const [deleteConfirmId, setDeleteConfirmId] = useState<string | null>(null);
@@ -133,6 +137,10 @@ export default function App() {
   }, [view, setReportsTab]);
 
   const handleDelete = async (id: string) => {
+    if (areOperationWritesLocked(costCalculationRun)) {
+      setGlobalError('لا يمكن حذف العمليات أثناء توقف أو إعادة احتساب التكلفة. أصلح الخطأ من الإعدادات ثم أعد المحاولة.');
+      return;
+    }
     try {
       await deleteDoc(doc(db, 'entries', id));
       if (user) {
@@ -151,6 +159,10 @@ export default function App() {
 
   const handleUpdate = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (areOperationWritesLocked(costCalculationRun)) {
+      setGlobalError('لا يمكن تعديل العمليات أثناء توقف أو إعادة احتساب التكلفة. أصلح الخطأ من الإعدادات ثم أعد المحاولة.');
+      return;
+    }
     if (!editingEntry?.id || isUpdatingEntry) return;
 
     const entryToUpdate = { ...editingEntry };
@@ -290,6 +302,29 @@ export default function App() {
             </div>
           </header>
 
+          {(costCalculationRun.status === 'running' || costCalculationRun.status === 'failed') && (
+            <div className={`mb-4 rounded-2xl border p-4 text-sm ${costCalculationRun.status === 'failed' ? 'border-red-500/40 bg-red-500/10 text-red-100' : 'border-yellow-500/40 bg-yellow-500/10 text-yellow-100'}`}>
+              <div className="font-black">
+                {costCalculationRun.status === 'running'
+                  ? 'جارٍ إعادة احتساب التكلفة، برجاء الانتظار'
+                  : 'فشل إعادة احتساب التكلفة — العمليات وتقارير التكلفة متوقفة'}
+              </div>
+              {costCalculationRun.error && (
+                <div className="mt-2 break-words text-xs">
+                  {costCalculationRun.error.code}: {costCalculationRun.error.message}
+                </div>
+              )}
+              <div className="mt-3 flex gap-2">
+                <button type="button" onClick={requestCostRetry} className="rounded-xl bg-[#c9a84c] px-4 py-2 text-xs font-black text-[#080a0f]">
+                  إعادة المحاولة
+                </button>
+                <button type="button" onClick={() => setView('settings')} className="rounded-xl border border-current px-4 py-2 text-xs font-black">
+                  فتح الإعدادات
+                </button>
+              </div>
+            </div>
+          )}
+
           <AnimatePresence mode="wait">
             <motion.div
               key={view}
@@ -299,7 +334,11 @@ export default function App() {
               transition={{ duration: 0.18 }}
             >
               {view === 'home' && <MainDashboard refreshData={refreshData} />}
-              {view === 'entry' && <EntryForm />}
+              {view === 'entry' && (
+                areOperationWritesLocked(costCalculationRun)
+                  ? <div className="rounded-2xl border border-red-500/30 bg-red-500/10 p-6 text-center text-sm text-red-100">العمليات متوقفة حتى يكتمل احتساب التكلفة بنجاح.</div>
+                  : <EntryForm />
+              )}
               {(view === 'journal' || view === 'database') && <DailyJournalView />}
               {reportViews.includes(view) && <ReportsView />}
               {view === 'more' && <MoreView isFullscreen={isFullscreen} onToggleFullscreen={toggleFullscreen} onLogOut={logOut} />}
