@@ -33,11 +33,18 @@ import { useAppStore } from '../../store';
 import { cn } from '../../lib/utils';
 import { ChartOfAccountsSettings } from './ChartOfAccountsSettings';
 import { formatMinorUnitsToEgpInput, parseEgpToMinorUnits } from '../../lib/openingCostConfig';
+import { areOperationWritesLocked } from '../../lib/costRecalculation';
 
 export const SettingsView = React.memo(() => {
-  const { setView, customRules, user, entries, setGlobalError, openingCostConfig, setOpeningCostConfig } = useAppStore();
+  const { setView, customRules, user, entries, accountsDb, setGlobalError, openingCostConfig, setOpeningCostConfig, costCalculationRun } = useAppStore();
+  const operationWritesLocked = areOperationWritesLocked(costCalculationRun);
   const [newRule, setNewRule] = useState({ t: '', d: '', c: '', k: '', m: '1' });
-  const [openingPriceForm, setOpeningPriceForm] = useState({ year: String(new Date().getFullYear()), gold: '', silver: '' });
+  const [openingPriceForm, setOpeningPriceForm] = useState<{
+    year: string;
+    gold: string;
+    silver: string;
+    accessories: Record<string, string>;
+  }>({ year: String(new Date().getFullYear()), gold: '', silver: '', accessories: {} });
   const [openingPriceError, setOpeningPriceError] = useState('');
   const [isSavingOpeningPrice, setIsSavingOpeningPrice] = useState(false);
   const [importText, setImportText] = useState('');
@@ -50,6 +57,12 @@ export const SettingsView = React.memo(() => {
     () => [...openingCostConfig].sort((a, b) => Number(a.year) - Number(b.year)),
     [openingCostConfig],
   );
+  const accessoryAccounts = useMemo(
+    () => accountsDb
+      .filter(account => account.is_inventory && account.type === 'accessory' && !!account.id)
+      .sort((left, right) => left.name.localeCompare(right.name, 'ar')),
+    [accountsDb],
+  );
 
   const validateOpeningPriceForm = (): AnnualOpeningCostConfig => {
     const year = Number(openingPriceForm.year);
@@ -60,8 +73,13 @@ export const SettingsView = React.memo(() => {
     const next: AnnualOpeningCostConfig = { year };
     const gold = openingPriceForm.gold.trim();
     const silver = openingPriceForm.silver.trim();
-    if (!gold && !silver) {
-      throw new Error('أدخل سعر افتتاح للذهب أو الفضة على الأقل.');
+    const accessoryValues: Record<string, string> = Object.fromEntries(
+      (Object.entries(openingPriceForm.accessories) as Array<[string, string]>)
+        .map(([accountId, value]) => [accountId, value.trim()])
+        .filter(([, value]) => !!value),
+    ) as Record<string, string>;
+    if (!gold && !silver && Object.keys(accessoryValues).length === 0) {
+      throw new Error('أدخل قيمة Opening Cost واحدة على الأقل.');
     }
     if (gold) {
       let goldMinor: number;
@@ -83,14 +101,33 @@ export const SettingsView = React.memo(() => {
       if (silverMinor <= 0) throw new Error('سعر افتتاح الفضة يجب أن يكون أكبر من صفر.');
       next.silverPriceMinorPerGram = silverMinor;
     }
+    if (Object.keys(accessoryValues).length > 0) {
+      next.accessoryUnitCostMinorByAccountId = {};
+      for (const [accountId, value] of Object.entries(accessoryValues)) {
+        let minor: number;
+        try {
+          minor = parseEgpToMinorUnits(value);
+        } catch {
+          throw new Error(`تكلفة افتتاح الملحق ${accountId} يجب أن تكون رقمًا حتى قرشين.`);
+        }
+        if (minor <= 0) throw new Error(`تكلفة افتتاح الملحق ${accountId} يجب أن تكون أكبر من صفر.`);
+        next.accessoryUnitCostMinorByAccountId[accountId] = minor;
+      }
+    }
     return next;
   };
 
   const persistOpeningCostConfig = async (nextConfig: AnnualOpeningCostConfig[]) => {
     if (!user?.uid) throw new Error('لا يوجد مستخدم نشط لحفظ الإعدادات.');
     const sorted = [...nextConfig].sort((a, b) => Number(a.year) - Number(b.year));
-    await setDoc(doc(db, 'settings', user.uid), { openingCostConfig: sorted }, { merge: true });
+    const previous = openingCostConfig;
     setOpeningCostConfig(sorted);
+    try {
+      await setDoc(doc(db, 'settings', user.uid), { openingCostConfig: sorted }, { merge: true });
+    } catch (error) {
+      setOpeningCostConfig(previous);
+      throw error;
+    }
   };
 
   const handleSaveOpeningPrice = async (e: React.FormEvent) => {
@@ -101,7 +138,7 @@ export const SettingsView = React.memo(() => {
       const nextRow = validateOpeningPriceForm();
       const nextConfig = sortedOpeningCostConfig.filter(row => Number(row.year) !== nextRow.year);
       await persistOpeningCostConfig([...nextConfig, nextRow]);
-      setOpeningPriceForm({ year: String(nextRow.year + 1), gold: '', silver: '' });
+      setOpeningPriceForm({ year: String(nextRow.year + 1), gold: '', silver: '', accessories: {} });
     } catch (error) {
       setOpeningPriceError(error instanceof Error ? error.message : 'تعذر حفظ سعر الافتتاح. راجع القيم المدخلة.');
     } finally {
@@ -115,6 +152,10 @@ export const SettingsView = React.memo(() => {
       year: String(row.year),
       gold: formatMinorUnitsToEgpInput(row.gold21PriceMinorPerGram),
       silver: formatMinorUnitsToEgpInput(row.silverPriceMinorPerGram),
+      accessories: Object.fromEntries(
+        Object.entries(row.accessoryUnitCostMinorByAccountId || {})
+          .map(([accountId, value]) => [accountId, formatMinorUnitsToEgpInput(value)]),
+      ),
     });
   };
 
@@ -132,6 +173,10 @@ export const SettingsView = React.memo(() => {
   };
 
   const handleDeleteAllData = async () => {
+    if (operationWritesLocked) {
+      setGlobalError('لا يمكن حذف العمليات أثناء تشغيل أو فشل إعادة احتساب التكلفة.');
+      return;
+    }
     setIsDeletingAll(true);
     try {
       const entriesToDelete = [...entries];
@@ -185,6 +230,10 @@ export const SettingsView = React.memo(() => {
   const [importProgress, setImportProgress] = useState<{ current: number, total: number, success: number, failed: number } | null>(null);
 
   const handleRetroactiveInvoiceNumbers = async () => {
+    if (operationWritesLocked) {
+      setGlobalError('لا يمكن تعديل العمليات أثناء تشغيل أو فشل إعادة احتساب التكلفة.');
+      return;
+    }
     setIsImporting(true);
     
     // 1. Sort all entries to assign sequentially in chronological order
@@ -383,6 +432,10 @@ export const SettingsView = React.memo(() => {
 
   const handleImport = async () => {
     if (!importText.trim()) return;
+    if (operationWritesLocked) {
+      setGlobalError('لا يمكن استيراد عمليات أثناء تشغيل أو فشل إعادة احتساب التكلفة.');
+      return;
+    }
     setIsImporting(true);
     setImportProgress(null);
     
@@ -517,7 +570,8 @@ export const SettingsView = React.memo(() => {
                 </p>
               </div>
 
-              <form onSubmit={handleSaveOpeningPrice} className="grid grid-cols-1 md:grid-cols-[120px_1fr_1fr_auto] gap-3 items-end">
+              <form onSubmit={handleSaveOpeningPrice} className="grid grid-cols-1 gap-3">
+                <div className="grid grid-cols-1 md:grid-cols-[120px_1fr_1fr] gap-3 items-end">
                 <label className="space-y-1">
                   <span className="text-[10px] font-bold text-[#c9a84c]">السنة</span>
                   <input value={openingPriceForm.year} onChange={(e) => setOpeningPriceForm(prev => ({ ...prev, year: e.target.value }))} inputMode="numeric" className="w-full bg-[#080a0f] border border-[#1a1e2a] rounded-xl p-3 text-sm text-[#ddd8cc] outline-none focus:border-[#c9a84c55]" placeholder="2026" />
@@ -530,6 +584,32 @@ export const SettingsView = React.memo(() => {
                   <span className="text-[10px] font-bold text-[#c9a84c]">سعر افتتاح جرام الفضة بالجنيه</span>
                   <input value={openingPriceForm.silver} onChange={(e) => setOpeningPriceForm(prev => ({ ...prev, silver: e.target.value }))} inputMode="decimal" className="w-full bg-[#080a0f] border border-[#1a1e2a] rounded-xl p-3 text-sm text-[#ddd8cc] outline-none focus:border-[#c9a84c55]" placeholder="60" />
                 </label>
+                </div>
+                <div className="rounded-2xl border border-[#1a1e2a] bg-[#080a0f] p-3">
+                  <div className="mb-3 text-[11px] font-black text-[#ddd8cc]">
+                    تكلفة الافتتاح للوحدة — ليست سعر بيع
+                  </div>
+                  <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+                    {accessoryAccounts.map(account => (
+                      <label key={account.id} className="space-y-1">
+                        <span className="text-[10px] font-bold text-[#c9a84c]">{account.name}</span>
+                        <input
+                          value={openingPriceForm.accessories[account.id!] || ''}
+                          onChange={(event) => setOpeningPriceForm(previous => ({
+                            ...previous,
+                            accessories: {
+                              ...previous.accessories,
+                              [account.id!]: event.target.value,
+                            },
+                          }))}
+                          inputMode="decimal"
+                          className="w-full rounded-xl border border-[#1a1e2a] bg-[#0e1018] p-3 text-sm text-[#ddd8cc] outline-none focus:border-[#c9a84c55]"
+                          placeholder="غير محدد"
+                        />
+                      </label>
+                    ))}
+                  </div>
+                </div>
                 <button type="submit" disabled={isSavingOpeningPrice} className="px-5 py-3 bg-[#c9a84c] text-[#080a0f] rounded-xl text-xs font-bold flex items-center justify-center gap-2 disabled:opacity-60">
                   {isSavingOpeningPrice ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
                   حفظ

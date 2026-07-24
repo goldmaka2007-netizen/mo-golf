@@ -11,9 +11,7 @@ import { InventoryCheckView } from './InventoryCheckView';
 import { FinalReportView } from './reports/FinalReportView';
 import { ScrapAnalysisView } from './reports/ScrapAnalysisView';
 import { MonthlySalesSummaryReportView } from './reports/MonthlySalesSummaryReportView';
-import { InventoryLifecycleView } from './reports/InventoryLifecycleView';
-import { ProfitAnalysisView } from './ProfitAnalysisView';
-import { AdvancedAnalyticsView } from './AdvancedAnalyticsView';
+import { Phase5CostReportView } from './reports/Phase5CostReportView';
 
 type ReportId = 'ledger' | 'trial' | 'income' | 'equity' | 'balance' | 'inventory' | 'lifecycle' | 'profit-analysis' | 'advanced-analytics' | 'final' | 'monthly' | 'scrap';
 const reports: { id: ReportId; label: string; icon: React.ReactNode }[] = [
@@ -32,8 +30,10 @@ const reports: { id: ReportId; label: string; icon: React.ReactNode }[] = [
 ];
 
 export const ReportsView = React.memo(() => {
-  const { entries, reportsTab, setReportsTab } = useAppStore();
-  const [selected, setSelected] = useState<ReportId | null>(null);
+  const { entries, reportsTab, setReportsTab, view } = useAppStore();
+  const [selected, setSelected] = useState<ReportId | null>(
+    view === 'reports' ? null : reportsTab,
+  );
   const startDate = format(new Date(new Date().getFullYear(), 0, 1), 'yyyy-MM-dd');
   const endDate = format(new Date(), 'yyyy-MM-dd');
   const filteredEntries = useMemo(() => entries.filter(e => e.date >= startDate && e.date <= endDate), [entries, startDate, endDate]);
@@ -74,9 +74,9 @@ export const ReportsView = React.memo(() => {
     {selected === 'equity' && <EquityStatementView entries={filteredEntries} />}
     {selected === 'balance' && <BalanceSheetView entries={balanceEntries} />}
     {selected === 'inventory' && <InventoryCheckView />}
-    {selected === 'lifecycle' && <InventoryLifecycleView entries={filteredEntries} />}
-    {selected === 'profit-analysis' && <ProfitAnalysisView />}
-    {selected === 'advanced-analytics' && <AdvancedAnalyticsView />}
+    {selected === 'lifecycle' && <Phase5CostReportView initialSection="inventory" />}
+    {selected === 'profit-analysis' && <Phase5CostReportView initialSection="profit" />}
+    {selected === 'advanced-analytics' && <Phase5CostReportView initialSection="profit" />}
     {selected === 'monthly' && <MonthlySalesSummaryReportView entries={filteredEntries} />}
     {selected === 'scrap' && <ScrapAnalysisView entries={filteredEntries} allEntries={entries} />}
     {selected === 'final' && <FinalReportView entries={filteredEntries} balanceEntries={balanceEntries} />}

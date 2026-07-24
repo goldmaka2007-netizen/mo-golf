@@ -8,13 +8,14 @@ import { buildAccountRegistry, canApproveRegistry, discoverAccounts, validateCan
 import { buildMigrationPatch, planAccountIdMigration } from '../../lib/accountMigration';
 import { buildParityReport } from '../../lib/shadowAccounting';
 import { cn } from '../../lib/utils';
+import { areOperationWritesLocked } from '../../lib/costRecalculation';
 
 type Tab = 'registry' | 'discovered' | 'aliases' | 'migration' | 'parity';
 const tabLabels: Record<Tab, string> = { registry: 'دليل الحسابات', discovered: 'الحسابات المكتشفة', aliases: 'Aliases الغامضة', migration: 'Migration', parity: 'Parity Report' };
 const clean = <T,>(value: T): T => JSON.parse(JSON.stringify(value)) as T;
 
 export const CanonicalAccountsPanel = React.memo(() => {
-  const { accountsDb, entries, canonicalAccounts, user } = useAppStore();
+  const { accountsDb, entries, canonicalAccounts, user, costCalculationRun } = useAppStore();
   const [tab, setTab] = useState<Tab>('registry');
   const [search, setSearch] = useState('');
   const [busy, setBusy] = useState(false);
@@ -50,6 +51,10 @@ export const CanonicalAccountsPanel = React.memo(() => {
   };
 
   const runMigration = async () => {
+    if (areOperationWritesLocked(costCalculationRun)) {
+      setMessage('لا يمكن تعديل العمليات أثناء تشغيل أو فشل إعادة احتساب التكلفة.');
+      return;
+    }
     if (!user?.uid || migration.blocked || !migration.ready) return;
     if (!window.confirm(`سيتم ربط ${migration.ready} حركة بـIDs ثابتة مع الاحتفاظ بالأسماء القديمة. متابعة؟`)) return;
     setBusy(true); setMessage('');

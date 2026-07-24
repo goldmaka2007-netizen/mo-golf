@@ -404,12 +404,7 @@ export const ACCOUNT_CATEGORIES = {
 
 export const VALUATION_PRICES = {
   GOLD_24: 3800, // Default prices for Egyptian market, can be adjusted
-  SILVER_PURE: 45,
-  ACCS: {
-    "دبلة تنجستين": 70,
-    "حلق طبي": 5,
-    "سيليكون": 15
-  }
+  SILVER_PURE: 45
 };
 
 export const ACCOUNTS = {

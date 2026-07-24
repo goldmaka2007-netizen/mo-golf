@@ -3,12 +3,11 @@ import { motion } from 'framer-motion';
 import { LayoutDashboard, Wallet, Scale, Coins, Package, BarChart3, TrendingUp, ShieldCheck } from 'lucide-react';
 import { Entry, AccountNature, Account } from '../../../types';
 import { useAppStore } from '../../../store';
-import { VALUATION_PRICES } from '../../../constants';
 import { getDynamicAccountNature, belongsToMetric, getMetricValue, getAccountTypeDetails } from '../../../utils/accountLogic';
 import { cn } from '../../../lib/utils';
 
 export const ValuationOverviewView = React.memo(({ entries }: { entries: Entry[] }) => {
-  const { accountsDb, goldPrice, silverPrice } = useAppStore();
+  const { accountsDb, goldPrice, silverPrice, costCalculationRun } = useAppStore();
   
   const valuation = useMemo(() => {
     // 1. Calculate Balances by Account
@@ -46,8 +45,11 @@ export const ValuationOverviewView = React.memo(({ entries }: { entries: Entry[]
       const isAsset = details.main === 'assets';
       const isLiab = details.main === 'liabilities';
       
-      const specificAccFactor = (VALUATION_PRICES.ACCS as Record<string, number>)[name] || 0;
-      const accVal = (bals.accs * specificAccFactor);
+      const accountId = accountsDb.find(account => account.name === name)?.id;
+      const costState = accountId && costCalculationRun.status === 'valid'
+        ? costCalculationRun.timeline?.finalStates[accountId]
+        : undefined;
+      const accVal = costState?.kind === 'accessory' ? costState.remainingTotalCostMinor / 100 : 0;
       
       const val = bals.cash + (bals.gold * goldFactor) + (bals.silver * silverFactor) + accVal;
 
@@ -71,7 +73,13 @@ export const ValuationOverviewView = React.memo(({ entries }: { entries: Entry[]
     metrics.netVal = metrics.assets.totalVal + metrics.liabilities.totalVal; // Liabs are negative in credits usually, but here we calculate balance
 
     return metrics;
-  }, [entries, accountsDb, goldPrice, silverPrice]);
+  }, [entries, accountsDb, goldPrice, silverPrice, costCalculationRun]);
+
+  if (costCalculationRun.status !== 'valid' || !costCalculationRun.timeline?.valid) {
+    return <div className="rounded-2xl border border-red-500/30 bg-red-500/10 p-4 text-sm text-red-100" dir="rtl">
+      تقارير التكلفة غير متاحة حتى يكتمل Cost Run صالح.
+    </div>;
+  }
 
   const cards = [
     { title: 'تقييم الأصول', val: valuation.assets.totalVal, icon: <ShieldCheck />, color: 'text-[#6a9e6a]', sub: 'ما يمتلكه المحل حالياً' },

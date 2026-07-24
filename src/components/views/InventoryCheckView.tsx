@@ -12,6 +12,7 @@ import { getMetricValue, getDynamicAccountNature, belongsToMetric, getMetricActu
 import { AccountNature, InventoryCheck, Entry, OperationType } from '../../types';
 import * as XLSX from 'xlsx';
 import { FormInput } from '../ui/FormInput';
+import { areOperationWritesLocked } from '../../lib/costRecalculation';
 
 const HistoryCard = React.memo(({
   item,
@@ -196,7 +197,8 @@ const HistoryCard = React.memo(({
 });
 
 export const InventoryCheckView = React.memo(() => {
-  const { entries, accountCategories, inventoryChecks, user, accountsDb, setGlobalError } = useAppStore();
+  const { entries, accountCategories, inventoryChecks, user, accountsDb, setGlobalError, costCalculationRun } = useAppStore();
+  const operationWritesLocked = areOperationWritesLocked(costCalculationRun);
   
   // UI States
   const [selectedAcc, setSelectedAcc] = useState('');
@@ -305,6 +307,10 @@ export const InventoryCheckView = React.memo(() => {
   }, []);
 
   const createAdjustmentEntry = useCallback(async (check: InventoryCheck) => {
+    if (operationWritesLocked) {
+      setGlobalError('لا يمكن إنشاء تسوية مخزون أثناء تشغيل أو فشل إعادة احتساب التكلفة.');
+      return;
+    }
     setAdjustLoading(check.id || null);
     try {
       const weightDiff = check.actualWeight - check.systemWeight;
@@ -348,7 +354,7 @@ export const InventoryCheckView = React.memo(() => {
     } finally {
       setAdjustLoading(null);
     }
-  }, [user, getIsGold, getIsSilver]);
+  }, [user, getIsGold, getIsSilver, operationWritesLocked, setGlobalError]);
 
   const exportHistory = () => {
     if (inventoryChecks.length === 0) return;
