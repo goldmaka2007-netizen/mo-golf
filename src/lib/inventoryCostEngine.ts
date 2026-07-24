@@ -401,7 +401,12 @@ const calculateRemoval = (
   if (state.kind === 'accessory') {
     if (quantity.accessoryUnits <= 0) fail('invalid_quantity', 'Accessory outgoing quantity must be positive', entry, state.inventoryAccountId);
     if (quantity.accessoryUnits > state.accessoryQuantityUnits) {
-      fail('insufficient_inventory', 'Accessory movement exceeds costed inventory', entry, state.inventoryAccountId);
+      fail(
+        'insufficient_inventory',
+        `Accessory movement exceeds costed inventory: required=${quantity.accessoryUnits / ACCESSORY_SCALE}, available=${state.accessoryQuantityUnits / ACCESSORY_SCALE}`,
+        entry,
+        state.inventoryAccountId,
+      );
     }
     const accessoryCostMinor = proportionalCost(
       state.remainingAccessoryCostMinor,
@@ -419,7 +424,12 @@ const calculateRemoval = (
     quantity.standardizedUnits > state.standardizedQuantityUnits
     || quantity.physicalUnits > state.actualPhysicalWeightUnits
   ) {
-    fail('insufficient_inventory', 'Metal movement exceeds costed inventory', entry, state.inventoryAccountId);
+    fail(
+      'insufficient_inventory',
+      `Metal movement exceeds costed inventory: required standardized=${quantity.standardizedUnits / GRAM_SCALE}g, available=${state.standardizedQuantityUnits / GRAM_SCALE}g; required physical=${quantity.physicalUnits / GRAM_SCALE}g, available=${state.actualPhysicalWeightUnits / GRAM_SCALE}g`,
+      entry,
+      state.inventoryAccountId,
+    );
   }
   const metalCostMinor = proportionalCost(
     state.remainingMetalCostMinor,

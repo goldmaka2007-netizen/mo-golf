@@ -91,7 +91,7 @@ describe('Phase 5 approved dataset regression', () => {
     expect(timeline.finalStates).toEqual({});
     expect(timeline.diagnostics).toEqual([{
       code: 'insufficient_inventory',
-      message: 'Metal movement exceeds costed inventory',
+      message: 'Metal movement exceeds costed inventory: required standardized=3.53g, available=3.45g; required physical=3.53g, available=3.45g',
       operationId: 'csvref-entry-89c515f70df8e79793ebc8d1482440f9',
       inventoryAccountId: 'seed-account-d1216eb4076ccdf40e20',
     }]);
