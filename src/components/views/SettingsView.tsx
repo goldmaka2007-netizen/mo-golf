@@ -31,7 +31,6 @@ import { db, OperationType, handleFirestoreError } from '../../firebase';
 import { Entry, CustomRule, AnnualOpeningCostConfig } from '../../types';
 import { useAppStore } from '../../store';
 import { cn } from '../../lib/utils';
-import { ChartOfAccountsSettings } from './ChartOfAccountsSettings';
 import { formatMinorUnitsToEgpInput, parseEgpToMinorUnits } from '../../lib/openingCostConfig';
 import { areOperationWritesLocked } from '../../lib/costRecalculation';
 
