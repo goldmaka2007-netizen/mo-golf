@@ -38,3 +38,17 @@ firebase-blueprint.json
 /post_import*.json
 /pilot*.json
 /csv_reference_*.json
+# Local audit, simulation, and migration outputs
+/*_audit.json
+/*_simulation.json
+/*_activation.json
+/*manifest*.json
+/*_report.md
+/*_summary.md
+/*_verification.md
+/*_verification.json
+/accounting_engine_repair_phase*.md
+/phase*_*.md
+/tx*_*.md
+/ui_console_issues.md
+/unresolved_business_decisions.md
