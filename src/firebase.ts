@@ -1,4 +1,4 @@
-import { initializeApp } from 'firebase/app';
+import { initializeApp, type FirebaseOptions } from 'firebase/app';
 import { 
   initializeAuth,
   indexedDBLocalPersistence,
@@ -13,21 +13,34 @@ import {
   persistentSingleTabManager
 } from 'firebase/firestore';
 
-const firebaseConfig = {
-  projectId: "gen-lang-client-0332689520",
-  appId: "1:1026583984887:web:21328419412a23964f71f2",
-  apiKey: "AIzaSyAbFeNT1VcmFZ1hdz1SPMMEaAeb3ykJ5VA",
-  authDomain: "gen-lang-client-0332689520.firebaseapp.com",
-  firestoreDatabaseId: "ai-studio-031a525c-7a85-4304-b0ca-6d60bd34adbf",
-  storageBucket: "gen-lang-client-0332689520.firebasestorage.app",
-  messagingSenderId: "1026583984887",
-  measurementId: ""
+const requiredEnv = (name: keyof ImportMetaEnv): string => {
+  const value = import.meta.env[name];
+  if (typeof value !== 'string' || value.trim() === '') {
+    throw new Error(`Missing required Vite environment variable: ${name}`);
+  }
+  return value.trim();
 };
+
+const firebaseConfig: FirebaseOptions = {
+  apiKey: requiredEnv('VITE_FIREBASE_API_KEY'),
+  authDomain: requiredEnv('VITE_FIREBASE_AUTH_DOMAIN'),
+  projectId: requiredEnv('VITE_FIREBASE_PROJECT_ID'),
+  storageBucket: requiredEnv('VITE_FIREBASE_STORAGE_BUCKET'),
+  messagingSenderId: requiredEnv('VITE_FIREBASE_MESSAGING_SENDER_ID'),
+  appId: requiredEnv('VITE_FIREBASE_APP_ID'),
+  measurementId: import.meta.env.VITE_FIREBASE_MEASUREMENT_ID?.trim() || undefined,
+};
+
+export const firebaseProjectId = firebaseConfig.projectId as string;
+export const firestoreDatabaseId = import.meta.env.VITE_FIREBASE_DATABASE_ID?.trim() || '(default)';
 
 import { OperationType } from './types';
 export { OperationType };
 
 const app = initializeApp(firebaseConfig);
+
+console.info(`[Firebase] projectId: ${firebaseProjectId}`);
+console.info(`[Firebase] Firestore databaseId: ${firestoreDatabaseId}`);
 
 // Stable Auth for PWA - Priority order: IndexedDB -> LocalStorage -> Session
 export const auth = initializeAuth(app, {
@@ -43,7 +56,7 @@ export const db = initializeFirestore(app, {
   localCache: persistentLocalCache({
     tabManager: persistentSingleTabManager({}) 
   })
-}, firebaseConfig.firestoreDatabaseId);
+}, firestoreDatabaseId);
 
 export const signIn = (email: string, password: string) => 
   signInWithEmailAndPassword(auth, email, password);
