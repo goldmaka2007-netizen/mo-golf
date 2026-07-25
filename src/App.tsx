@@ -1,8 +1,8 @@
 ﻿import React, { useState, useEffect } from 'react';
-import { deleteDoc, doc, updateDoc, serverTimestamp, addDoc, collection, getDocsFromServer, query, where, getDocFromServer } from 'firebase/firestore';
+import { deleteDoc, doc, updateDoc, serverTimestamp, addDoc, collection, getDocsFromServer, query, where } from 'firebase/firestore';
 import { AnimatePresence, motion } from 'framer-motion';
 import { useAppStore } from './store';
-import { db, logOut } from './firebase';
+import { db, firebaseProjectId, firestoreDatabaseId, logOut } from './firebase';
 import { Entry } from './types';
 import { buildGoldEquivalent21Audit, canCalculateGoldEquivalent21, inferGoldKaratFromMultiplier } from './lib/goldEquivalent';
 import { isGoldEquivalentEntry } from './utils/accountLogic';
@@ -207,17 +207,11 @@ export default function App() {
     }
   };
 
-  useEffect(() => {
-    if (isAuthReady && user) {
-      getDocFromServer(doc(db, 'test', 'connection')).catch(() => {});
-    }
-  }, [isAuthReady, user]);
-
   const handleHardReset = () => {
     try {
       localStorage.clear();
       sessionStorage.clear();
-      ['firebaseLocalStorageDb', 'firestore/[DEFAULT]/gen-lang-client-0332689520/main'].forEach(n => {
+      ['firebaseLocalStorageDb', `firestore/[DEFAULT]/${firebaseProjectId}/${firestoreDatabaseId}`].forEach(n => {
         try { indexedDB.deleteDatabase(n); } catch(e) {}
       });
     } catch (e) {
