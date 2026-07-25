@@ -109,6 +109,16 @@ describe('canonical classification guards', () => {
       ]);
     });
     expect(audit.zeroLegRecords).toEqual([]);
+    expect(audit.disallowedDimensionRecords).toEqual([]);
+  });
+  it('still reports invalid accessory opening cash payloads when quantity legs are absent', () => {
+    const accessoryAccounts: Account[] = [
+      { id: 'accessory', name: 'Accessory item', mainType: 'asset', subType: 'accessories', balanceNature: 'piece', type: 'accessory', is_inventory: true, userId: 'u' },
+    ];
+    const opening = entry({ id: 'invalid-accessory-opening', operationKind: 'opening', debit: 'Accessory item', debitAccountId: 'accessory', credit: 'Accessory opening equity', cash: '100', count: '0', weight: '0', arabicWeight: '0' });
+    const registry = buildCanonicalAccountRegistry(accessoryAccounts, [opening]); const legs = buildCanonicalAccountingLegs([opening], registry); const audit = auditAccountingCoverage([opening], registry, legs);
+    expect(legs).toEqual([]);
+    expect(audit.disallowedDimensionRecords).toEqual(['invalid-accessory-opening']);
   });
 });
 describe('gold counterpart coverage', () => {

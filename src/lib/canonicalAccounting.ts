@@ -276,9 +276,13 @@ export const auditAccountingCoverage = (entries: Entry[], registry: CanonicalAcc
       if (amount.cash > 0) expected.push({ side: kind === 'sale' ? 'debit' : 'credit', entity: kind === 'sale' ? debit : credit, dimension: 'cash', amount: amount.cash });
       if (metal && amount.metal > 0) expected.push({ side: kind === 'sale' ? 'credit' : 'debit', entity: kind === 'sale' ? credit : debit, dimension: metal, amount: amount.metal });
     } else if (kind === 'opening' && debit?.metal === 'accessory') {
+      const sourceEntryId = entry.id || String(entry.seq);
+      const hasCanonicalAccessoryOpeningQuantityLegs = amount.quantity > 0
+        && legs.some(leg => leg.sourceEntryId === sourceEntryId && leg.side === 'debit' && leg.dimension === 'quantity' && leg.entityId === debit.entityId && Math.abs(leg.amount - amount.quantity) <= 0.000001)
+        && legs.some(leg => leg.sourceEntryId === sourceEntryId && leg.side === 'credit' && leg.dimension === 'quantity' && leg.group === 'equity' && Math.abs(leg.amount - amount.quantity) <= 0.000001);
       expected.push({ side: 'debit', entity: debit, dimension: 'quantity', amount: amount.quantity });
       expected.push({ side: 'credit', entity: credit, dimension: 'quantity', amount: amount.quantity });
-      if (amount.cash > 0) expected.push({ side: 'debit', entity: debit, dimension: 'cash', amount: amount.cash }, { side: 'credit', entity: credit, dimension: 'cash', amount: amount.cash });
+      if (!hasCanonicalAccessoryOpeningQuantityLegs && amount.cash > 0) expected.push({ side: 'debit', entity: debit, dimension: 'cash', amount: amount.cash }, { side: 'credit', entity: credit, dimension: 'cash', amount: amount.cash });
     } else {
       if (amount.cash > 0) expected.push({ side: 'debit', entity: debit, dimension: 'cash', amount: amount.cash }, { side: 'credit', entity: credit, dimension: 'cash', amount: amount.cash });
       if (metal && amount.metal > 0) expected.push({ side: 'debit', entity: debit, dimension: metal, amount: amount.metal }, { side: 'credit', entity: credit, dimension: metal, amount: amount.metal });
