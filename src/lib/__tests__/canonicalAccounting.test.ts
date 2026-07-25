@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { Account, Entry } from '../../types';
-import { auditAccountingCoverage, auditEntityClassification, auditGoldSurplusOperations, buildCanonicalAccountRegistry, buildCanonicalAccountingLegs, findUnbalancedMetalPostings } from '../canonicalAccounting';
+import { auditAccountingCoverage, auditEntityClassification, auditGoldSurplusOperations, buildCanonicalAccountRegistry, buildCanonicalAccountingLegs, diagnoseMetalPostings, findUnbalancedMetalPostings } from '../canonicalAccounting';
+import { loadPhase5GoldenDataset } from '../../test-fixtures/phase5GoldenDataset';
 import { buildTrialBalanceReport } from '../trialBalanceReport';
 const accounts: Account[] = [
   { id: 'cash', name: 'الخزنة', mainType: 'asset', subType: '', balanceNature: 'cash', type: 'cash', userId: 'u' },
@@ -33,6 +34,18 @@ describe('canonical accounting legs', () => {
     expect(legs.some(l => l.accountName === 'كسر فضة' && l.dimension === 'silver' && l.side === 'debit' && l.amount === 1.25)).toBe(true); expect(legs.some(l => l.accountName === 'الخزنة' && l.dimension === 'cash' && l.side === 'credit' && l.amount === 100)).toBe(true);
     expect(auditAccountingCoverage([sale, purchase], registry, legs).namesWithValidMovementButNoLeg).toEqual([]);
   });
+  it('does not flag valid cash sale and purchase metal movements', () => {
+    const operations = [
+      entry({ id: 'gold-sale', operationKind: 'sale', debit: 'الخزنة', debitAccountId: 'cash', credit: 'حلق أطفال', creditAccountId: 'gold-product', cash: '14100', arabicWeight: '1.99' }),
+      entry({ id: 'gold-purchase', operationKind: 'purchase', debit: 'حلق أطفال', debitAccountId: 'gold-product', credit: 'الخزنة', creditAccountId: 'cash', cash: '12000', arabicWeight: '1.5' }),
+      entry({ id: 'silver-sale', operationKind: 'sale', debit: 'الخزنة', debitAccountId: 'cash', credit: 'كسر فضة', creditAccountId: 'silver-scrap', cash: '200', weight: '2.5' }),
+      entry({ id: 'silver-purchase', operationKind: 'purchase', debit: 'كسر فضة', debitAccountId: 'silver-scrap', credit: 'الخزنة', creditAccountId: 'cash', cash: '100', weight: '1.25' }),
+    ];
+    const registry = buildCanonicalAccountRegistry(accounts, operations); const legs = buildCanonicalAccountingLegs(operations, registry); const audit = auditAccountingCoverage(operations, registry, legs);
+    expect(diagnoseMetalPostings(operations, registry, legs).flatMap(item => item.droppedReasons)).toEqual([]);
+    expect(findUnbalancedMetalPostings(operations, legs)).toEqual([]);
+    expect(audit.disallowedDimensionRecords).toEqual([]);
+  });
 });
 describe('canonical classification guards', () => {
   const accessories: Account[] = [
@@ -46,7 +59,7 @@ describe('canonical classification guards', () => {
   it('never turns accessories with misleading legacy weight into gold or silver', () => {
     const entries = ['سيليكون', 'دبلة تنجستين', 'حلق طبي'].map((name, index) => entry({ id: `a-${index}`, operationKind: 'sale', debit: 'الخزنة', debitAccountId: 'cash', credit: name, creditAccountId: ['silicone', 'tungsten', 'medical'][index], cash: '10', weight: '1', arabicWeight: '1', count: '1' }));
     const registry = buildCanonicalAccountRegistry(accessories, entries); const legs = buildCanonicalAccountingLegs(entries, registry); const audit = auditEntityClassification(registry, entries);
-    expect(registry.entities.filter(entity => ['سيليكون', 'دبلة تنجستين', 'حلق طبي'].includes(entity.canonicalName)).every(entity => entity.metal === 'accessory' && entity.trackingMode === 'quantity' && entity.allowedDimensions.join() === 'cash')).toBe(true);
+    expect(registry.entities.filter(entity => ['سيليكون', 'دبلة تنجستين', 'حلق طبي'].includes(entity.canonicalName)).every(entity => entity.metal === 'accessory' && entity.trackingMode === 'quantity' && entity.allowedDimensions.join() === 'quantity')).toBe(true);
     expect(legs.some(leg => ['سيليكون', 'دبلة تنجستين', 'حلق طبي'].includes(leg.accountName) && leg.dimension !== 'cash')).toBe(false);
     expect(audit.accessoryEntitiesWithMetalLegs).toEqual([]); expect(audit.passed).toBe(true);
     expect(buildTrialBalanceReport(entries, accessories, 'gold', '2026-01-01', '2026-12-31').groups.flatMap(g => g.rows).some(r => ['سيليكون', 'دبلة تنجستين', 'حلق طبي'].includes(r.accountName))).toBe(false);
@@ -63,6 +76,39 @@ describe('canonical classification guards', () => {
     const unknown = entry({ id: 'unknown', operationKind: 'merchant_settlement', debit: 'تاجر غير مصنف', credit: 'الخزنة', debitAccountId: 'unknown', creditAccountId: 'cash', weight: '7', arabicWeight: '7' });
     const registry = buildCanonicalAccountRegistry(accessories, [unknown]); const legs = buildCanonicalAccountingLegs([unknown], registry);
     expect(registry.byLegacyName.get('تاجر غير مصنف')?.metal).toBeNull(); expect(legs.some(leg => leg.accountName === 'تاجر غير مصنف' && leg.dimension !== 'cash')).toBe(false);
+  });
+  it('posts accessory opening inventory to quantity and historical opening equity', () => {
+    const accessoryAccounts: Account[] = [
+      { id: 'accessory', name: 'Accessory item', mainType: 'asset', subType: 'accessories', balanceNature: 'piece', type: 'accessory', is_inventory: true, userId: 'u' },
+    ];
+    const opening = entry({ id: 'accessory-opening', operationKind: 'opening', debit: 'Accessory item', debitAccountId: 'accessory', credit: 'Accessory opening equity', creditAccountId: 'missing-equity', count: '3', weight: '0', arabicWeight: '0', cash: '0' });
+    const registry = buildCanonicalAccountRegistry(accessoryAccounts, [opening]); const legs = buildCanonicalAccountingLegs([opening], registry); const audit = auditAccountingCoverage([opening], registry, legs);
+    expect(legs.map(leg => [leg.accountName, leg.side, leg.dimension, leg.amount, leg.group])).toEqual([
+      ['Accessory item', 'debit', 'quantity', 3, 'assets'],
+      ['Accessory opening equity', 'credit', 'quantity', 3, 'equity'],
+    ]);
+    expect(audit.zeroLegRecords).toEqual([]);
+    expect(audit.disallowedDimensionRecords).toEqual([]);
+  });
+
+  it('covers TX28, TX30, and TX31 accessory opening fixtures with canonical legs', () => {
+    const ids = [
+      'csvref-entry-b933ee71879ad729575ccded9ef256e3',
+      'csvref-entry-28cb29a01785ba9a31e6db2dbf79e8fc',
+      'csvref-entry-369084c2cfc8efd74e8d03455e4f68bc',
+    ];
+    const { entries, accounts } = loadPhase5GoldenDataset();
+    const targets = entries.filter(item => ids.includes(item.id ?? ''));
+    const registry = buildCanonicalAccountRegistry(accounts, targets); const legs = buildCanonicalAccountingLegs(targets, registry); const audit = auditAccountingCoverage(targets, registry, legs);
+    expect(targets.map(item => item.id)).toEqual(ids);
+    ids.forEach(id => {
+      const recordLegs = legs.filter(leg => leg.sourceEntryId === id);
+      expect(recordLegs.map(leg => [leg.side, leg.dimension, leg.group])).toEqual([
+        ['debit', 'quantity', 'assets'],
+        ['credit', 'quantity', 'equity'],
+      ]);
+    });
+    expect(audit.zeroLegRecords).toEqual([]);
   });
 });
 describe('gold counterpart coverage', () => {

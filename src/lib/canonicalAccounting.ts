@@ -2,7 +2,7 @@ import { Account, CanonicalAccountDefinition, Entry } from '../types';
 import { getEntryArabicWeight, parseCash, resolveOperationKind } from './engine';
 import { buildAccountRegistry as buildCentralAccountRegistry } from './accountRegistry';
 
-export type AccountingDimension = 'cash' | 'gold' | 'silver';
+export type AccountingDimension = 'cash' | 'gold' | 'silver' | 'quantity';
 export type AccountingGroup = 'assets' | 'liabilities' | 'equity' | 'revenue' | 'expenses';
 export type CanonicalEntityType = 'cash' | 'product' | 'inventory' | 'merchant' | 'creditor' | 'debtor' | 'equity' | 'revenue' | 'expense' | 'fixed_asset' | 'adjustment';
 export interface CanonicalAccountEntity {
@@ -23,6 +23,9 @@ export interface CanonicalAccountRegistry { entities: CanonicalAccountEntity[]; 
 export interface AccountingLeg { entityId: string; accountName: string; dimension: AccountingDimension; side: 'debit' | 'credit'; amount: number; sourceEntryId: string; operationKind: string; date: string; isOpening: boolean; group: AccountingGroup; entity: CanonicalAccountEntity; entry: Entry; oppositeAccount: string; }
 
 const normalized = (value: string | undefined) => String(value ?? '').trim().replace(/\s+/g, ' ');
+type MetalDimension = 'gold' | 'silver';
+const metalDimensions: MetalDimension[] = ['gold', 'silver'];
+const cashMetalDimensions: AccountingDimension[] = ['cash', 'gold', 'silver'];
 interface CanonicalReference { canonicalName: string; aliases: string[]; entityType: CanonicalEntityType; mainGroup: AccountingGroup; metal: CanonicalAccountEntity['metal']; allowedDimensions: AccountingDimension[]; normalBalance: 'debit' | 'credit'; }
 const canonicalReferences: CanonicalReference[] = [
   { canonicalName: '\u0632\u064a\u0627\u062f\u0629-\u0627\u0644\u0630\u0647\u0628', aliases: ['\u0632\u064a\u0627\u062f\u0629-\u0627\u0644\u0630\u0647\u0628', '\u0632\u064a\u0627\u062f\u0629 \u0627\u0644\u0630\u0647\u0628', '\u0632\u064a\u0627\u062f\u0647 \u0627\u0644\u0630\u0647\u0628', '\u0632\u064a\u0627\u062f\u0629 \u0630\u0647\u0628'], entityType: 'revenue', mainGroup: 'revenue', metal: 'gold', allowedDimensions: ['gold'], normalBalance: 'credit' },
@@ -55,7 +58,8 @@ const explicitMetalFor = (account: Account): CanonicalAccountEntity['metal'] => 
   return null;
 };const dimensionsFor = (account: Account): AccountingDimension[] => {
   const metal = explicitMetalFor(account);
-  if (account.type === 'cash' || metal === 'accessory') return ['cash'];
+  if (account.type === 'cash') return ['cash'];
+  if (metal === 'accessory') return ['quantity'];
   if (metal === 'gold') return account.type === 'merchant' ? ['cash', 'gold'] : ['gold'];
   if (metal === 'silver') return account.type === 'merchant' ? ['cash', 'silver'] : ['silver'];
   return ['cash'];
@@ -66,12 +70,14 @@ const descriptionFor = (entity: Pick<CanonicalAccountEntity, 'entityType' | 'met
 export const buildCanonicalAccountRegistry = (accounts: Account[], entries: Entry[] = [], manualDefinitions?: CanonicalAccountDefinition[]): CanonicalAccountRegistry => {
   if (manualDefinitions) {
   const central = buildCentralAccountRegistry(accounts, entries, manualDefinitions);
+  const accessoryOpeningEquityNames = new Set(entries.filter(isValidAccountingEntry).filter(entry => resolveOperationKind(entry) === 'opening').filter(entry => { const debitAccount = entry.debitAccountId ? accounts.find(account => account.id === entry.debitAccountId) : accounts.find(account => normalized(account.name) === normalized(entry.debit)); return debitAccount?.type === 'accessory'; }).map(entry => normalized(entry.credit)));
   const entities = central.accounts.map(definition => {
     const sourceAccount = definition.sourceAccountId ? accounts.find(account => account.id === definition.sourceAccountId) : undefined;
-    const financialDimensions = definition.allowedDimensions.filter((dimension): dimension is AccountingDimension => dimension !== 'quantity');
-    const primaryDimension = financialDimensions[0] ?? 'cash';
-    const normalBalance = definition.normalBalanceByDimension[primaryDimension] ?? (['liabilities', 'equity', 'revenue'].includes(definition.mainGroup) ? 'credit' : 'debit');
-    const entityType: CanonicalEntityType = definition.entityType === 'gold_inventory' || definition.entityType === 'silver_inventory' || definition.entityType === 'accessory_inventory' ? 'inventory'
+    const accessoryOpeningEquity = definition.isHistoricalOnly && accessoryOpeningEquityNames.has(normalized(definition.canonicalName));
+    const allowedDimensions = accessoryOpeningEquity ? ['quantity' as AccountingDimension] : definition.allowedDimensions.filter((dimension): dimension is AccountingDimension => cashMetalDimensions.includes(dimension as AccountingDimension) || dimension === 'quantity');
+    const primaryDimension = allowedDimensions.find(dimension => dimension !== 'quantity') ?? allowedDimensions[0] ?? 'cash';
+    const normalBalance = definition.normalBalanceByDimension[primaryDimension] ?? (['liabilities', 'equity', 'revenue'].includes(accessoryOpeningEquity ? 'equity' : definition.mainGroup) ? 'credit' : 'debit');
+    const entityType: CanonicalEntityType = accessoryOpeningEquity ? 'equity' : definition.entityType === 'gold_inventory' || definition.entityType === 'silver_inventory' || definition.entityType === 'accessory_inventory' ? 'inventory'
       : definition.entityType === 'cash' ? 'cash'
       : definition.entityType === 'merchant' ? 'merchant'
       : definition.entityType === 'creditor' ? 'creditor'
@@ -87,17 +93,17 @@ export const buildCanonicalAccountRegistry = (accounts: Account[], entries: Entr
       legacyNames: definition.legacyNames,
       aliases: definition.aliases,
       entityType,
-      mainGroup: definition.mainGroup,
-      allowedDimensions: financialDimensions,
+      mainGroup: accessoryOpeningEquity ? 'equity' : definition.mainGroup,
+      allowedDimensions,
       metal: definition.metal,
-      trackingMode: definition.trackingMode === 'quantity' ? 'quantity' : definition.tracksWeight ? 'weight' : 'value',
+      trackingMode: definition.trackingMode === 'quantity' || accessoryOpeningEquity ? 'quantity' : definition.tracksWeight ? 'weight' : 'value',
       normalBalance,
       normalBalanceByDimension: definition.normalBalanceByDimension,
       tracksQuantity: definition.tracksQuantity,
       isInventory: definition.isInventory,
       isMerchant: definition.isMerchant,
       isHistoricalOnly: definition.isHistoricalOnly,
-      displayDescription: definition.description || definition.displayName,
+      displayDescription: accessoryOpeningEquity ? 'Accessory opening equity' : definition.description || definition.displayName,
       sourceAccount,
       classificationSource: definition.classificationSource,
       classificationConfidence: definition.classificationConfidence,
@@ -149,7 +155,7 @@ export const buildCanonicalAccountRegistry = (accounts: Account[], entries: Entr
       ? governedDefinition
       : undefined;
     const governedDimensions = governed?.allowedDimensions.filter(
-      (dimension): dimension is AccountingDimension => dimension !== 'quantity',
+      (dimension): dimension is AccountingDimension => cashMetalDimensions.includes(dimension as AccountingDimension) || dimension === 'quantity',
     );
     const resolvedMetal = governed?.metal ?? reference?.metal ?? metal;
     const resolvedGroup = governed?.mainGroup ?? reference?.mainGroup ?? group;
@@ -200,9 +206,9 @@ export const buildCanonicalAccountRegistry = (accounts: Account[], entries: Entr
   entries.filter(isValidAccountingEntry).forEach(entry => (['debit', 'credit'] as const).forEach(side => {
     const name = normalized(entry[side]); if (!name || byLegacyName.has(name) || ambiguousAliases.has(name)) return;
     const opposite = byLegacyName.get(normalized(entry[side === 'debit' ? 'credit' : 'debit'])); const reference = referenceForName(name);
-    const kind = resolveOperationKind(entry); const dimension: AccountingDimension = reference?.metal === 'gold' || reference?.metal === 'silver' ? reference.metal : opposite?.metal === 'gold' || opposite?.metal === 'silver' ? opposite.metal : 'cash';
-    const group: AccountingGroup = reference?.mainGroup ?? (side === 'credit' ? (kind === 'opening' && opposite?.mainGroup === 'assets' ? 'equity' : 'liabilities') : 'assets');
-    const entity: CanonicalAccountEntity = { entityId: `historical:${reference?.canonicalName ?? name}`, canonicalName: reference?.canonicalName ?? name, legacyNames: [...new Set([name, ...(reference?.aliases ?? [])])], entityType: reference?.entityType ?? (group === 'liabilities' ? 'creditor' : group === 'equity' ? 'equity' : 'debtor'), mainGroup: group, allowedDimensions: reference?.allowedDimensions ?? [dimension], metal: reference?.metal ?? (dimension === 'cash' ? null : dimension), trackingMode: dimension === 'cash' ? 'value' : 'weight', normalBalance: reference?.normalBalance ?? (group === 'assets' ? 'debit' : 'credit'), isInventory: false, isMerchant: false, isHistoricalOnly: true, displayDescription: group === 'liabilities' ? 'خصوم تاريخية' : group === 'equity' ? 'حقوق ملكية تاريخية' : 'حساب تاريخي' };
+    const kind = resolveOperationKind(entry); const accessoryOpeningEquity = kind === 'opening' && side === 'credit' && opposite?.metal === 'accessory'; const dimension: AccountingDimension = accessoryOpeningEquity ? 'quantity' : reference?.metal === 'gold' || reference?.metal === 'silver' ? reference.metal : opposite?.metal === 'gold' || opposite?.metal === 'silver' ? opposite.metal : 'cash';
+    const group: AccountingGroup = reference?.mainGroup ?? (accessoryOpeningEquity ? 'equity' : side === 'credit' ? (kind === 'opening' && opposite?.mainGroup === 'assets' ? 'equity' : 'liabilities') : 'assets');
+    const entity: CanonicalAccountEntity = { entityId: `historical:${reference?.canonicalName ?? name}`, canonicalName: reference?.canonicalName ?? name, legacyNames: [...new Set([name, ...(reference?.aliases ?? [])])], entityType: reference?.entityType ?? (group === 'liabilities' ? 'creditor' : group === 'equity' ? 'equity' : 'debtor'), mainGroup: group, allowedDimensions: reference?.allowedDimensions ?? [dimension], metal: reference?.metal ?? (dimension === 'gold' || dimension === 'silver' ? dimension : null), trackingMode: dimension === 'cash' ? 'value' : dimension === 'quantity' ? 'quantity' : 'weight', normalBalance: reference?.normalBalance ?? (group === 'assets' ? 'debit' : 'credit'), isInventory: false, isMerchant: false, isHistoricalOnly: true, displayDescription: group === 'liabilities' ? 'Historical liability' : group === 'equity' ? 'Historical equity' : 'Historical account' };
     entities.push(entity); byId.set(entity.entityId, entity); entity.legacyNames.forEach(alias => byLegacyName.set(normalized(alias), entity));  }));
   return { entities, byId, byLegacyName, ambiguousAliases };
   }
@@ -211,7 +217,15 @@ export const buildCanonicalAccountRegistry = (accounts: Account[], entries: Entr
 
 const entityFor = (entry: Entry, side: 'debit' | 'credit', registry: CanonicalAccountRegistry) => registry.entities.find(entity => entity.sourceAccount?.id && entity.sourceAccount.id === entry[side === 'debit' ? 'debitAccountId' : 'creditAccountId']) ?? registry.byLegacyName.get(normalized(entry[side]));
 const weightFor = (entry: Entry, entity?: CanonicalAccountEntity) => { if (!entity || entity.metal === 'accessory' || entity.trackingMode !== 'weight') return 0; const amount = entity.metal === 'silver' ? Number(entry.weight) || 0 : getEntryArabicWeight(entry, entity.sourceAccount); return amount || Number(entry.arabicWeight) || 0; };
-const addLeg = (out: AccountingLeg[], entry: Entry, entity: CanonicalAccountEntity | undefined, side: 'debit' | 'credit', dimension: AccountingDimension, amount: number, oppositeAccount: string) => { if (!entity || !entity.allowedDimensions.includes(dimension) || (entity.metal === 'accessory' && dimension !== 'cash') || (entity.metal === 'silver' && dimension === 'gold') || (entity.metal === 'gold' && dimension === 'silver') || !Number.isFinite(amount) || amount <= 0) return; out.push({ entityId: entity.entityId, accountName: entity.canonicalName, dimension, side, amount, sourceEntryId: entry.id || String(entry.seq), operationKind: resolveOperationKind(entry), date: entry.date, isOpening: resolveOperationKind(entry) === 'opening', group: entity.mainGroup, entity, entry, oppositeAccount }); };
+const quantityFor = (entry: Entry, entity?: CanonicalAccountEntity) => {
+  if (!entity || entity.metal !== 'accessory') return 0;
+  return Number(entry.count) || Number(entry.weight) || Number(entry.arabicWeight) || 0;
+};
+const addLeg = (out: AccountingLeg[], entry: Entry, entity: CanonicalAccountEntity | undefined, side: 'debit' | 'credit', dimension: AccountingDimension, amount: number, oppositeAccount: string) => { if (!entity || !entity.allowedDimensions.includes(dimension) || (entity.metal === 'accessory' && dimension !== 'quantity') || (entity.metal === 'silver' && dimension === 'gold') || (entity.metal === 'gold' && dimension === 'silver') || !Number.isFinite(amount) || amount <= 0) return; out.push({ entityId: entity.entityId, accountName: entity.canonicalName, dimension, side, amount, sourceEntryId: entry.id || String(entry.seq), operationKind: resolveOperationKind(entry), date: entry.date, isOpening: resolveOperationKind(entry) === 'opening', group: entity.mainGroup, entity, entry, oppositeAccount }); };
+const addAccessoryOpeningEquityLeg = (out: AccountingLeg[], entry: Entry, entity: CanonicalAccountEntity | undefined, amount: number, oppositeAccount: string) => {
+  if (!entity || entity.mainGroup !== 'equity' || !Number.isFinite(amount) || amount <= 0) return;
+  out.push({ entityId: entity.entityId, accountName: entity.canonicalName, dimension: 'quantity', side: 'credit', amount, sourceEntryId: entry.id || String(entry.seq), operationKind: resolveOperationKind(entry), date: entry.date, isOpening: true, group: entity.mainGroup, entity, entry, oppositeAccount });
+};
 
 /** Central posting matrix: a value is posted only to the account that owns that dimension. */
 export const buildCanonicalAccountingLegs = (entries: Entry[], registry: CanonicalAccountRegistry): AccountingLeg[] => {
@@ -229,6 +243,17 @@ export const buildCanonicalAccountingLegs = (entries: Entry[], registry: Canonic
     if (kind === 'merchant_settlement') { if (cash > 0) { addLeg(out, entry, debit, 'debit', 'cash', cash, entry.credit); addLeg(out, entry, credit, 'credit', 'cash', cash, entry.debit); return; } if (dimension) { addLeg(out, entry, debit, 'debit', dimension, weight, entry.credit); addLeg(out, entry, credit, 'credit', dimension, weight, entry.debit); } return; }
     if (kind === 'expense') { addLeg(out, entry, debit, 'debit', 'cash', cash, entry.credit); addLeg(out, entry, creditCash, 'credit', 'cash', cash, entry.debit); return; }
     if (kind === 'opening' || kind === 'transfer' || kind === 'tifeet' || kind === 'adjustment' || kind === 'other' || kind === 'personal_withdrawal') {
+      const accessory = debit?.metal === 'accessory' ? debit : undefined;
+      const quantity = quantityFor(entry, accessory);
+      if (kind === 'opening' && accessory && quantity > 0) {
+        addLeg(out, entry, accessory, 'debit', 'quantity', quantity, entry.credit);
+        addAccessoryOpeningEquityLeg(out, entry, credit, quantity, entry.debit);
+        if (cash > 0) {
+          addLeg(out, entry, debitCash, 'debit', 'cash', cash, entry.credit);
+          addLeg(out, entry, creditCash, 'credit', 'cash', cash, entry.debit);
+        }
+        return;
+      }
       const dims: AccountingDimension[] = []; if (cash > 0 && (debit?.allowedDimensions.includes('cash') || credit?.allowedDimensions.includes('cash'))) dims.push('cash'); if (weight > 0 && dimension) dims.push(dimension);
       dims.forEach(dim => { const amount = dim === 'cash' ? cash : weight; const d = dim === 'cash' ? debitCash : debit; const c = dim === 'cash' ? creditCash : credit; addLeg(out, entry, d, 'debit', dim, amount, entry.credit); addLeg(out, entry, c, 'credit', dim, amount, entry.debit); });
     }
@@ -239,11 +264,33 @@ export interface AccountingCoverageAudit { totalUniqueNames: number; totalRegist
 export const auditAccountingCoverage = (entries: Entry[], registry: CanonicalAccountRegistry, legs: AccountingLeg[]): AccountingCoverageAudit => {
   const names = new Set(entries.filter(isValidAccountingEntry).flatMap(e => [normalized(e.debit), normalized(e.credit)]).filter(Boolean)); const legEntityIds = new Set(legs.map(l => l.entityId));
   const dimensions = new Map<string, Set<string>>(); legs.forEach(l => { const s = dimensions.get(l.entityId) || new Set(); s.add(l.dimension); dimensions.set(l.entityId, s); });
-  const diff: Record<AccountingDimension, number> = { cash: 0, gold: 0, silver: 0 }; legs.forEach(l => diff[l.dimension] += l.side === 'debit' ? l.amount : -l.amount);
+  const diff: Record<AccountingDimension, number> = { cash: 0, gold: 0, silver: 0, quantity: 0 }; legs.forEach(l => diff[l.dimension] += l.side === 'debit' ? l.amount : -l.amount);
   const resolved = [...names].map(name => ({ name, entity: registry.byLegacyName.get(name) }));
   const zeroLegRecords = entries.filter(isValidAccountingEntry).filter(e => (parseCash(e) > 0 || Number(e.weight) > 0 || Number(e.count) > 0) && !legs.some(l => l.entry === e)).map(e => e.id || String(e.seq));
   const zeroOrInvalidAmountRecords = entries.filter(isValidAccountingEntry).filter(e => ![parseCash(e), Number(e.weight), Number(e.arabicWeight), Number(e.count)].some(value => Number.isFinite(value) && value > 0)).map(e => e.id || String(e.seq));
-  const disallowedDimensionRecords = entries.filter(isValidAccountingEntry).flatMap(entry => (['debit', 'credit'] as const).flatMap(side => { const entity = registry.byLegacyName.get(normalized(entry[side])); if (!entity) return []; const cash = parseCash(entry) > 0 && !entity.allowedDimensions.includes('cash'); const metal = (Number(entry.weight) > 0 || Number(entry.arabicWeight) > 0) && entity.metal && !entity.allowedDimensions.includes(entity.metal === 'silver' ? 'silver' : 'gold'); return cash || metal ? [entry.id || String(entry.seq)] : []; }));
+  const disallowedDimensionRecords = entries.filter(isValidAccountingEntry).flatMap(entry => {
+    const debit = entityFor(entry, 'debit', registry); const credit = entityFor(entry, 'credit', registry); const kind = resolveOperationKind(entry); const amount = { cash: parseCash(entry), metal: Number(entry.weight) || Number(entry.arabicWeight) || 0, quantity: Number(entry.count) || Number(entry.weight) || Number(entry.arabicWeight) || 0 };
+    const expected: { side: 'debit' | 'credit'; entity?: CanonicalAccountEntity; dimension: AccountingDimension; amount: number }[] = [];
+    const metal = ([debit, credit].map(entity => entity?.metal).find(item => item === 'gold' || item === 'silver') ?? null) as MetalDimension | null;
+    if (kind === 'sale' || kind === 'purchase') {
+      if (amount.cash > 0) expected.push({ side: kind === 'sale' ? 'debit' : 'credit', entity: kind === 'sale' ? debit : credit, dimension: 'cash', amount: amount.cash });
+      if (metal && amount.metal > 0) expected.push({ side: kind === 'sale' ? 'credit' : 'debit', entity: kind === 'sale' ? credit : debit, dimension: metal, amount: amount.metal });
+    } else if (kind === 'opening' && debit?.metal === 'accessory') {
+      expected.push({ side: 'debit', entity: debit, dimension: 'quantity', amount: amount.quantity });
+      expected.push({ side: 'credit', entity: credit, dimension: 'quantity', amount: amount.quantity });
+      if (amount.cash > 0) expected.push({ side: 'debit', entity: debit, dimension: 'cash', amount: amount.cash }, { side: 'credit', entity: credit, dimension: 'cash', amount: amount.cash });
+    } else {
+      if (amount.cash > 0) expected.push({ side: 'debit', entity: debit, dimension: 'cash', amount: amount.cash }, { side: 'credit', entity: credit, dimension: 'cash', amount: amount.cash });
+      if (metal && amount.metal > 0) expected.push({ side: 'debit', entity: debit, dimension: metal, amount: amount.metal }, { side: 'credit', entity: credit, dimension: metal, amount: amount.metal });
+    }
+    return expected.flatMap(item => {
+      if (!item.entity || item.amount <= 0) return [];
+      const allowed = item.dimension === 'quantity' && kind === 'opening' && item.side === 'credit' && item.entity.mainGroup === 'equity'
+        ? true
+        : item.entity.allowedDimensions.includes(item.dimension);
+      return allowed ? [] : [entry.id || String(entry.seq)];
+    });
+  });
   return { totalUniqueNames: names.size, totalRegistryEntities: registry.entities.length, totalHistoricalOnlyEntities: registry.entities.filter(e => e.isHistoricalOnly).length, namesWithValidMovementButNoLeg: resolved.filter(item => item.entity && !legEntityIds.has(item.entity.entityId)).map(item => item.name), resolvedAliases: resolved.filter(item => item.entity && normalized(item.entity.canonicalName) !== item.name).map(item => item.name), unknownNames: resolved.filter(item => !item.entity).map(item => item.name), ambiguousAliases: [...(registry.ambiguousAliases?.keys() ?? [])], knownAccountsWithoutLeg: resolved.filter(item => item.entity && !legEntityIds.has(item.entity.entityId)).map(item => item.entity!.canonicalName), disallowedDimensionRecords: [...new Set(disallowedDimensionRecords)], zeroOrInvalidAmountRecords, postingMatrixMisses: zeroLegRecords, conflictingClassifications: registry.entities.filter(e => e.legacyNames.some(n => registry.entities.filter(x => x.entityId !== e.entityId && x.legacyNames.map(normalized).includes(normalized(n))).length > 0)).map(e => e.canonicalName), namesInMultipleDimensions: [...dimensions].filter(([, v]) => v.size > 1).map(([id]) => registry.byId.get(id)?.canonicalName || id), excluded: entries.filter(e => !isValidAccountingEntry(e)).map(e => ({ id: e.id || String(e.seq), reason: 'deleted/voided/reversed/excluded/invalid' })), unhandledOperationKinds: [...new Set(entries.filter(isValidAccountingEntry).filter(e => !['opening','purchase','sale','transfer','tifeet','adjustment','merchant_settlement','personal_withdrawal','expense','other'].includes(resolveOperationKind(e))).map(e => resolveOperationKind(e)))], zeroLegRecords, debitCreditDifference: diff };
 };
 
@@ -260,7 +307,7 @@ export interface EntityClassificationAudit {
 export const auditEntityClassification = (registry: CanonicalAccountRegistry, entries: Entry[]): EntityClassificationAudit => {
   const legs = buildCanonicalAccountingLegs(entries, registry);
   const named = (predicate: (entity: CanonicalAccountEntity) => boolean, dimension: AccountingDimension) => registry.entities.filter(predicate).filter(entity => legs.some(leg => leg.entityId === entity.entityId && leg.dimension === dimension)).map(entity => entity.canonicalName);
-  const accessoryEntitiesWithMetalLegs = registry.entities.filter(entity => entity.metal === 'accessory').filter(entity => legs.some(leg => leg.entityId === entity.entityId && leg.dimension !== 'cash')).map(entity => entity.canonicalName);
+  const accessoryEntitiesWithMetalLegs = registry.entities.filter(entity => entity.metal === 'accessory').filter(entity => legs.some(leg => leg.entityId === entity.entityId && metalDimensions.includes(leg.dimension as MetalDimension))).map(entity => entity.canonicalName);
   const silverEntitiesWithGoldLegs = named(entity => entity.metal === 'silver', 'gold');
   const goldEntitiesWithSilverLegs = named(entity => entity.metal === 'gold', 'silver');
   const inferredMetalConflicts = registry.entities.filter(entity => !entity.isHistoricalOnly && entity.sourceAccount?.type === 'accessory' && entity.metal !== 'accessory').map(entity => entity.canonicalName);
@@ -278,12 +325,15 @@ export const diagnoseMetalPostings = (entries: Entry[], registry: CanonicalAccou
   const debit = entityFor(entry, 'debit', registry); const credit = entityFor(entry, 'credit', registry); const metals = [debit, credit].map(entity => entity?.metal).filter((metal): metal is 'gold' | 'silver' => metal === 'gold' || metal === 'silver');
   const dimension = metals.length === 1 || (metals.length === 2 && metals[0] === metals[1]) ? metals[0] : null; if (!dimension) return [];
   const sourceEntryId = entry.id || String(entry.seq); const recordLegs = legs.filter(leg => leg.sourceEntryId === sourceEntryId && leg.dimension === dimension); const amount = weightFor(entry, dimension === 'gold' ? (debit?.metal === 'gold' ? debit : credit) : (debit?.metal === 'silver' ? debit : credit));
-  const droppedReasons: string[] = []; if (!debit?.allowedDimensions.includes(dimension)) droppedReasons.push('debit entity does not allow dimension'); if (!credit?.allowedDimensions.includes(dimension)) droppedReasons.push('credit entity does not allow dimension'); if (amount > 0 && !recordLegs.some(leg => leg.side === 'debit')) droppedReasons.push('missing debit metal leg'); if (amount > 0 && !recordLegs.some(leg => leg.side === 'credit')) droppedReasons.push('missing credit metal leg');
+  const kind = resolveOperationKind(entry); const singleSidedMetal = kind === 'sale' || kind === 'purchase'; const expectedMetalSide: 'debit' | 'credit' | null = !singleSidedMetal ? null : kind === 'sale' ? 'credit' : 'debit';
+  const droppedReasons: string[] = [];
+  if (!singleSidedMetal || expectedMetalSide === 'debit') { if (!debit?.allowedDimensions.includes(dimension)) droppedReasons.push('debit entity does not allow dimension'); if (amount > 0 && !recordLegs.some(leg => leg.side === 'debit')) droppedReasons.push('missing debit metal leg'); }
+  if (!singleSidedMetal || expectedMetalSide === 'credit') { if (!credit?.allowedDimensions.includes(dimension)) droppedReasons.push('credit entity does not allow dimension'); if (amount > 0 && !recordLegs.some(leg => leg.side === 'credit')) droppedReasons.push('missing credit metal leg'); }
   return [{ sourceEntryId, operationKind: resolveOperationKind(entry), dimension, amount, debitAccount: entry.debit, creditAccount: entry.credit, debitEntity: debit?.canonicalName, creditEntity: credit?.canonicalName, debitGroup: debit?.mainGroup, creditGroup: credit?.mainGroup, debitAllowedDimensions: debit?.allowedDimensions, creditAllowedDimensions: credit?.allowedDimensions, debitLeg: recordLegs.find(leg => leg.side === 'debit'), creditLeg: recordLegs.find(leg => leg.side === 'credit'), droppedReasons }];
 });
 export const findUnbalancedMetalPostings = (entries: Entry[], legs: AccountingLeg[]): { sourceEntryId: string; dimension: 'gold' | 'silver'; debit: number; credit: number }[] => {
-  const validIds = new Set(entries.filter(isValidAccountingEntry).map(entry => entry.id || String(entry.seq))); const totals = new Map<string, { debit: number; credit: number }>();
-  legs.filter(leg => leg.dimension !== 'cash' && validIds.has(leg.sourceEntryId)).forEach(leg => { const key = `${leg.sourceEntryId}:${leg.dimension}`; const total = totals.get(key) || { debit: 0, credit: 0 }; total[leg.side] += leg.amount; totals.set(key, total); });
+  const validIds = new Set(entries.filter(isValidAccountingEntry).filter(entry => !['sale', 'purchase'].includes(resolveOperationKind(entry))).map(entry => entry.id || String(entry.seq))); const totals = new Map<string, { debit: number; credit: number }>();
+  legs.filter(leg => metalDimensions.includes(leg.dimension as MetalDimension) && validIds.has(leg.sourceEntryId)).forEach(leg => { const key = `${leg.sourceEntryId}:${leg.dimension}`; const total = totals.get(key) || { debit: 0, credit: 0 }; total[leg.side] += leg.amount; totals.set(key, total); });
   return [...totals].flatMap(([key, total]) => Math.abs(total.debit - total.credit) > 0.000001 ? [{ sourceEntryId: key.substring(0, key.lastIndexOf(':')), dimension: key.substring(key.lastIndexOf(':') + 1) as 'gold' | 'silver', ...total }] : []);
 };
 export interface GoldSurplusAuditRow {
