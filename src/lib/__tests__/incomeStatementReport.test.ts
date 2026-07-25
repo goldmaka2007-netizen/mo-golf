@@ -1,155 +1,109 @@
 import { describe, expect, it } from 'vitest';
 import type { Account, Entry } from '../../types';
-import type { InventoryCostTimeline, OperationCostResultV2 } from '../inventoryCostTypes';
-import { buildIncomeStatementReport } from '../incomeStatementReport';
-import { buildLedgerReport } from '../ledgerReport';
-import { buildLegacyLedgerLegs } from '../legacyLedger';
-import { buildTrialBalanceReport } from '../trialBalanceReport';
+import { belongsToMetric, getAccountTypeDetails, getMetricValue } from '../../utils/accountLogic';
+import { buildIncomeStatementReport, type IncomeStatementMetric } from '../incomeStatementReport';
 
 const accounts: Account[] = [
-  { id: 'cash', name: 'cash', mainType: 'asset', subType: 'cash', balanceNature: 'cash', type: 'cash', userId: 'u' },
-  { id: 'gold', name: 'gold inventory', mainType: 'asset', subType: 'inventory', balanceNature: 'gold', type: 'gold_product', metal: 'gold', is_inventory: true, userId: 'u' },
-  { id: 'capital', name: 'capital', mainType: 'equity', subType: 'capital', balanceNature: 'cash', type: 'other', userId: 'u' },
-  { id: 'drawings', name: 'drawings', mainType: 'equity', subType: 'drawings', balanceNature: 'cash', type: 'other', userId: 'u' },
-  { id: 'rent', name: 'rent expense', mainType: 'expense', subType: 'opex', balanceNature: 'cash', type: 'other', userId: 'u' },
-  { id: 'shortage', name: 'shortage settlement', mainType: 'expense', subType: 'inventory_loss', balanceNature: 'gold', type: 'other', userId: 'u' },
+  { id: 'cash', name: 'الخزنة', mainType: 'asset', subType: 'نقدية', balanceNature: 'cash', type: 'cash', userId: 'u' },
+  { id: 'gold', name: 'ذهب 21', mainType: 'asset', subType: 'مخزون ذهب', balanceNature: 'gold', type: 'gold_product', metal: 'gold', userId: 'u' },
+  { id: 'silver', name: 'فضة', mainType: 'asset', subType: 'مخزون فضة', balanceNature: 'silver', type: 'silver', metal: 'silver', userId: 'u' },
+  { id: 'accs', name: 'ملحقات', mainType: 'asset', subType: 'مخزون ملحقات', balanceNature: 'piece', type: 'accessory', userId: 'u' },
+  { id: 'cash-revenue', name: 'إيراد خدمة', mainType: 'revenue', subType: 'إيرادات أخرى', balanceNature: 'cash', type: 'cash', userId: 'u' },
+  { id: 'cash-expense', name: 'مصروف إيجار', mainType: 'expense', subType: 'مصروفات تشغيل', balanceNature: 'cash', type: 'cash', userId: 'u' },
+  { id: 'gold-revenue', name: 'زيادة ذهب', mainType: 'revenue', subType: 'زيادات ذهب', balanceNature: 'gold', metal: 'gold', userId: 'u' },
+  { id: 'silver-expense', name: 'عجز فضة', mainType: 'expense', subType: 'عجز معادن', balanceNature: 'silver', metal: 'silver', userId: 'u' },
 ];
 
-const entry = (value: Partial<Entry>): Entry => ({
-  id: value.id,
-  seq: 1,
-  tx: value.tx || 'tx',
-  operationKind: value.operationKind || 'other',
-  date: value.date || '2026-01-01',
-  debit: '',
-  credit: '',
-  cash: '0',
-  weight: '0',
-  count: '0',
-  arabicWeight: '0',
-  notes: '',
-  userId: 'u',
-  ...value,
+const entry = (patch: Partial<Entry>): Entry => ({
+  id: patch.id, tx: patch.tx || 'عملية', date: patch.date || '2026-01-10', debit: '', credit: '', cash: '0', weight: '0',
+  count: '0', arabicWeight: '0', notes: '', userId: 'u', ...patch,
 });
 
-const entries: Entry[] = [
-  entry({ id: 'capital', operationKind: 'other', debit: 'cash', debitAccountId: 'cash', credit: 'capital', creditAccountId: 'capital', cash: '5000' }),
-  entry({ id: 'purchase', operationKind: 'purchase', debit: 'gold inventory', debitAccountId: 'gold', credit: 'cash', creditAccountId: 'cash', cash: '1000', weight: '10', arabicWeight: '10', karat: 21 }),
-  entry({ id: 'sale', operationKind: 'sale', debit: 'cash', debitAccountId: 'cash', credit: 'gold inventory', creditAccountId: 'gold', cash: '1500', weight: '4', arabicWeight: '4', karat: 21 }),
-  entry({ id: 'rent', operationKind: 'expense', debit: 'rent expense', debitAccountId: 'rent', credit: 'cash', creditAccountId: 'cash', cash: '100' }),
-  entry({ id: 'drawings', operationKind: 'personal_withdrawal', debit: 'drawings', debitAccountId: 'drawings', credit: 'cash', creditAccountId: 'cash', cash: '200' }),
-  entry({ id: 'shortage', operationKind: 'adjustment', debit: 'shortage settlement', debitAccountId: 'shortage', credit: 'gold inventory', creditAccountId: 'gold', weight: '1', arabicWeight: '1', karat: 21 }),
-  entry({ id: 'outside', operationKind: 'sale', date: '2025-12-31', debit: 'cash', debitAccountId: 'cash', credit: 'gold inventory', creditAccountId: 'gold', cash: '999', weight: '1', arabicWeight: '1', karat: 21 }),
+const dataset: Entry[] = [
+  entry({ id: 'gold-buy', debit: 'ذهب 21', credit: 'الخزنة', cash: '1000', weight: '10', arabicWeight: '10', karat: 21 }),
+  entry({ id: 'gold-sale', debit: 'الخزنة', credit: 'ذهب 21', cash: '1500', weight: '4', arabicWeight: '4', karat: 21 }),
+  entry({ id: 'silver-buy', tx: 'شراء فضة', debit: 'فضة', credit: 'الخزنة', cash: '300', weight: '30' }),
+  entry({ id: 'silver-sale', tx: 'بيع فضة', debit: 'الخزنة', credit: 'فضة', cash: '450', weight: '12' }),
+  entry({ id: 'acc-buy', debit: 'ملحقات', credit: 'الخزنة', cash: '100', weight: '5', count: '5' }),
+  entry({ id: 'acc-sale', debit: 'الخزنة', credit: 'ملحقات', cash: '180', weight: '2', count: '2' }),
+  entry({ id: 'service', debit: 'الخزنة', credit: 'إيراد خدمة', cash: '75' }),
+  entry({ id: 'rent', debit: 'مصروف إيجار', credit: 'الخزنة', cash: '25' }),
+  entry({ id: 'gold-gain', debit: 'ذهب 21', credit: 'زيادة ذهب', weight: '1.5', arabicWeight: '1.5', karat: 21 }),
+  entry({ id: 'silver-loss', tx: 'عجز فضة', debit: 'عجز فضة', credit: 'فضة', weight: '2' }),
+  entry({ id: 'outside', date: '2026-02-01', debit: 'الخزنة', credit: 'ذهب 21', cash: '9999', weight: '99', arabicWeight: '99', karat: 21 }),
 ];
 
-const costResult = (entryId: string, patch: Partial<OperationCostResultV2>): OperationCostResultV2 => {
-  const source = entries.find(item => item.id === entryId)!;
-  return {
-    operationId: entryId,
-    classification: 'non_cost',
-    incomingStandardizedQuantityUnits: 0,
-    outgoingStandardizedQuantityUnits: 0,
-    incomingActualPhysicalWeightUnits: 0,
-    outgoingActualPhysicalWeightUnits: 0,
-    incomingAccessoryQuantityUnits: 0,
-    outgoingAccessoryQuantityUnits: 0,
-    incomingMetalCostMinor: 0,
-    incomingWorkmanshipCostMinor: 0,
-    outgoingMetalCostMinor: 0,
-    outgoingWorkmanshipCostMinor: 0,
-    incomingTotalCostMinor: 0,
-    outgoingTotalCostMinor: 0,
-    metalCogsMinor: 0,
-    workmanshipCogsMinor: 0,
-    totalCogsMinor: 0,
-    saleAmountMinor: 0,
-    profitMinor: null,
-    adjustmentGainMinor: 0,
-    adjustmentLossMinor: 0,
-    calculationVersion: 'phase5-wac-v1',
-    entry: source,
-    ...patch,
+type LegacyCategory = { total: number; totalWeight: number; details: { name: string; val: number; weight: number }[] };
+const legacyDimensionFromParent = (entries: Entry[], metric: IncomeStatementMetric) => {
+  const revenueCats: Record<string, LegacyCategory> = {};
+  const expenseCats: Record<string, LegacyCategory> = {};
+  let totalRev = 0;
+  let totalExp = 0;
+  const add = (cats: Record<string, LegacyCategory>, category: string, name: string, val: number, weight: number) => {
+    if (!cats[category]) cats[category] = { total: 0, totalWeight: 0, details: [] };
+    const existing = cats[category].details.find(detail => detail.name === name);
+    if (existing) { existing.val += val; existing.weight += weight; }
+    else cats[category].details.push({ name, val, weight });
+    cats[category].total += val;
+    cats[category].totalWeight += weight;
   };
+
+  entries.forEach(item => {
+    const val = getMetricValue(item, metric, accounts);
+    if (val === 0) return;
+    const isSilver = (item.tx || '').includes('فضة') || item.debit.includes('فضة') || item.credit.includes('فضة');
+    const rawWeight = isSilver ? parseFloat(item.weight || '0') : parseFloat(item.arabicWeight || item.weight || '0');
+    const weight = Number.isNaN(rawWeight) ? 0 : rawWeight;
+    const debit = getAccountTypeDetails(item.debit, accounts);
+    const credit = getAccountTypeDetails(item.credit, accounts);
+
+    if (belongsToMetric(item.credit, metric, accounts) && credit.main === 'revenue') { add(revenueCats, credit.sub, item.credit, val, weight); totalRev += val; }
+    if (belongsToMetric(item.debit, metric, accounts) && debit.main === 'expenses') { add(expenseCats, debit.sub, item.debit, val, weight); totalExp += val; }
+
+    if (metric === 'cash') {
+      const product = (name: string) => belongsToMetric(name, 'gold', accounts) || belongsToMetric(name, 'silver', accounts) || belongsToMetric(name, 'accs', accounts);
+      if (belongsToMetric(item.debit, 'cash', accounts) && product(item.credit) && credit.main === 'assets') {
+        add(revenueCats, 'إيراد مبيعات تجارة', `مبيعات نقدية (${item.credit})`, val, weight); totalRev += val;
+      }
+      if (belongsToMetric(item.credit, 'cash', accounts) && product(item.debit) && debit.main === 'assets') {
+        add(expenseCats, 'تكلفة مشتريات تجارة', `مشتريات نقدية (${item.debit})`, val, weight); totalExp += val;
+      }
+    } else {
+      if (belongsToMetric(item.debit, metric, accounts) && debit.main === 'assets' && !belongsToMetric(item.credit, metric, accounts)) {
+        const category = metric === 'accs' ? 'وارد عدد (مشتريات ملحقات)' : `وزن ${metric === 'gold' ? 'ذهب' : 'فضة'} وارد (مشتريات)`;
+        add(revenueCats, category, `${metric === 'accs' ? 'شراء عدد' : 'شراء وزن'} (${item.debit})`, val, weight); totalRev += val;
+      }
+      if (belongsToMetric(item.credit, metric, accounts) && credit.main === 'assets' && !belongsToMetric(item.debit, metric, accounts)) {
+        const category = metric === 'accs' ? 'صادر عدد (مبيعات ملحقات)' : `وزن ${metric === 'gold' ? 'ذهب' : 'فضة'} صادر (مبيعات)`;
+        add(expenseCats, category, `${metric === 'accs' ? 'بيع عدد' : 'بيع وزن'} (${item.credit})`, val, weight); totalExp += val;
+      }
+    }
+  });
+  [revenueCats, expenseCats].forEach(cats => Object.values(cats).forEach(cat => cat.details.sort((a, b) => Math.abs(b.val) - Math.abs(a.val))));
+  return { revenue: { categories: revenueCats, total: totalRev }, expenses: { categories: expenseCats, total: totalExp }, net: totalRev - totalExp };
 };
 
-const timeline: InventoryCostTimeline = {
-  calculationVersion: 'phase5-wac-v1',
-  orderedOperationIds: entries.map(item => item.id!),
-  results: [
-    costResult('sale', { classification: 'sale', sourceInventoryAccountId: 'gold', inventoryAccountId: 'gold', totalCogsMinor: 60000, metalCogsMinor: 60000, saleAmountMinor: 150000, profitMinor: 90000 }),
-    costResult('shortage', { classification: 'shortage', sourceInventoryAccountId: 'gold', inventoryAccountId: 'gold', adjustmentLossMinor: 15000 }),
-    costResult('outside', { classification: 'sale', sourceInventoryAccountId: 'gold', inventoryAccountId: 'gold', totalCogsMinor: 30000, saleAmountMinor: 99900, profitMinor: 69900 }),
-  ],
-  resultsByOperationId: {},
-  finalStates: {},
-  diagnostics: [],
-  orderingDiagnostics: [],
-  historicalInventoryOverlays: [],
-  valid: true,
-};
-timeline.resultsByOperationId = Object.fromEntries(timeline.results.map(result => [result.operationId, result]));
-
-const options = { enableFinancialProjection: true, costTimeline: timeline };
-
-describe('central income statement projection', () => {
-  it('keeps journal, ledger, trial balance, and income statement on the same balances', () => {
-    const legs = buildLegacyLedgerLegs(entries, accounts, [], options).filter(leg => leg.dimension === 'cash' && leg.date >= '2026-01-01' && leg.date <= '2026-01-31');
-    expect(legs.reduce((sum, leg) => sum + (leg.side === 'debit' ? leg.amount : -leg.amount), 0)).toBe(0);
-
-    const inventoryLedger = buildLedgerReport(entries, accounts, accounts[1], 'cash', '2026-01-01', '2026-01-31', [], options);
-    expect(inventoryLedger.totalDebit).toBe(1000);
-    expect(inventoryLedger.totalCredit).toBe(750);
-    expect(inventoryLedger.openingBalance).toBe(-300);
-    expect(inventoryLedger.closingBalance).toBe(-50);
-
-    const trial = buildTrialBalanceReport(entries, accounts, 'cash', '2026-01-01', '2026-01-31', [], options);
-    const trialInventory = trial.groups.flatMap(group => group.rows).find(row => row.entityId === 'product:gold');
-    expect(trialInventory).toMatchObject({ periodDebit: inventoryLedger.totalDebit, periodCredit: inventoryLedger.totalCredit, closingCredit: Math.abs(inventoryLedger.closingBalance) });
-    expect(trial.balanced).toBe(true);
-
-    const income = buildIncomeStatementReport(entries, accounts, '2026-01-01', '2026-01-31', [], timeline);
-    expect(income.revenue.total).toBe(1500);
-    expect(income.cogs.total).toBe(600);
-    expect(income.grossProfit).toBe(900);
-    expect(income.operatingExpenses.total).toBe(250);
-    expect(income.operatingProfit).toBe(650);
-    expect(income.trialBalance.groups).toEqual(trial.groups);
+describe('income statement parent-regression', () => {
+  it('matches the parent UI algorithm for every shop dimension, total, net result, and period', () => {
+    const periodEntries = dataset.filter(item => item.date >= '2026-01-01' && item.date <= '2026-01-31');
+    const oldResult = {
+      startDate: '2026-01-01', endDate: '2026-01-31',
+      cash: legacyDimensionFromParent(periodEntries, 'cash'),
+      gold: legacyDimensionFromParent(periodEntries, 'gold'),
+      silver: legacyDimensionFromParent(periodEntries, 'silver'),
+      accs: legacyDimensionFromParent(periodEntries, 'accs'),
+    };
+    const centralResult = buildIncomeStatementReport(dataset, accounts, '2026-01-01', '2026-01-31');
+    expect(centralResult).toEqual(oldResult);
   });
 
-  it('excludes capital, drawings, purchases, outside-period operations, and duplicate sale recognition from profit', () => {
-    const income = buildIncomeStatementReport(entries, accounts, '2026-01-01', '2026-01-31', [], timeline);
-    expect(income.revenue.lines.map(line => line.accountName)).toEqual(['إيراد مبيعات المخزون']);
-    expect(income.revenue.total).not.toBe(1500 + 5000 + 999);
-    expect(income.operatingExpenses.lines.map(line => line.accountName)).toContain('rent expense');
-    expect(income.operatingExpenses.lines.map(line => line.accountName)).toContain('خسائر تسوية عجز المخزون');
-    expect(income.operatingExpenses.lines.map(line => line.accountName)).not.toContain('drawings');
-    expect(income.cogs.total).toBe(600);
-  });
-
-  it('does not estimate COGS when the weighted-average timeline is unavailable', () => {
-    const income = buildIncomeStatementReport(entries, accounts, '2026-01-01', '2026-01-31');
-    expect(income.cogs.status).toBe('missing_cost_timeline');
-    expect(income.grossProfit).toBeNull();
-    expect(income.operatingProfit).toBeNull();
-  });
-
-  it('projects gold, silver, and accessory income tabs from central trial-balance dimensions', () => {
-    const dimensionalAccounts: Account[] = [
-      ...accounts,
-      { id: 'silver', name: 'silver inventory', mainType: 'asset', subType: 'inventory', balanceNature: 'silver', type: 'silver', metal: 'silver', is_inventory: true, userId: 'u' },
-      { id: 'accessory', name: 'accessory inventory', mainType: 'asset', subType: 'inventory', balanceNature: 'piece', type: 'accessory', is_inventory: true, userId: 'u' },
-      { id: 'gold-surplus', name: 'gold surplus', mainType: 'revenue', subType: 'surplus', balanceNature: 'gold', type: 'other', userId: 'u' },
-      { id: 'silver-surplus', name: 'silver surplus', mainType: 'revenue', subType: 'surplus', balanceNature: 'silver', type: 'other', userId: 'u' },
-      { id: 'accessory-surplus', name: 'accessory surplus', mainType: 'revenue', subType: 'surplus', balanceNature: 'piece', type: 'other', userId: 'u' },
-    ];
-    const dimensionalEntries = [
-      entry({ id: 'gold-surplus-entry', operationKind: 'adjustment', debit: 'gold inventory', debitAccountId: 'gold', credit: 'gold surplus', creditAccountId: 'gold-surplus', weight: '2', arabicWeight: '2', karat: 21 }),
-      entry({ id: 'silver-surplus-entry', operationKind: 'adjustment', debit: 'silver inventory', debitAccountId: 'silver', credit: 'silver surplus', creditAccountId: 'silver-surplus', weight: '3' }),
-      entry({ id: 'accessory-surplus-entry', operationKind: 'adjustment', debit: 'accessory inventory', debitAccountId: 'accessory', credit: 'accessory surplus', creditAccountId: 'accessory-surplus', weight: '5', count: '5' }),
-    ];
-
-    expect(buildIncomeStatementReport(dimensionalEntries, dimensionalAccounts, '2026-01-01', '2026-01-31', [], null, 'gold').revenue.total).toBe(2);
-    expect(buildIncomeStatementReport(dimensionalEntries, dimensionalAccounts, '2026-01-01', '2026-01-31', [], null, 'silver').revenue.total).toBe(3);
-    expect(buildIncomeStatementReport(dimensionalEntries, dimensionalAccounts, '2026-01-01', '2026-01-31', [], null, 'quantity').revenue.total).toBe(5);
+  it('keeps the parent all-period boundaries while excluding no entries', () => {
+    const report = buildIncomeStatementReport(dataset, accounts);
+    expect(report.startDate).toBe('2026-01-10');
+    expect(report.endDate).toBe('2026-02-01');
+    expect(report.cash).toEqual(legacyDimensionFromParent(dataset, 'cash'));
+    expect(report.gold).toEqual(legacyDimensionFromParent(dataset, 'gold'));
+    expect(report.silver).toEqual(legacyDimensionFromParent(dataset, 'silver'));
+    expect(report.accs).toEqual(legacyDimensionFromParent(dataset, 'accs'));
   });
 });
