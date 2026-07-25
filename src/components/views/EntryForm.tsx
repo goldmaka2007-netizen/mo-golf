@@ -21,10 +21,12 @@ import { buildGoldEquivalent21Audit, canCalculateGoldEquivalent21, inferGoldKara
 import { isQuantityAlignedToStep } from '../../lib/weightedAverageCost';
 import { buildOpeningCostConfig } from '../../lib/openingCostConfig';
 import { rebuildInventoryCostTimeline } from '../../lib/inventoryCostEngine';
+import { approvedHistoricalInventoryOverlaysForAccounts } from '../../lib/historicalInventoryOverlay';
 import { areOperationWritesLocked } from '../../lib/costRecalculation';
 import { isGoldEquivalentEntry } from '../../utils/accountLogic';
 import { AccountSearchSelect } from '../ui/AccountSearchSelect';
 import { resolveEntryIdentity } from '../../lib/entryIdentity';
+import { validateEntryNumberingPolicy } from '../../lib/entryValidation';
 import { OperationSelector } from '../ui/OperationSelector';
 import { buildAccountRegistry } from '../../lib/accountRegistry';
 import { buildCanonicalPosting } from '../../lib/postingMatrix';
@@ -376,6 +378,12 @@ export const EntryForm = React.memo(() => {
     }
     Object.assign(entry, identity.value);
 
+    const numberingValidation = validateEntryNumberingPolicy(entry);
+    if (!numberingValidation.valid) {
+      setGlobalError(`رفض سياسة ترقيم القيد: ${numberingValidation.issues.map(issue => issue.message).join(' — ')}`);
+      return;
+    }
+
     // The legacy engine remains authoritative, while the central matrix acts
     // as a save-time guard once the shadow registry has been initialized.
     if (canonicalAccounts.length > 0) {
@@ -412,7 +420,9 @@ export const EntryForm = React.memo(() => {
 
       const pendingEntry = { ...entry, id: '__pending_cost_validation__' } as Entry;
       const openingConfig = buildOpeningCostConfig(openingCostConfig);
-      const costValidation = rebuildInventoryCostTimeline([...entries, pendingEntry], accountsDb, openingConfig);
+      const costValidation = rebuildInventoryCostTimeline([...entries, pendingEntry], accountsDb, openingConfig, {
+        historicalInventoryOverlayDirectives: approvedHistoricalInventoryOverlaysForAccounts(accountsDb),
+      });
       if (!costValidation.valid) {
         const diagnostic = costValidation.diagnostics[0];
         setGlobalError(`رفض محرك التكلفة: ${diagnostic?.code || 'unknown'} — ${diagnostic?.message || 'تعذر اعتماد تكلفة العملية.'}`);
