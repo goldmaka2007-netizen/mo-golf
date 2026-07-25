@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { Calendar, CheckCircle2, ChevronLeft, ChevronRight, ClipboardPaste, Database, Download, Scale, TrendingUp, Wallet } from 'lucide-react';
+import { Calendar, CheckCircle2, ChevronLeft, ChevronRight, ClipboardPaste, Database, Download, PlusCircle, Scale, TrendingUp, Wallet } from 'lucide-react';
 import { format } from 'date-fns';
 import * as XLSX from 'xlsx-js-style';
 import { AccountingLeg } from '../../lib/canonicalAccounting';
@@ -19,7 +19,7 @@ const unique = (items: string[]) => [...new Set(items)].filter(Boolean);
 const amount = (value: number, dimension: DailyJournalDimension) => value.toLocaleString(undefined, dimension === 'cash' ? { maximumFractionDigits: 0 } : { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 
 export const DailyJournalView = React.memo(() => {
-  const { entries, setEditingEntry, accountsDb } = useAppStore();
+  const { entries, setEditingEntry, accountsDb, setView } = useAppStore();
   const [selectedDate, setSelectedDate] = useState('');
 
   useEffect(() => {
@@ -48,6 +48,11 @@ export const DailyJournalView = React.memo(() => {
     return next;
   }, [rawEntries, legsByEntry]);
 
+  const openEntryForSelectedDate = () => {
+    const targetDate = selectedDate || format(new Date(), 'yyyy-MM-dd');
+    setEditingEntry({ date: targetDate });
+    setView('entry');
+  };
   const exportToExcel = () => {
     const summary = dimensions.map(meta => {
       const data = report.dimensions[meta.id];
@@ -71,6 +76,10 @@ export const DailyJournalView = React.memo(() => {
         <input type="date" value={selectedDate} onChange={event => setSelectedDate(event.target.value)} className="h-11 rounded-xl border border-[#1a1e2a] bg-[#080a0f] px-3 text-center text-sm font-black text-[#ddd8cc] outline-none [color-scheme:dark]" />
         <button type="button" onClick={() => { const date = new Date(selectedDate); date.setDate(date.getDate() + 1); setSelectedDate(format(date, 'yyyy-MM-dd')); }} className="flex h-11 items-center justify-center rounded-xl border border-[#1a1e2a] bg-[#080a0f] text-[#ddd8cc]"><ChevronLeft className="h-5 w-5" /></button>
       </div>
+      <button type="button" onClick={openEntryForSelectedDate} className="mt-3 flex min-h-12 w-full items-center justify-center gap-2 rounded-xl bg-[#c9a84c] px-4 py-3 text-sm font-black text-[#080a0f] shadow-lg shadow-[#c9a84c]/10 transition-all active:scale-[0.99] focus:outline-none focus:ring-2 focus:ring-[#f5f1e8]">
+        <PlusCircle className="h-4 w-4" />
+        {'إضافة عملية لهذا اليوم'}
+      </button>
     </div>
 
     {import.meta.env.DEV && report.diagnostics.groups.length > 0 && <DevelopmentDiagnostics groups={report.diagnostics.groups} total={report.diagnostics.entries.length} />}

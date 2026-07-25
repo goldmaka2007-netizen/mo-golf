@@ -152,7 +152,7 @@ export const EntryForm = React.memo(() => {
       setFormData(prev => ({
         ...prev,
         ...editingEntry,
-        date: format(new Date(), 'yyyy-MM-dd'), // Always use today for shortcuts
+        date: editingEntry.date || format(new Date(), 'yyyy-MM-dd'),
         invoiceNumber: generateInvoiceNumber(editingEntry.tx || '')
       }));
       
