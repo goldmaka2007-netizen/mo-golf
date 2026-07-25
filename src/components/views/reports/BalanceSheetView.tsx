@@ -10,185 +10,26 @@ import {
   Package,
   Download
 } from 'lucide-react';
-import { Entry, AccountNature } from '../../../types';
+import { Entry } from '../../../types';
 import { useAppStore } from '../../../store';
 import { cn } from '../../../lib/utils';
-import { getDynamicAccountNature, belongsToMetric, getMetricValue, getAccountTypeDetails, getMetricActualValue } from '../../../utils/accountLogic';
-import { parseWeight } from '../../../lib/accounting';
+import { buildIncomeStatementReport } from '../../../lib/incomeStatementReport';
+import { buildEquityStatementReport } from '../../../lib/equityStatementReport';
+import { buildFinancialPositionReport } from '../../../lib/financialPositionReport';
 import { exportToExcel } from '../../../utils/exportUtils';
-import { calculateGoldOwnershipPosition } from '../../../lib/engine';
 
 type LedgerType = 'cash' | 'gold' | 'silver' | 'accs';
 
 export const BalanceSheetView = React.memo(({ entries }: { entries: Entry[] }) => {
-  const { accountCategories, accountsDb } = useAppStore();
+  const { accountsDb } = useAppStore();
   const [activeTab, setActiveTab] = useState<LedgerType>('gold');
 
-  const goldPosition = useMemo(() => calculateGoldOwnershipPosition(entries, accountsDb), [entries, accountsDb]);
-
   const balanceSheet = useMemo(() => {
-    const createLedger = (metric: LedgerType) => {
-      const assetsCats: Record<string, { total: number; totalCount: number; details: { name: string; val: number; actualVal: number; countVal: number }[] }> = {};
-      const liabilitiesCats: Record<string, { total: number; totalCount: number; details: { name: string; val: number; actualVal: number; countVal: number }[] }> = {};
-      const equityCats: Record<string, { total: number; totalCount: number; details: { name: string; val: number; actualVal: number; countVal: number }[] }> = {};
-      
-      let totalAss = 0;
-      let totalLiab = 0;
-      let totalEquity = 0;
-
-      // 1. Accumulate Account Balances
-      const accountBalances: Record<string, number> = {};
-      const actualBalances: Record<string, number> = {};
-
-      entries.forEach(entry => {
-        const val = getMetricValue(entry, metric, accountsDb);
-        const actualVal = (metric === 'gold' || metric === 'silver' || metric === 'accs') 
-          ? getMetricActualValue(entry, metric as any, accountsDb) 
-          : val;
-
-        if (val === 0 && actualVal === 0) return;
-
-        if (belongsToMetric(entry.debit, metric, accountsDb)) {
-          accountBalances[entry.debit] = (accountBalances[entry.debit] || 0) + val;
-          actualBalances[entry.debit] = (actualBalances[entry.debit] || 0) + actualVal;
-        }
-        if (belongsToMetric(entry.credit, metric, accountsDb)) {
-          accountBalances[entry.credit] = (accountBalances[entry.credit] || 0) - val;
-          actualBalances[entry.credit] = (actualBalances[entry.credit] || 0) - actualVal;
-        }
-      });
-
-      // 2. Classify Accounts
-      Object.entries(accountBalances).forEach(([account, balance]) => {
-        const actualBalance = actualBalances[account] || 0;
-        
-        let correctedBalance = balance;
-        // Fix for ghost balances: if the physical weight is 0 (or close to 0 due to precision), 
-        // force the Arabic conversion balance to 0 so we don't end up with e.g. -0.03 in balance sheet.
-        if ((metric === 'gold' || metric === 'silver') && Math.abs(actualBalance) < 0.001) {
-            correctedBalance = 0;
-        }
-
-        if (Math.abs(correctedBalance) < 0.00001 && Math.abs(actualBalance) < 0.00001) return;
-        
-        const details = getAccountTypeDetails(account, accountsDb);
-        let finalVal = 0;
-        let finalActual = 0;
-        let targetGroup: any = null;
-
-        if (details.main === 'assets') {
-          targetGroup = assetsCats;
-          finalVal = correctedBalance;
-          finalActual = actualBalance;
-        } else if (details.main === 'liabilities') {
-          targetGroup = liabilitiesCats;
-          finalVal = -correctedBalance;
-          finalActual = -actualBalance;
-        } else if (details.main === 'equity') {
-          targetGroup = equityCats;
-          finalVal = -correctedBalance;
-          finalActual = -actualBalance;
-        }
-
-        if (targetGroup) {
-          if (!targetGroup[details.sub]) targetGroup[details.sub] = { total: 0, totalCount: 0, details: [] };
-          
-          const displayVal = finalVal;
-
-          targetGroup[details.sub].details.push({ 
-            name: account, 
-            val: displayVal, 
-            actualVal: finalActual, 
-            countVal: 0 
-          });
-          targetGroup[details.sub].total += displayVal;
-          
-          if (details.main === 'assets') totalAss += displayVal;
-          else if (details.main === 'liabilities') totalLiab += displayVal;
-          else totalEquity += displayVal;
-        }
-      });
-
-      // 3. Calculate Net Profit/Loss (Consistent with Income/Equity Statements)
-      let totalRev = 0;
-      let totalExp = 0;
-
-      entries.forEach(entry => {
-        const val = getMetricValue(entry, metric, accountsDb);
-        const actualVal = (metric === 'gold' || metric === 'silver' || metric === 'accs') 
-          ? getMetricActualValue(entry, metric as any, accountsDb) 
-          : val;
-          
-        if (val === 0 && actualVal === 0) return;
-
-        const debitDetails = getAccountTypeDetails(entry.debit, accountsDb);
-        const creditDetails = getAccountTypeDetails(entry.credit, accountsDb);
-        const currentVal = val;
-
-        // Standard Revenue/Expense
-        if (belongsToMetric(entry.credit, metric, accountsDb) && creditDetails.main === 'revenue') totalRev += currentVal;
-        if (belongsToMetric(entry.debit, metric, accountsDb) && debitDetails.main === 'expenses') totalExp += currentVal;
-
-        // Trade flows
-        if (metric === 'cash') {
-          const isGold = (acc: string) => belongsToMetric(acc, 'gold', accountsDb);
-          const isSilver = (acc: string) => belongsToMetric(acc, 'silver', accountsDb);
-          const isAccs = (acc: string) => belongsToMetric(acc, 'accs', accountsDb);
-          const isProduct = (acc: string) => isGold(acc) || isSilver(acc) || isAccs(acc);
-
-          if (belongsToMetric(entry.debit, 'cash', accountsDb) && isProduct(entry.credit) && creditDetails.main === 'assets') totalRev += val;
-          if (belongsToMetric(entry.credit, 'cash', accountsDb) && isProduct(entry.debit) && debitDetails.main === 'assets') totalExp += val;
-        } else if (metric === 'gold' || metric === 'silver') {
-          if (belongsToMetric(entry.debit, metric, accountsDb) && debitDetails.main === 'assets' && !belongsToMetric(entry.credit, metric, accountsDb)) totalRev += currentVal;
-          if (belongsToMetric(entry.credit, metric, accountsDb) && creditDetails.main === 'assets' && !belongsToMetric(entry.debit, metric, accountsDb)) totalExp += currentVal;
-        } else if (metric === 'accs') {
-          // Accessories trade (if any accessories weight/count is tracked as asset)
-          if (belongsToMetric(entry.debit, 'accs', accountsDb) && debitDetails.main === 'assets' && !belongsToMetric(entry.credit, 'accs', accountsDb)) totalRev += currentVal;
-          if (belongsToMetric(entry.credit, 'accs', accountsDb) && creditDetails.main === 'assets' && !belongsToMetric(entry.debit, 'accs', accountsDb)) totalExp += currentVal;
-        }
-      });
-
-      const metricProLoss = totalRev - totalExp;
-
-      // Inject Net Profit into Equity
-      if (Math.abs(metricProLoss) > 0.00001) {
-        const label = metricProLoss >= 0 ? "صافي نتائج أعمال الفترة (أرباح)" : "صافي نتائج أعمال الفترة (خسائر)";
-        if (!equityCats["نتائج الأعمال"]) equityCats["نتائج الأعمال"] = { total: 0, totalCount: 0, details: [] };
-        equityCats["نتائج الأعمال"].details.push({ 
-          name: label, 
-          val: metricProLoss, 
-          actualVal: metricProLoss, // Profits are usually in the unified unit or just numeric
-          countVal: 0 
-        });
-        equityCats["نتائج الأعمال"].total += metricProLoss;
-        totalEquity += metricProLoss;
-      }
-
-      const sortCats = (cats: Record<string, { details: { val: number }[] }>) => {
-        Object.values(cats).forEach((cat) => {
-          cat.details.sort((a, b) => Math.abs(b.val) - Math.abs(a.val));
-        });
-      };
-
-      sortCats(assetsCats);
-      sortCats(liabilitiesCats);
-      sortCats(equityCats);
-
-      return {
-        assets: { categories: assetsCats, total: totalAss, totalCount: 0 },
-        liabilities: { categories: liabilitiesCats, total: totalLiab, totalCount: 0 },
-        equity: { categories: equityCats, total: totalEquity, totalCount: 0 },
-        uncategorized: []
-      };
-    };
-
-    return {
-      cash: createLedger('cash'),
-      gold: createLedger('gold'),
-      silver: createLedger('silver'),
-      accs: createLedger('accs')
-    };
+    const incomeStatement = buildIncomeStatementReport(entries, accountsDb);
+    const equityStatement = buildEquityStatementReport(entries, accountsDb, incomeStatement);
+    return buildFinancialPositionReport(entries, accountsDb, equityStatement);
   }, [entries, accountsDb]);
+  const goldPosition = balanceSheet.goldPosition;
 
   const handleExport = () => {
     const unitMap = { cash: 'ج.م', gold: 'جم عربي', silver: 'جرام', accs: 'قطعة' };
