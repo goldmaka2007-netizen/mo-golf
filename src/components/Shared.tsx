@@ -1,8 +1,8 @@
 import React, { useState } from 'react';
 import { motion } from 'framer-motion';
-import { 
-  ChevronLeft, 
-  CheckCircle2, 
+import {
+  ChevronLeft,
+  CheckCircle2,
   ClipboardPaste,
   Wallet,
   Scale,
@@ -54,7 +54,7 @@ export function ActionButton({ onClick, icon, title, sub, variant }: { onClick: 
   };
 
   return (
-    <button 
+    <button
       onClick={onClick}
       className={cn(
         "w-full p-5 rounded-2xl border flex items-center gap-5 text-right transition-all active:scale-[0.98]",
@@ -116,20 +116,18 @@ export const EntryRow = React.memo(({ e, setEditingEntry }: { e: Entry, setEditi
   };
 
   return (
-    <button 
-      onClick={() => setEditingEntry(e)}
-      className="w-full bg-[#0e1018] border border-[#1a1e2a] rounded-2xl p-5 text-right hover:border-[#c9a84c33] transition-all active:scale-[0.99] relative overflow-hidden group"
-    >
+    <div className="w-full bg-[#0e1018] border border-[#1a1e2a] rounded-2xl text-right hover:border-[#c9a84c33] transition-all relative overflow-hidden group">
       <div className="absolute top-0 right-0 w-1 h-full bg-[#c9a84c00] group-hover:bg-[#c9a84c] transition-all" />
+      <button
+        type="button"
+        aria-label={`فتح القيد ${e.tx}`}
+        onClick={() => setEditingEntry(e)}
+        className="absolute inset-0 z-0 rounded-2xl focus:outline-none focus:ring-2 focus:ring-[#c9a84c]"
+      />
+      <div className="relative z-0 p-5 pr-16 pointer-events-none">
       <div className="flex justify-between items-start mb-2">
         <div className="flex items-center gap-2">
           <div className="text-sm font-bold text-[#c9a84c]">{e.tx}</div>
-          <button 
-            onClick={handleCopy}
-            className="p-1.5 rounded-lg bg-[#1a1e2a] text-[#5a5548] hover:text-[#c9a84c] transition-all opacity-0 group-hover:opacity-100"
-          >
-            {copied ? <CheckCircle2 className="w-3 h-3 text-[#6a9e6a]" /> : <ClipboardPaste className="w-3 h-3" />}
-          </button>
         </div>
         <div className="text-[10px] text-[#3a3530] font-bold">
           {(() => {
@@ -172,6 +170,14 @@ export const EntryRow = React.memo(({ e, setEditingEntry }: { e: Entry, setEditi
           )}
         </div>
       </div>
-    </button>
+      </div>
+      <button
+        type="button"
+        onClick={handleCopy}
+        className="absolute right-8 top-5 z-10 pointer-events-auto p-1.5 rounded-lg bg-[#1a1e2a] text-[#5a5548] hover:text-[#c9a84c] transition-all opacity-0 group-hover:opacity-100 focus:opacity-100 focus:outline-none focus:ring-2 focus:ring-[#c9a84c]"
+      >
+        {copied ? <CheckCircle2 className="w-3 h-3 text-[#6a9e6a]" /> : <ClipboardPaste className="w-3 h-3" />}
+      </button>
+    </div>
   );
 });
