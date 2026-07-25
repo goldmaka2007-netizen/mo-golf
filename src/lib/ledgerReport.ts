@@ -1,10 +1,10 @@
 import { Account, AccountNature, CanonicalAccountDefinition, Entry } from '../types';
 import { getEntryArabicWeight, getMerchantMetals, resolveOperationKind } from './engine';
 import { getDynamicAccountNature, getMetricActualValue, getMetricValue } from '../utils/accountLogic';
-import { buildLegacyLedgerLegs, legacyLedgerEntityId } from './legacyLedger';
+import { buildLegacyLedgerLegs, legacyLedgerEntityId, type LegacyLedgerBuildOptions } from './legacyLedger';
 import { splitLegsByPeriod } from './periodLegs';
 
-export type LedgerDimension = 'cash' | 'gold' | 'silver';
+export type LedgerDimension = 'cash' | 'gold' | 'silver' | 'quantity';
 export type GoldDisplayMode = 'equivalent21' | 'original';
 
 export interface LedgerRow {
@@ -42,11 +42,12 @@ const accountMatches = (entry: Entry, side: 'debit' | 'credit', account: Account
 /** Account metadata defines which dimensions an account may own. An entry's
  * cash/weight payload never grants a dimension to the other side. */
 const supportsDimension = (account: Account, dimension: LedgerDimension, _accounts: Account[], entries: Entry[] = []): boolean => {
-  if (account.type === 'accessory') return dimension === 'cash';
+  if (account.type === 'accessory') return dimension === 'quantity';
   // The inventory engine owns merchant metal classification, including legacy
   // merchants whose metal field was never migrated.
   if (account.type === 'merchant') {
     if (dimension === 'cash') return true;
+    if (dimension === 'quantity') return false;
     return getMerchantMetals(account, entries, _accounts).includes(dimension);
   }
   if (account.is_inventory || ['gold_product', 'gold_raw', 'gold_direct'].includes(account.type || '')) return dimension === 'gold';
@@ -69,9 +70,10 @@ const valueFor = (entry: Entry, account: Account, dimension: LedgerDimension, ac
   const resolved = entryWithMasterNames(entry, accounts);
   // Match the exact merchant-weight calculation used by processInventory. It
   // intentionally does not require the opposite side to be a metal account.
-  if (account.type === 'merchant' && dimension !== 'cash') {
+  if (account.type === 'merchant' && (dimension === 'gold' || dimension === 'silver')) {
     return getEntryArabicWeight(resolved, { ...account, metal: dimension });
   }
+  if (dimension === 'quantity') return getMetricValue(resolved, 'accs', accounts);
   return dimension === 'cash' ? getMetricValue(resolved, 'cash', accounts) : getMetricValue(resolved, dimension, accounts);
 };
 
@@ -93,13 +95,14 @@ export const getAvailableDimensions = (account: Account, entries: Entry[], accou
   else if (account.type === 'cash') configured.push('cash');
   else if (account.metal === 'gold' || ['gold_product', 'gold_raw', 'gold_direct'].includes(account.type ?? '')) configured.push('gold');
   else if (account.metal === 'silver' || account.type === 'silver') configured.push('silver');
-  else if (account.type !== 'accessory') {
+  else if (account.type === 'accessory') configured.push('quantity');
+  else {
     const nature = getDynamicAccountNature(account.name, accounts);
     if (nature === AccountNature.MIXED_GOLD) configured.push('cash', 'gold');
     if (nature === AccountNature.MIXED_SILVER) configured.push('cash', 'silver');
   }
   configured.forEach(dimension => historical.add(dimension));
-  return (['cash', 'gold', 'silver'] as const).filter(dimension => historical.has(dimension));
+  return (['cash', 'gold', 'silver', 'quantity'] as const).filter(dimension => historical.has(dimension));
 };
 
 export const buildLedgerReport = (
@@ -110,9 +113,10 @@ export const buildLedgerReport = (
   startDate: string,
   endDate: string,
   canonicalDefinitions?: CanonicalAccountDefinition[],
+  options: LegacyLedgerBuildOptions = {},
 ): LedgerReport => {
   const entityId = legacyLedgerEntityId(account);
-  const legs = buildLegacyLedgerLegs(entries, accounts, canonicalDefinitions)
+  const legs = buildLegacyLedgerLegs(entries, accounts, canonicalDefinitions, options)
     .filter(leg => leg.entityId === entityId && leg.dimension === dimension)
     .sort((a, b) => (a.date || '').localeCompare(b.date || ''));
   if (legs.length) {
@@ -144,13 +148,15 @@ export const getFilteredTotals = (rows: LedgerRow[]): Pick<LedgerReport, 'totalD
   totalCredit: rows.reduce((total, row) => total + row.credit, 0),
 });
 
-export const formatCash = (amount: number): string => `${amount.toLocaleString('en-US', { minimumFractionDigits: 0, maximumFractionDigits: 0 })} جنيه`;
-export const formatWeight = (amount: number): string => `${amount.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} جم`;
-export const formatLedgerAmount = (amount: number, dimension: LedgerDimension): string => dimension === 'cash' ? formatCash(amount) : formatWeight(amount);
+export const formatCash = (amount: number): string => `${amount.toLocaleString('en-US', { minimumFractionDigits: 0, maximumFractionDigits: 0 })} \u062c\u0646\u064a\u0647`;
+export const formatWeight = (amount: number): string => `${amount.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} \u062c\u0645`;
+export const formatQuantity = (amount: number): string => `${amount.toLocaleString('en-US', { minimumFractionDigits: 0, maximumFractionDigits: 3 })} \u0642\u0637\u0639\u0629`;
+export const formatLedgerAmount = (amount: number, dimension: LedgerDimension): string => dimension === 'cash' ? formatCash(amount) : dimension === 'quantity' ? formatQuantity(amount) : formatWeight(amount);
 
 export const formatBalance = (balance: number, dimension: LedgerDimension): string => {
-  const nature = balance < 0 ? 'دائن' : 'مدين';
-  return `${formatLedgerAmount(Math.abs(balance), dimension)} ${nature}`;
+  const nature = balance < 0 ? '\u062f\u0627\u0626\u0646' : '\u0645\u062f\u064a\u0646';
+  const magnitude = balance < 0 ? -balance : balance;
+  return `${formatLedgerAmount(magnitude, dimension)} ${nature}`;
 };
 
 const escapeCsv = (value: string): string => `"${value.replace(/"/g, '""')}"`;
@@ -162,37 +168,56 @@ export const buildLedgerCsv = (args: {
   const { accountName, dimension, startDate, endDate, report, rows, goldDisplayMode } = args;
   const amount = (row: LedgerRow, value: number): string =>
     goldDisplayMode === 'original' && dimension === 'gold' && row.originalWeight !== undefined && row.karat
-      ? `${formatLedgerAmount(row.originalWeight, 'gold')} — عيار ${row.karat}`
+      ? `${formatLedgerAmount(row.originalWeight, 'gold')} - \u0639\u064a\u0627\u0631 ${row.karat}`
       : formatLedgerAmount(value, dimension);
+  const labels = {
+    accountName: '\u0627\u0633\u0645 \u0627\u0644\u062d\u0633\u0627\u0628',
+    dimension: '\u0627\u0644\u0628\u0639\u062f',
+    cash: '\u0646\u0642\u062f\u064a\u0629',
+    gold: '\u0630\u0647\u0628',
+    silver: '\u0641\u0636\u0629',
+    quantity: '\u0639\u062f\u062f',
+    fromDate: '\u0645\u0646 \u062a\u0627\u0631\u064a\u062e',
+    toDate: '\u0625\u0644\u0649 \u062a\u0627\u0631\u064a\u062e',
+    openingBalance: '\u0631\u0635\u064a\u062f \u0623\u0648\u0644 \u0627\u0644\u0645\u062f\u0629',
+    totalDebit: '\u0625\u062c\u0645\u0627\u0644\u064a \u0627\u0644\u0645\u062f\u064a\u0646',
+    totalCredit: '\u0625\u062c\u0645\u0627\u0644\u064a \u0627\u0644\u062f\u0627\u0626\u0646',
+    closingBalance: '\u0631\u0635\u064a\u062f \u0622\u062e\u0631 \u0627\u0644\u0645\u062f\u0629',
+    date: '\u0627\u0644\u062a\u0627\u0631\u064a\u062e',
+    operationNumber: '\u0631\u0642\u0645 \u0627\u0644\u0639\u0645\u0644\u064a\u0629',
+    description: '\u0627\u0644\u0628\u064a\u0627\u0646',
+    debit: '\u0645\u062f\u064a\u0646',
+    credit: '\u062f\u0627\u0626\u0646',
+    balance: '\u0627\u0644\u0631\u0635\u064a\u062f',
+  } as const;
+  const dimensionLabel = dimension === 'cash' ? labels.cash : dimension === 'gold' ? labels.gold : dimension === 'silver' ? labels.silver : labels.quantity;
   const metadata = [
-    ['اسم الحساب', accountName], ['البعد', dimension === 'cash' ? 'نقدية' : dimension === 'gold' ? 'ذهب' : 'فضة'],
-    ['من تاريخ', startDate], ['إلى تاريخ', endDate], ['رصيد أول المدة', formatBalance(report.openingBalance, dimension)],
-    ['إجمالي المدين', formatLedgerAmount(report.totalDebit, dimension)], ['إجمالي الدائن', formatLedgerAmount(report.totalCredit, dimension)],
-    ['رصيد آخر المدة', formatBalance(report.closingBalance, dimension)], [],
+    [labels.accountName, accountName], [labels.dimension, dimensionLabel],
+    [labels.fromDate, startDate], [labels.toDate, endDate], [labels.openingBalance, formatBalance(report.openingBalance, dimension)],
+    [labels.totalDebit, formatLedgerAmount(report.totalDebit, dimension)], [labels.totalCredit, formatLedgerAmount(report.totalCredit, dimension)],
+    [labels.closingBalance, formatBalance(report.closingBalance, dimension)], [],
   ];
   const lines = metadata.map(row => row.map(cell => escapeCsv(cell)).join(','));
-  lines.push(['التاريخ', 'رقم العملية', 'البيان', 'مدين', 'دائن', 'الرصيد'].map(escapeCsv).join(','));
-  lines.push(['', '', 'رصيد أول المدة', '', '', formatBalance(report.openingBalance, dimension)].map(escapeCsv).join(','));
+  lines.push([labels.date, labels.operationNumber, labels.description, labels.debit, labels.credit, labels.balance].map(escapeCsv).join(','));
+  lines.push(['', '', labels.openingBalance, '', '', formatBalance(report.openingBalance, dimension)].map(escapeCsv).join(','));
   rows.forEach(row => lines.push([
-    row.date, row.operationNumber, `${row.operationType} — ${row.oppositeAccount}`,
+    row.date, row.operationNumber, `${row.operationType} - ${row.oppositeAccount}`,
     amount(row, row.debit), amount(row, row.credit), formatBalance(row.balance, dimension),
   ].map(escapeCsv).join(',')));
   return `\uFEFF${lines.join('\r\n')}`;
 };
 
 export const getAccountGroup = (account: Account): string => {
-  if (account.type === 'cash') return 'الخزنة';
-  if (account.type === 'merchant') return 'التجار';
-  if (account.type === 'accessory') return 'الأصناف — ملحقات';
-  if (account.metal === 'gold') return 'الأصناف — ذهب';
-  if (account.metal === 'silver') return 'الأصناف — فضة';
-  if (['revenue', 'revenues', 'إيرادات', 'الإيرادات', 'ايرادات', 'الايرادات'].includes(account.mainType)) return 'الإيرادات';
-  if (['expense', 'expenses', 'مصروفات', 'المصروفات'].includes(account.mainType)) return 'المصروفات';
-  if (['equity', 'حقوق ملكية', 'حقوق الملكية'].includes(account.mainType)) return 'حقوق الملكية';
-  return 'الأصناف';
-};
-
-export const getAccountNature = (account: Account, accounts: Account[]): AccountNature => {
+  if (account.type === 'cash') return '\u0627\u0644\u062e\u0632\u0646\u0629';
+  if (account.type === 'merchant') return '\u0627\u0644\u062a\u062c\u0627\u0631';
+  if (account.type === 'accessory') return '\u0627\u0644\u0623\u0635\u0646\u0627\u0641 - \u0645\u0644\u062d\u0642\u0627\u062a';
+  if (account.metal === 'gold') return '\u0627\u0644\u0623\u0635\u0646\u0627\u0641 - \u0630\u0647\u0628';
+  if (account.metal === 'silver') return '\u0627\u0644\u0623\u0635\u0646\u0627\u0641 - \u0641\u0636\u0629';
+  if (['revenue', 'revenues', '\u0625\u064a\u0631\u0627\u062f\u0627\u062a', '\u0627\u0644\u0625\u064a\u0631\u0627\u062f\u0627\u062a', '\u0627\u064a\u0631\u0627\u062f\u0627\u062a', '\u0627\u0644\u0627\u064a\u0631\u0627\u062f\u0627\u062a'].includes(account.mainType)) return '\u0627\u0644\u0625\u064a\u0631\u0627\u062f\u0627\u062a';
+  if (['expense', 'expenses', '\u0645\u0635\u0631\u0648\u0641\u0627\u062a', '\u0627\u0644\u0645\u0635\u0631\u0648\u0641\u0627\u062a'].includes(account.mainType)) return '\u0627\u0644\u0645\u0635\u0631\u0648\u0641\u0627\u062a';
+  if (['equity', '\u062d\u0642\u0648\u0642 \u0645\u0644\u0643\u064a\u0629', '\u062d\u0642\u0648\u0642 \u0627\u0644\u0645\u0644\u0643\u064a\u0629'].includes(account.mainType)) return '\u062d\u0642\u0648\u0642 \u0627\u0644\u0645\u0644\u0643\u064a\u0629';
+  return '\u0627\u0644\u0623\u0635\u0646\u0627\u0641';
+};export const getAccountNature = (account: Account, accounts: Account[]): AccountNature => {
   const found = accounts.find(item => getAccountKey(item) === getAccountKey(account));
   return found?.metal === 'gold' ? AccountNature.GOLD : found?.metal === 'silver' ? AccountNature.SILVER : AccountNature.CASH;
 };
@@ -256,3 +281,4 @@ export const buildLedgerAccountSelection = (accounts: Account[], search = ''): L
   selected.forEach(entity => grouped.set(entity.primaryGroup, [...(grouped.get(entity.primaryGroup) || []), entity]));
   return [...grouped].map(([label, groupAccounts]) => ({ id: label, label, accounts: groupAccounts }));
 };
+

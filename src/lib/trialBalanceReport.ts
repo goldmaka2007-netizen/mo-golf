@@ -1,6 +1,6 @@
 import { Account, CanonicalAccountDefinition, Entry } from '../types';
 import { formatLedgerAmount, LedgerDimension } from './ledgerReport';
-import { buildLegacyLedgerLegs } from './legacyLedger';
+import { buildLegacyLedgerLegs, type LegacyLedgerBuildOptions } from './legacyLedger';
 import { splitLegsByPeriod } from './periodLegs';
 
 export type TrialBalanceGroupId = 'assets' | 'liabilities' | 'equity' | 'revenue' | 'expenses';
@@ -48,8 +48,8 @@ export const getTrialBalanceDescription = (account: Account): string => {
   const group = groupMeta(account.mainType).id;
   return group === 'revenue' ? '\u0625\u064a\u0631\u0627\u062f' : group === 'expenses' ? '\u0645\u0635\u0631\u0648\u0641' : group === 'equity' ? arabic.equity : group === 'liabilities' ? arabic.liability : arabic.asset;
 };
-export const buildTrialBalanceReport = (entries: Entry[], accounts: Account[], dimension: LedgerDimension, startDate: string, endDate: string, canonicalDefinitions?: CanonicalAccountDefinition[]): TrialBalanceReport => {
-  const legs = buildLegacyLedgerLegs(entries, accounts, canonicalDefinitions).filter(leg => leg.dimension === dimension);
+export const buildTrialBalanceReport = (entries: Entry[], accounts: Account[], dimension: LedgerDimension, startDate: string, endDate: string, canonicalDefinitions?: CanonicalAccountDefinition[], options: LegacyLedgerBuildOptions = {}): TrialBalanceReport => {
+  const legs = buildLegacyLedgerLegs(entries, accounts, canonicalDefinitions, options).filter(leg => leg.dimension === dimension);
   const groupRows = new Map<TrialBalanceGroupId, TrialBalanceRow[]>();
   const entities = [...new Map(legs.map(leg => [leg.entityId, leg.account])).values()];
   entities.forEach((entity, order) => {
