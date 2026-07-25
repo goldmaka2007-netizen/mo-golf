@@ -52,3 +52,8 @@ firebase-blueprint.json
 /tx*_*.md
 /ui_console_issues.md
 /unresolved_business_decisions.md
+
+# Local accounting architecture/reconciliation working notes
+/schema_mapping.json
+/accounting_reconciliation.md
+/repository_accounting_architecture_map.md
