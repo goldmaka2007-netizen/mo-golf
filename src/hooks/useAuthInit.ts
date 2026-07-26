@@ -3,6 +3,7 @@ import { onAuthStateChanged, User } from 'firebase/auth';
 import { doc, getDoc, setDoc } from 'firebase/firestore';
 import { auth, db, signIn } from '../firebase';
 import { useAppStore } from '../store';
+import { isAdminEmail } from '../lib/adminAccess';
 
 export const useAuthInit = () => {
   const { setUser, setIsAuthReady } = useAppStore();
@@ -19,11 +20,10 @@ export const useAuthInit = () => {
       const userRef = doc(db, 'users', user.uid);
       const docSnap = await getDoc(userRef);
       if (!docSnap.exists()) {
-        const adminEmail = import.meta.env.VITE_ADMIN_EMAIL || "mohamedyasser757.my@gmail.com";
         await setDoc(userRef, {
           email: user.email,
           displayName: user.displayName || user.email?.split('@')[0],
-          role: user.email?.toLowerCase() === adminEmail.toLowerCase() ? 'admin' : 'user',
+          role: isAdminEmail(user.email) ? 'admin' : 'user',
           createdAt: new Date().toISOString()
         });
       }
@@ -47,7 +47,7 @@ export const useAuthInit = () => {
     // Main Auth Listener
     const unsubscribe = onAuthStateChanged(auth, async (user) => {
       if (!isMounted) return;
-      console.log("[Auth] State changed handler:", user?.email || "None");
+      console.log("[Auth] State changed handler:", user ? "authenticated" : "signed-out");
       await finish(user);
     });
 

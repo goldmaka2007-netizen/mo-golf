@@ -34,6 +34,7 @@ import { useAuthInit } from './hooks/useAuthInit';
 import { useDataSync } from './hooks/useDataSync';
 import { useCostRecalculation } from './hooks/useCostRecalculation';
 import { areOperationWritesLocked } from './lib/costRecalculation';
+import { isAdminEmail } from './lib/adminAccess';
 
 type AppView = ReturnType<typeof useAppStore.getState>['view'];
 
@@ -68,8 +69,7 @@ export default function App() {
     if (!user) return;
     setIsUpdatingPrice(true);
     try {
-      const adminEmail = import.meta.env.VITE_ADMIN_EMAIL || "mohamedyasser757.my@gmail.com";
-      const isAdmin = user.email?.toLowerCase() === adminEmail.toLowerCase();
+      const isAdmin = isAdminEmail(user.email);
       const q = isAdmin
         ? query(collection(db, 'entries'))
         : query(collection(db, 'entries'), where('userId', '==', user.uid));

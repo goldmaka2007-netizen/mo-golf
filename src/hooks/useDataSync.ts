@@ -6,6 +6,7 @@ import { Entry, Account, TransactionRule, CustomRule, InventoryCheck, CanonicalA
 import { SEED_ACCOUNTS, SEED_RULES } from '../migrationData';
 import { writeBatch } from 'firebase/firestore';
 import { handleFirestoreError, OperationType } from '../firebase';
+import { isAdminEmail } from '../lib/adminAccess';
 
 export const useDataSync = (user: any, isAuthReady: boolean) => {
   const { 
@@ -28,8 +29,7 @@ export const useDataSync = (user: any, isAuthReady: boolean) => {
   useEffect(() => {
     if (!isAuthReady || !user) return;
 
-    const adminEmail = import.meta.env.VITE_ADMIN_EMAIL || "mohamedyasser757.my@gmail.com";
-    const isAdmin = user.email?.toLowerCase() === adminEmail.toLowerCase();
+    const isAdmin = isAdminEmail(user.email);
     
     // --- Entries Listener ---
     const entriesQuery = isAdmin 
