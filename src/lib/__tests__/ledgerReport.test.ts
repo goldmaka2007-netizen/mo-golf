@@ -115,9 +115,9 @@ describe('final ledger selection model', () => {
 describe('ledger opening-balance presentation', () => {
   const openingCash = entry({ id: 'open-1', operationKind: 'opening', date: '2026-01-01', debit: 'الخزنة', credit: 'مبيعات', cash: '100' });
   const cashMove = entry({ id: 'move-1', date: '2026-01-02', debit: 'الخزنة', credit: 'مبيعات', cash: '25' });
-  it('keeps an opening-kind entry on the period start date in period movement', () => {
+  it('keeps an opening-kind entry on the period start date in opening balance only', () => {
     const report = buildLedgerReport([openingCash, cashMove], accounts, accounts[0], 'cash', '2026-01-01', '2026-01-31');
-    expect(report.openingBalance).toBe(0); expect(report.rows).toHaveLength(2); expect(report.totalDebit).toBe(125); expect(report.closingBalance).toBe(125);
+    expect(report.openingBalance).toBe(100); expect(report.rows).toHaveLength(1); expect(report.totalDebit).toBe(25); expect(report.closingBalance).toBe(125);
   });
   it('adds all openings and prior non-opening activity for later periods', () => {
     const report = buildLedgerReport([openingCash, entry({ ...openingCash, id: 'open-2', cash: '20' }), cashMove, entry({ id: 'march', date: '2026-03-01', debit: 'الخزنة', credit: 'مبيعات', cash: '5' })], accounts, accounts[0], 'cash', '2026-03-01', '2026-03-31');
@@ -125,11 +125,11 @@ describe('ledger opening-balance presentation', () => {
   });
   it('excludes voided openings and formats cash/weight explicitly', () => {
     const report = buildLedgerReport([openingCash, entry({ ...openingCash, id: 'void', cash: '99', isVoided: true } as Entry & { isVoided: boolean })], accounts, accounts[0], 'cash', '2026-01-01', '2026-01-31');
-    expect(report.openingBalance).toBe(0); expect(formatLedgerAmount(125000.75, 'cash')).toContain('125,001'); expect(formatLedgerAmount(10.5, 'gold')).toContain('10.50'); expect(formatLedgerAmount(348.1, 'silver')).toContain('348.10');
+    expect(report.openingBalance).toBe(100); expect(formatLedgerAmount(125000.75, 'cash')).toContain('125,001'); expect(formatLedgerAmount(10.5, 'gold')).toContain('10.50'); expect(formatLedgerAmount(348.1, 'silver')).toContain('348.10');
   });
   it('exports one opening balance row and no opening movement row', () => {
     const report = buildLedgerReport([openingCash, cashMove], accounts, accounts[0], 'cash', '2026-01-01', '2026-01-31');
     const csv = buildLedgerCsv({ accountName: accounts[0].name, dimension: 'cash', startDate: '2026-01-01', endDate: '2026-01-31', report, rows: report.rows, goldDisplayMode: 'equivalent21' });
-    expect(csv).toContain('رصيد أول المدة'); expect(csv).toContain('125 جنيه'); expect(csv).not.toContain('open-1');
+    expect(csv).toContain('رصيد أول المدة'); expect(csv).toContain('100 جنيه'); expect(csv).not.toContain('open-1');
   });
 });

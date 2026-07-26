@@ -31,12 +31,12 @@ const entries: Entry[] = [
 
 describe('period leg split', () => {
   const legs = buildCanonicalAccountingLegs(entries, buildCanonicalAccountRegistry(accounts, entries));
-  it.each([['cash', 'cash'], ['gold', 'gold'], ['silver', 'silver']] as const)('uses date boundaries only for %s', (dimension, prefix) => {
+  it.each([['cash', 'cash'], ['gold', 'gold'], ['silver', 'silver']] as const)('keeps opening-kind legs in opening balance for %s', (dimension, prefix) => {
     const split = splitLegsByPeriod(legs.filter(leg => leg.dimension === dimension), start, end);
     const openingIds = new Set(split.openingLegs.map(leg => leg.sourceEntryId));
     const periodIds = new Set(split.periodLegs.map(leg => leg.sourceEntryId));
-    expect(openingIds).toEqual(new Set([`${prefix}-prior`]));
-    expect(periodIds).toEqual(new Set([`${prefix}-start-opening`, `${prefix}-later-opening`]));
+    expect(openingIds).toEqual(new Set([`${prefix}-prior`, `${prefix}-start-opening`, `${prefix}-later-opening`]));
+    expect(periodIds).toEqual(new Set());
     expect([...openingIds].filter(id => periodIds.has(id))).toEqual([]);
   });
 
@@ -45,13 +45,13 @@ describe('period leg split', () => {
     const wholePeriodTrial = buildTrialBalanceReport(entries, accounts, dimension, start, end);
     const ledger = buildLedgerReport(entries, accounts, account, dimension, start, end);
     const trialRow = wholePeriodTrial.groups.flatMap(group => group.rows).find(row => row.entityId.endsWith(`:${account.id}`));
-    expect(journal.openingDebit).toBe(10);
+    expect(journal.openingDebit).toBe(30);
     expect(journal.openingCredit).toBe(0);
-    expect(journal.periodDebit).toBe(20);
+    expect(journal.periodDebit).toBe(0);
     expect(journal.periodCredit).toBe(0);
-    expect(ledger.openingBalance).toBe(10);
-    expect(ledger.totalDebit).toBe(50);
-    expect(ledger.rows.map(row => row.entry.id)).toEqual([`${dimension}-start-opening`, `${dimension}-later-opening`]);
-    expect(trialRow).toMatchObject({ openingDebit: 10, periodDebit: 50, closingDebit: 60 });
+    expect(ledger.openingBalance).toBe(60);
+    expect(ledger.totalDebit).toBe(0);
+    expect(ledger.rows).toHaveLength(0);
+    expect(trialRow).toMatchObject({ openingDebit: 60, periodDebit: 0, closingDebit: 60 });
   });
 });

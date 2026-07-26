@@ -16,14 +16,14 @@ describe('canonical accounting legs', () => {
     const entries = [entry({ id: 'alaa', operationKind: 'opening', debit: 'راس المال ذهب', debitAccountId: 'gold-equity', credit: 'الاء ياسر', arabicWeight: '25.19714286' })];
     const gold = buildTrialBalanceReport(entries, accounts, 'gold', '2026-01-01', '2026-12-31');
     const row = gold.groups.flatMap(g => g.rows).find(r => r.accountName === 'الاء ياسر');
-    expect(row).toMatchObject({ group: 'liabilities', periodCredit: 25.19714286, closingCredit: 25.19714286 });
+    expect(row).toMatchObject({ group: 'liabilities', openingCredit: 25.19714286, closingCredit: 25.19714286 });
     expect(buildTrialBalanceReport(entries, accounts, 'cash', '2026-01-01', '2026-12-31').groups.flatMap(g => g.rows).some(r => r.accountName === 'الاء ياسر')).toBe(false);
     expect(buildTrialBalanceReport(entries, accounts, 'silver', '2026-01-01', '2026-12-31').groups.flatMap(g => g.rows).some(r => r.accountName === 'الاء ياسر')).toBe(false);
   });
   it('keeps silver opening assets and equity balanced', () => {
     const entries = [entry({ operationKind: 'opening', debit: 'كسر فضة', debitAccountId: 'silver-scrap', credit: 'راس المال فضة', creditAccountId: 'silver-equity', weight: '305' })];
     const report = buildTrialBalanceReport(entries, accounts, 'silver', '2026-01-01', '2026-12-31');
-    expect(report.balanced).toBe(true); expect(report.groups.flatMap(g => g.rows).find(r => r.accountName === 'كسر فضة')?.periodDebit).toBe(305); expect(report.groups.flatMap(g => g.rows).find(r => r.accountName === 'راس المال فضة')?.periodCredit).toBe(305);
+    expect(report.balanced).toBe(true); expect(report.groups.flatMap(g => g.rows).find(r => r.accountName === 'كسر فضة')?.openingDebit).toBe(305); expect(report.groups.flatMap(g => g.rows).find(r => r.accountName === 'راس المال فضة')?.openingCredit).toBe(305);
   });
   it('isolates cash and gold/silver ownership for sales and purchases', () => {
     const sale = entry({ operationKind: 'sale', debit: 'الخزنة', debitAccountId: 'cash', credit: 'حلق أطفال', creditAccountId: 'gold-product', cash: '14100', arabicWeight: '1.99' });
