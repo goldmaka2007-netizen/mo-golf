@@ -3,7 +3,7 @@ import { AccountingLeg, buildCanonicalAccountRegistry, buildCanonicalAccountingL
 import { parseCash, resolveOperationKind } from './engine';
 import { splitLegsByPeriod } from './periodLegs';
 
-export type DailyJournalDimension = 'cash' | 'gold' | 'silver';
+export type DailyJournalDimension = 'cash' | 'gold' | 'silver' | 'quantity';
 export interface DailyJournalAmounts { openingDebit: number; openingCredit: number; periodDebit: number; periodCredit: number; closingDebit: number; closingCredit: number; }
 export interface DailyJournalDimensionReport extends DailyJournalAmounts { dimension: DailyJournalDimension; periodLegs: AccountingLeg[]; }
 export type DailyJournalDiagnosticReason = 'missing_debit_account' | 'missing_credit_account' | 'unresolved_debit_account_id' | 'unresolved_credit_account_id' | 'unsupported_operation_kind' | 'missing_canonical_amount' | 'cash_dimension_unavailable' | 'metal_dimension_unavailable' | 'missing_debit_metal_leg' | 'missing_credit_metal_leg';
@@ -14,7 +14,7 @@ export interface DailyJournalReport { date: string; dimensions: Record<DailyJour
 
 const empty = (): DailyJournalAmounts => ({ openingDebit: 0, openingCredit: 0, periodDebit: 0, periodCredit: 0, closingDebit: 0, closingCredit: 0 });
 const split = (balance: number): [number, number] => balance >= 0 ? [balance, 0] : [0, Math.abs(balance)];
-const isOperationalLeg = (leg: AccountingLeg, dimension: DailyJournalDimension) => dimension === 'cash' ? leg.entity.entityType === 'cash' : leg.entity.isInventory && leg.entity.metal === dimension;
+const isOperationalLeg = (leg: AccountingLeg, dimension: DailyJournalDimension) => dimension === 'cash' ? leg.entity.entityType === 'cash' : dimension === 'quantity' ? leg.entity.isInventory && leg.entity.metal === 'accessory' : leg.entity.isInventory && leg.entity.metal === dimension;
 const supportedKinds = new Set(['opening', 'purchase', 'sale', 'transfer', 'tifeet', 'adjustment', 'merchant_settlement', 'personal_withdrawal', 'expense', 'other']);
 const recommendationFor: Record<DailyJournalDiagnosticReason, string> = {
   missing_debit_account: '\u0627\u0644\u0642\u064a\u062f \u0646\u0627\u0642\u0635: \u062d\u062f\u062f \u062d\u0633\u0627\u0628 \u0627\u0644\u0645\u062f\u064a\u0646.',
@@ -67,7 +67,7 @@ export const buildDailyJournalReport = (entries: Entry[], accounts: Account[], d
   const registry = buildCanonicalAccountRegistry(accounts, entries);
   const legs = buildCanonicalAccountingLegs(entries, registry);
   const dimensions = {} as Record<DailyJournalDimension, DailyJournalDimensionReport>;
-  (['cash', 'gold', 'silver'] as DailyJournalDimension[]).forEach(dimension => {
+  (['cash', 'gold', 'silver', 'quantity'] as DailyJournalDimension[]).forEach(dimension => {
     const amounts = empty(); const dimensionLegs = legs.filter(leg => leg.dimension === dimension);
     const { periodLegs } = splitLegsByPeriod(dimensionLegs, date, date);
     const operationalLegs = dimensionLegs.filter(leg => isOperationalLeg(leg, dimension));

@@ -219,7 +219,7 @@ const entityFor = (entry: Entry, side: 'debit' | 'credit', registry: CanonicalAc
 const weightFor = (entry: Entry, entity?: CanonicalAccountEntity) => { if (!entity || entity.metal === 'accessory' || entity.trackingMode !== 'weight') return 0; const amount = entity.metal === 'silver' ? Number(entry.weight) || 0 : getEntryArabicWeight(entry, entity.sourceAccount); return amount || Number(entry.arabicWeight) || 0; };
 const quantityFor = (entry: Entry, entity?: CanonicalAccountEntity) => {
   if (!entity || entity.metal !== 'accessory') return 0;
-  return Number(entry.count) || Number(entry.weight) || Number(entry.arabicWeight) || 0;
+  return Number(entry.weight) || Number(entry.count) || 0;
 };
 const addLeg = (out: AccountingLeg[], entry: Entry, entity: CanonicalAccountEntity | undefined, side: 'debit' | 'credit', dimension: AccountingDimension, amount: number, oppositeAccount: string) => { if (!entity || !entity.allowedDimensions.includes(dimension) || (entity.metal === 'accessory' && dimension !== 'quantity') || (entity.metal === 'silver' && dimension === 'gold') || (entity.metal === 'gold' && dimension === 'silver') || !Number.isFinite(amount) || amount <= 0) return; out.push({ entityId: entity.entityId, accountName: entity.canonicalName, dimension, side, amount, sourceEntryId: entry.id || String(entry.seq), operationKind: resolveOperationKind(entry), date: entry.date, isOpening: resolveOperationKind(entry) === 'opening', group: entity.mainGroup, entity, entry, oppositeAccount }); };
 const addAccessoryOpeningEquityLeg = (out: AccountingLeg[], entry: Entry, entity: CanonicalAccountEntity | undefined, amount: number, oppositeAccount: string) => {
@@ -269,7 +269,7 @@ export const auditAccountingCoverage = (entries: Entry[], registry: CanonicalAcc
   const zeroLegRecords = entries.filter(isValidAccountingEntry).filter(e => (parseCash(e) > 0 || Number(e.weight) > 0 || Number(e.count) > 0) && !legs.some(l => l.entry === e)).map(e => e.id || String(e.seq));
   const zeroOrInvalidAmountRecords = entries.filter(isValidAccountingEntry).filter(e => ![parseCash(e), Number(e.weight), Number(e.arabicWeight), Number(e.count)].some(value => Number.isFinite(value) && value > 0)).map(e => e.id || String(e.seq));
   const disallowedDimensionRecords = entries.filter(isValidAccountingEntry).flatMap(entry => {
-    const debit = entityFor(entry, 'debit', registry); const credit = entityFor(entry, 'credit', registry); const kind = resolveOperationKind(entry); const amount = { cash: parseCash(entry), metal: Number(entry.weight) || Number(entry.arabicWeight) || 0, quantity: Number(entry.count) || Number(entry.weight) || Number(entry.arabicWeight) || 0 };
+    const debit = entityFor(entry, 'debit', registry); const credit = entityFor(entry, 'credit', registry); const kind = resolveOperationKind(entry); const amount = { cash: parseCash(entry), metal: Number(entry.weight) || Number(entry.arabicWeight) || 0, quantity: Number(entry.weight) || Number(entry.count) || 0 };
     const expected: { side: 'debit' | 'credit'; entity?: CanonicalAccountEntity; dimension: AccountingDimension; amount: number }[] = [];
     const metal = ([debit, credit].map(entity => entity?.metal).find(item => item === 'gold' || item === 'silver') ?? null) as MetalDimension | null;
     if (kind === 'sale' || kind === 'purchase') {

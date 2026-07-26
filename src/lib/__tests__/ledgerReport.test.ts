@@ -14,11 +14,11 @@ const entry = (value: Partial<Entry>): Entry => ({ seq: 1, tx: 'بيع', date: '
 
 describe('ledger report', () => {
   const cash = accounts[0], gold = accounts[1], silver = accounts[2], accessory = accounts[3], mixed = accounts[5];
-  it('shows dynamic dimensions without a quantity dimension', () => {
+  it('shows dynamic dimensions including accessory quantity', () => {
     expect(getAvailableDimensions(cash, [entry({ debit: 'الخزنة', credit: 'مبيعات', cash: '100' })], accounts)).toEqual(['cash']);
     expect(getAvailableDimensions(gold, [entry({ debit: 'ذهب عيار 18', credit: 'الخزنة', weight: '10', karat: 18 })], accounts)).toEqual(['gold']);
     expect(getAvailableDimensions(mixed, [entry({ debit: 'حساب مختلط', credit: 'الخزنة', cash: '100', weight: '10', karat: 18 })], accounts)).toEqual(['cash', 'gold']);
-    expect(getAvailableDimensions(accessory, [entry({ debit: 'ملحقات', credit: 'الخزنة', count: '5' })], accounts)).toEqual([]);
+    expect(getAvailableDimensions(accessory, [entry({ debit: 'ملحقات', credit: 'الخزنة', weight: '5' })], accounts)).toEqual(['quantity']);
   });
   it('keeps a historical tab even at zero balance and calculates opening/running balances oldest first', () => {
     const entries = [entry({ date: '2026-01-03', seq: 3, invoiceNumber: 'A3', debit: 'الخزنة', credit: 'مبيعات', cash: '50' }), entry({ date: '2026-01-01', seq: 1, invoiceNumber: 'A1', debit: 'الخزنة', credit: 'مبيعات', cash: '100' }), entry({ date: '2026-01-02', seq: 2, invoiceNumber: 'A2', debit: 'مبيعات', credit: 'الخزنة', cash: '100' })];
