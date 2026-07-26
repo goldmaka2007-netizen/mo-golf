@@ -29,6 +29,7 @@ import {
   canCalculateGoldEquivalent21,
   type SupportedGoldKarat,
 } from './goldEquivalent';
+import { isOpeningEntry } from './openingEntry';
 
 const MAX_SAFE_BIGINT = BigInt(Number.MAX_SAFE_INTEGER);
 const ACCESSORY_SCALE = 1000;
@@ -193,18 +194,13 @@ const orderingNumber = (entry: Entry): number => {
 
 const compareText = (left: string, right: string): number => left === right ? 0 : left < right ? -1 : 1;
 
-const isOpeningOperation = (entry: Entry): boolean =>
-  entry.operationKind === 'opening'
-  || entry.tx === 'قيد افتتاحي'
-  || entry.subTx?.startsWith('رصيد افتتاحي') === true;
-
 export const compareEntriesForPhase5Cost = (left: Entry, right: Entry): number => {
   const date = compareText(left.date, right.date);
   if (date !== 0) return date;
   // Opening layers are effective at the start of their date. This is an
   // explicit accounting order, required because the approved legacy export
   // has no seq and its source rows are not guaranteed to place openings first.
-  const openingOrder = Number(isOpeningOperation(right)) - Number(isOpeningOperation(left));
+  const openingOrder = Number(isOpeningEntry(right)) - Number(isOpeningEntry(left));
   if (openingOrder !== 0) return openingOrder;
   const order = orderingNumber(left) - orderingNumber(right);
   if (order !== 0) return order;
@@ -612,7 +608,7 @@ const classify = (
   if (entry.tx === 'حساب تاجر ذهب' || entry.tx === 'حساب تاجر فضة') {
     return creditInventory ? 'merchant_delivery' : 'non_cost';
   }
-  if (entry.operationKind === 'opening' || entry.tx === 'قيد افتتاحي' || entry.subTx?.startsWith('رصيد افتتاحي')) return 'opening';
+  if (isOpeningEntry(entry)) return 'opening';
   if (entry.operationKind === 'sale' || ['بيع ذهب', 'بيع فضة', 'بيع ملحقات'].includes(entry.tx)) return 'sale';
   if (entry.operationKind === 'purchase' || ['شراء ذهب', 'شراء فضة', 'شراء ملحقات'].includes(entry.tx)) return 'customer_purchase';
   if (entry.operationKind === 'tifeet' || entry.tx === 'تيفيت') return 'tafyeet';

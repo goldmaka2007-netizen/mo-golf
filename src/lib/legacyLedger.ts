@@ -1,6 +1,8 @@
 import type { Account, CanonicalAccountDefinition, Entry } from '../types';
+import { resolveOperationKind } from './engine';
 import { isValidAccountingEntry } from './canonicalAccounting';
 import type { InventoryCostTimeline, OperationCostResultV2 } from './inventoryCostTypes';
+import { isOpeningEntry } from './openingEntry';
 
 export type LegacyLedgerDimension = 'cash' | 'gold' | 'silver' | 'quantity';
 export type LegacyLedgerSide = 'debit' | 'credit';
@@ -179,9 +181,9 @@ const legFrom = (
   dimension,
   amount,
   sourceEntryId: operationId(entry),
-  operationKind: entry.operationKind || 'other',
+  operationKind: resolveOperationKind(entry),
   date: entry.date,
-  isOpening: entry.operationKind === 'opening',
+  isOpening: isOpeningEntry(entry),
   entry,
   entityId: account.entityId,
   accountName: account.accountName,

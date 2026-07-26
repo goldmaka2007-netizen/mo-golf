@@ -4,6 +4,7 @@ import { parseWeight, normalizeNumerals } from './accounting';
 import { canCalculateGoldEquivalent21, calculateGoldEquivalent21 } from './goldEquivalent';
 import { rebuildCostTimeline, getOperationId, compareEntriesForCost, ACCESSORY_QUANTITY_SCALE, type CostTimelineResult, type OperationCostResult, type OpeningCostConfig } from './weightedAverageCost';
 import { getAccountTypeDetails } from '../utils/accountLogic';
+import { isOpeningEntry } from './openingEntry';
 
 export const KARAT_MULT: Record<string, number> = { '18': 18 / 21, '21': 1, '24': 24 / 21, silver: 1 };
 
@@ -126,6 +127,7 @@ export const getEntryArabicWeight = (entry: Entry, account?: Account): number =>
 export const parseCash = (entry: Entry): number => parseFloat(normalizeNumerals(String(entry.cash ?? '0'))) || 0;
 
 export const resolveOperationKind = (entry: Entry): AccountingOperationKind => {
+  if (isOpeningEntry(entry)) return 'opening';
   if (entry.operationKind) return entry.operationKind;
 
   const txKey = entry.subTx ? `\u0631\u0635\u064A\u062F \u0627\u0641\u062A\u062A\u0627\u062D\u064A ${entry.subTx}` : (entry.tx || '');

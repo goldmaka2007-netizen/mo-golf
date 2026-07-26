@@ -62,12 +62,18 @@ describe('Accounting Engine Repair — Phase 1', () => {
       expect(report.balanced).toBe(true);
       expect(report.difference).toBe(0);
     });
-    expect(reports[0].periodDebit).toBe(29292790);
-    expect(reports[0].periodCredit).toBe(29292790);
-    expect(reports[1].periodDebit).toBeCloseTo(7479.90, 8);
-    expect(reports[1].periodCredit).toBeCloseTo(7479.90, 8);
-    expect(reports[2].periodDebit).toBeCloseTo(8509.39, 8);
-    expect(reports[2].periodCredit).toBeCloseTo(8509.39, 8);
+    expect(reports[0].openingDebit).toBe(1831490);
+    expect(reports[0].openingCredit).toBe(1831490);
+    expect(reports[0].periodDebit).toBe(27461300);
+    expect(reports[0].periodCredit).toBe(27461300);
+    expect(reports[1].openingDebit).toBeCloseTo(2260.11, 8);
+    expect(reports[1].openingCredit).toBeCloseTo(2260.11, 8);
+    expect(reports[1].periodDebit).toBeCloseTo(5219.79, 8);
+    expect(reports[1].periodCredit).toBeCloseTo(5219.79, 8);
+    expect(reports[2].openingDebit).toBeCloseTo(4837.60, 8);
+    expect(reports[2].openingCredit).toBeCloseTo(4837.60, 8);
+    expect(reports[2].periodDebit).toBeCloseTo(3671.79, 8);
+    expect(reports[2].periodCredit).toBeCloseTo(3671.79, 8);
   });
 
   it('keeps operational movements out of Trial Balance by type and source', () => {
