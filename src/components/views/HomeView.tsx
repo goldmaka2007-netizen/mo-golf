@@ -49,10 +49,10 @@ interface GoldSummaryCardProps {
   onClick: () => void;
 }
 
-const formatGold21 = (value: number) => `${value.toFixed(2)} Ø¬Ù…`;
+const formatGold21 = (value: number) => `${value.toFixed(2)} جم`;
 
 const GoldSummaryCard = React.memo(({ position, onClick }: GoldSummaryCardProps) => {
-  const liabilityContext = position.netGoldLiabilities21 > 0 ? 'Ø¹Ù„Ù‰ Ø§Ù„Ù…Ø­Ù„' : position.netGoldLiabilities21 < 0 ? 'Ù„ØµØ§Ù„Ø­ Ø§Ù„Ù…Ø­Ù„' : 'Ù…ØªÙˆØ§Ø²Ù†';
+  const liabilityContext = position.netGoldLiabilities21 > 0 ? 'على المحل' : position.netGoldLiabilities21 < 0 ? 'لصالح المحل' : 'متوازن';
 
   return (
     <button
@@ -62,7 +62,7 @@ const GoldSummaryCard = React.memo(({ position, onClick }: GoldSummaryCardProps)
     >
       <div className="flex items-start justify-between gap-3">
         <div className="min-w-0">
-          <div className="text-xs font-black text-[#8a8172]">ØµØ§Ù�?ÙŠ Ù…Ù„ÙƒÙŠØ© Ø§Ù„Ù…Ø­Ù„</div>
+          <div className="text-xs font-black text-[#8a8172]">صافي ملكية المحل</div>
           <div className="mt-1 text-3xl font-black font-mono leading-tight text-[#c9a84c]">
             {formatGold21(position.netShopGoldOwnership21)}
           </div>
@@ -73,12 +73,12 @@ const GoldSummaryCard = React.memo(({ position, onClick }: GoldSummaryCardProps)
       </div>
       <div className="mt-3 grid grid-cols-2 gap-2 text-[11px] font-bold">
         <div className="rounded-xl border border-[#1a1e2a] bg-[#080a0f] p-2">
-          <div className="text-[#5a5548]">Ù…Ø®Ø²ÙˆÙ† Ù�?Ø¹Ù„ÙŠ</div>
+          <div className="text-[#5a5548]">مخزون فعلي</div>
           <div className="mt-0.5 font-mono text-[#ddd8cc]">{formatGold21(position.physicalGoldInventory21)}</div>
         </div>
         <div className="rounded-xl border border-[#1a1e2a] bg-[#080a0f] p-2">
           <div className="flex items-center justify-between gap-2 text-[#5a5548]">
-            <span>ØµØ§Ù�?ÙŠ Ø§Ù„ØªØ²Ø§Ù…Ø§Øª</span>
+            <span>صافي التزامات</span>
             <span className="rounded-md bg-[#1a1e2a] px-1.5 py-0.5 text-[9px] text-[#c9a84c]">{liabilityContext}</span>
           </div>
           <div className="mt-0.5 font-mono text-[#ddd8cc]">{formatGold21(position.netGoldLiabilities21)}</div>
@@ -147,7 +147,7 @@ const PriceCard = React.memo(({
                 variant === 'gold' ? "border-[#c9a84c33] text-[#c9a84c] focus:border-[#c9a84c] shadow-[inset_0_2px_10px_rgba(201,168,76,0.05)]" : "border-[#ddd8cc33] text-[#ddd8cc] focus:border-[#ddd8cc] shadow-[inset_0_2px_10px_rgba(221,216,204,0.03)]"
               )}
             />
-            <span className="absolute left-3 top-1/2 -translate-y-1/2 text-[9px] text-[#5a5548] font-black opacity-30">Ø¬.Ù…</span>
+            <span className="absolute left-3 top-1/2 -translate-y-1/2 text-[9px] text-[#5a5548] font-black opacity-30">ج.م</span>
           </div>
 
           <button
@@ -179,8 +179,8 @@ const PriceCard = React.memo(({
       {!isBuyPrice && spread !== undefined && onSpreadChange && (
         <div className="space-y-2 mb-4">
            <div className="flex items-center justify-between text-[10px] font-black text-[#5a5548] uppercase">
-             <span>Ù�?Ø±Ù‚ Ø§Ù„Ø´Ø±Ø§Ø¡ (Ø§Ù„Ø¨Ø±ÙŠÙŠØ²Ø©)</span>
-             <span className={cn("font-mono", variant === 'gold' ? "text-[#c9a84c]" : "text-[#ddd8cc]")}>{spread} Ø¬.Ù…</span>
+             <span>فرق الشراء (البرييزة)</span>
+             <span className={cn("font-mono", variant === 'gold' ? "text-[#c9a84c]" : "text-[#ddd8cc]")}>{spread} ج.م</span>
            </div>
            <input
              type="range"
@@ -203,7 +203,7 @@ const PriceCard = React.memo(({
           className="w-full py-2.5 bg-[#1a1e2a] text-[#c9a84c] rounded-xl hover:bg-[#c9a84c22] transition-all shadow-sm border border-[#c9a84c11] flex items-center justify-center gap-2 text-[10px] font-bold"
         >
           <ClipboardPaste className="w-4 h-4" />
-          Ù„ØµÙ‚ Ø³Ø¹Ø± Ø§Ù„Ø°Ù‡Ø¨ Ù…Ù† ÙˆØ§ØªØ³Ø§Ø¨
+          لصق سعر الذهب من واتساب
         </button>
       )}
     </div>
@@ -217,17 +217,17 @@ interface RecentEntryRowProps {
 }
 
 const RecentEntryRow = React.memo(({ e, accountCategories, setEditingEntry }: RecentEntryRowProps) => {
-  const isSilver = (e.tx || '').includes('Ù�?Ø¶Ø©') || (e.debit || '').includes('Ù�?Ø¶Ø©') || (e.credit || '').includes('Ù�?Ø¶Ø©');
-  const isAcc = (e.tx || '').includes('Ù…Ù„Ø­Ù‚Ø§Øª') || (e.debit || '').includes('Ù…Ù„Ø­Ù‚Ø§Øª') || (e.credit || '').includes('Ù…Ù„Ø­Ù‚Ø§Øª');
-  const unit = isSilver ? "Ø¬Ø±Ø§Ù… Ù�?Ø¶Ø©" : isAcc ? "Ù‚Ø·Ø¹Ø©" : "Ø¬Ø±Ø§Ù…";
+  const isSilver = (e.tx || '').includes('فضة') || (e.debit || '').includes('فضة') || (e.credit || '').includes('فضة');
+  const isAcc = (e.tx || '').includes('ملحقات') || (e.debit || '').includes('ملحقات') || (e.credit || '').includes('ملحقات');
+  const unit = isSilver ? "جرام فضة" : isAcc ? "قطعة" : "جرام";
 
-  const cashAccounts = accountCategories?.assets?.["Ø§Ù„Ù†Ù‚Ø¯ÙŠØ©"] || [];
-  let displaySide = `${e.debit} â†�? ${e.credit}`;
+  const cashAccounts = accountCategories?.assets?.["النقدية"] || [];
+  let displaySide = `${e.debit} ← ${e.credit}`;
   if (cashAccounts.includes(e.debit)) displaySide = e.credit;
   else if (cashAccounts.includes(e.credit)) displaySide = e.debit;
-  else if (e.tx === 'ØªÙŠÙ�?ÙŠØª') {
-    if ((e.debit || '') === 'ÙƒØ³Ø± Ø¹Ø±Ø¨ÙŠ' || (e.debit || '') === 'ÙƒØ³Ø± Ø§Ù�?Ø±Ù†Ø¬ÙŠ') displaySide = e.credit;
-    else if ((e.credit || '') === 'ÙƒØ³Ø± Ø¹Ø±Ø¨ÙŠ' || (e.credit || '') === 'ÙƒØ³Ø± Ø§Ù�?Ø±Ù†Ø¬ÙŠ') displaySide = e.debit;
+  else if (e.tx === 'تيفيت') {
+    if ((e.debit || '') === 'كسر عربي' || (e.debit || '') === 'كسر افرنجي') displaySide = e.credit;
+    else if ((e.credit || '') === 'كسر عربي' || (e.credit || '') === 'كسر افرنجي') displaySide = e.debit;
   }
 
   const c = parseFloat(e.cash || '0');
@@ -252,20 +252,20 @@ const RecentEntryRow = React.memo(({ e, accountCategories, setEditingEntry }: Re
         {e.notes && <div className="text-[11px] text-[#5a5548] italic bg-[#080a0f] px-2 py-1 rounded-lg mt-2">{e.notes}</div>}
       </div>
       <div className="text-left space-y-1">
-        {e.cash && e.tx !== 'ØªÙŠÙ�?ÙŠØª' && <div className="text-lg font-bold text-[#c9a84c] font-mono">{Math.round(c).toLocaleString()} <span className="text-[10px] font-sans">Ø¬</span></div>}
+        {e.cash && e.tx !== 'تيفيت' && <div className="text-lg font-bold text-[#c9a84c] font-mono">{Math.round(c).toLocaleString()} <span className="text-[10px] font-sans">ج</span></div>}
         <div className="flex flex-col items-end gap-1">
           {e.weight && (
             <div className="text-xs text-[#ddd8cc] font-bold bg-[#1a1e2a] px-2 py-1 rounded-lg">
               {w.toFixed(2)} <span className="text-[10px] opacity-60">{unit}</span>
-              {e.karat ? <span className="mr-1 text-[#c9a84c]">(Ø¹ÙŠØ§Ø± {e.karat})</span> : ''}
+              {e.karat ? <span className="mr-1 text-[#c9a84c]">(عيار {e.karat})</span> : ''}
             </div>
           )}
-          {e.weight && ((e.tx || '').includes('Ø¨ÙŠØ¹') || (e.tx || '').includes('Ø´Ø±Ø§Ø¡')) && w > 0 && c > 0 && (
+          {e.weight && ((e.tx || '').includes('بيع') || (e.tx || '').includes('شراء')) && w > 0 && c > 0 && (
             <div className={cn("text-[9px] font-bold px-1.5 py-0.5 rounded border mt-1",
-              (e.tx || '').includes('Ø¨ÙŠØ¹') ? "text-[#c9a84c] bg-[#c9a84c11] border-[#c9a84c22]" : "text-[#6a9e6a] bg-[#6a9e6a11] border-[#6a9e6a22]"
+              (e.tx || '').includes('بيع') ? "text-[#c9a84c] bg-[#c9a84c11] border-[#c9a84c22]" : "text-[#6a9e6a] bg-[#6a9e6a11] border-[#6a9e6a22]"
             )}>
-              {((e.tx || '').includes('Ø¨ÙŠØ¹') ? (isAcc ? 'Ø³Ø¹Ø± Ø§Ù„Ù‚Ø·Ø¹Ø© (Ø¨ÙŠØ¹): ' : 'Ø³Ø¹Ø± Ø§Ù„Ø¬Ø±Ø§Ù… (Ø¨ÙŠØ¹): ') : (isAcc ? 'Ø³Ø¹Ø± Ø§Ù„Ù‚Ø·Ø¹Ø© (Ø´Ø±Ø§Ø¡): ' : 'Ø³Ø¹Ø± Ø§Ù„Ø¬Ø±Ø§Ù… (Ø´Ø±Ø§Ø¡): '))}
-              <span className="font-mono">{pricePerGram}</span> Ø¬.Ù…
+              {((e.tx || '').includes('بيع') ? (isAcc ? 'سعر القطعة (بيع): ' : 'سعر الجرام (بيع): ') : (isAcc ? 'سعر القطعة (شراء): ' : 'سعر الجرام (شراء): '))}
+              <span className="font-mono">{pricePerGram}</span> ج.م
             </div>
           )}
         </div>
@@ -363,10 +363,10 @@ export const HomeView = React.memo(({
   }, [entries, accountsDb, operationalProjection.physicalSilverInventoryMovement]);
 
   const reportShortcuts = [
-    { id: 'profit-analysis', label: 'ØªØ­Ù„ÙŠÙ„ Ø§Ù„Ø±Ø¨Ø­ÙŠØ© Ùˆالمخزون', icon: <BarChart3 className="w-5 h-5 text-[#c9a84c]" />, desc: 'Ø§Ù„Ø£Ø±Ø¨Ø§Ø­ Ø§Ù„Ø­Ù‚ÙŠÙ‚ÙŠØ© Ø¨Ø§Ù„Ù…ØªÙˆØ³Ø· Ø§Ù„Ù…ØªØ­Ø±Ùƒ' },
-    { id: 'final', label: 'Ø§Ù„ØªÙ‚Ø±ÙŠØ± Ø§Ù„Ø´Ø§Ù…Ù„', icon: <PieChart className="w-5 h-5 text-[#6a8a9e]" />, desc: 'Ù…Ù„Ø®Øµ Ø§Ù„Ù…Ø±ÙƒØ² Ùˆالمخزون' },
-    { id: 'income', label: 'Ø§Ù„Ø¯Ø®Ù„ ÙˆØ§Ù„Ø£Ø±Ø¨Ø§Ø­', icon: <TrendingUp className="w-5 h-5 text-[#6a9e6a]" />, desc: 'ÙƒØ´Ù�? Ø§Ù„Ø£Ø±Ø¨Ø§Ø­ ÙˆØ§Ù„Ø®Ø³Ø§Ø¦Ø±' },
-    { id: 'ledger', label: 'ÙƒØ´Ù�? Ø­Ø³Ø§Ø¨', icon: <Book className="w-5 h-5 text-[#9e6a6a]" />, desc: 'Ø¨Ø­Ø« ÙˆØªÙ�?Ø±ÙŠØº Ø­Ø³Ø§Ø¨ Ù…Ø¹ÙŠÙ†' }
+    { id: 'profit-analysis', label: 'تحليل الربحية والمخزون', icon: <BarChart3 className="w-5 h-5 text-[#c9a84c]" />, desc: 'الأرباح الحقيقية بالمتوسط المتحرك' },
+    { id: 'final', label: 'التقرير الشامل', icon: <PieChart className="w-5 h-5 text-[#6a8a9e]" />, desc: 'ملخص المركز والمخزون' },
+    { id: 'income', label: 'الدخل والأرباح', icon: <TrendingUp className="w-5 h-5 text-[#6a9e6a]" />, desc: 'كشف الأرباح والخسائر' },
+    { id: 'ledger', label: 'كشف حساب', icon: <Book className="w-5 h-5 text-[#9e6a6a]" />, desc: 'بحث وتفريغ حساب معين' }
   ];
 
   return (
@@ -380,7 +380,7 @@ export const HomeView = React.memo(({
         <div className="flex items-center justify-between gap-3 px-1">
           <div className="min-w-0">
             <div className="truncate text-xs font-bold text-[#8a8172]">{today}</div>
-            <div className="mt-1 text-[11px] font-bold text-[#c9a84c99]">Ø¥Ø¬Ù…Ø§Ù„ÙŠ Ø§Ù„Ù‚ÙŠÙˆØ¯ Ø§Ù„Ù…Ø³Ø¬Ù„Ø©: {entries.length}</div>
+            <div className="mt-1 text-[11px] font-bold text-[#c9a84c99]">إجمالي القيود المسجلة: {entries.length}</div>
           </div>
           <button
             type="button"
@@ -390,7 +390,7 @@ export const HomeView = React.memo(({
               "flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl border border-[#c9a84c22] bg-[#c9a84c11] text-[#c9a84c] transition-all active:scale-95",
               isUpdatingPrice && "animate-spin opacity-60"
             )}
-            title="ØªØ­Ø¯ÙŠØ« Ø§Ù„Ø¨ÙŠØ§Ù†Ø§Øª Ù…Ù† Ù�?Ø§ÙŠØ±Ø¨ÙŠØ²"
+            title="تحديث البيانات من فايربيز"
           >
             <Zap className="h-5 w-5" />
           </button>
@@ -399,8 +399,8 @@ export const HomeView = React.memo(({
         <div className="grid grid-cols-2 gap-3">
           <KPICard
             icon={<Wallet className="w-5 h-5" />}
-            title="Ø±ØµÙŠØ¯ Ø§Ù„Ø®Ø²Ù†Ø©"
-            value={`${Math.round(totals.cash).toLocaleString()} Ø¬`}
+            title="رصيد الخزنة"
+            value={`${Math.round(totals.cash).toLocaleString()} ج`}
             color="text-[#6a9e6a]"
           />
           <GoldSummaryCard
@@ -412,22 +412,22 @@ export const HomeView = React.memo(({
           />
           <KPICard
             icon={<Database className="w-5 h-5" />}
-            title="المخزون Ø§Ù„Ù�?Ø¹Ù„ÙŠ â€�? Ù�?Ø¶Ø©"
-            value={`${totals.silver.toFixed(2)} Ø¬Ù…`}
+            title="المخزون الفعلي — فضة"
+            value={`${totals.silver.toFixed(2)} جم`}
             color="text-[#6a8a9e]"
           />
           <KPICard
             icon={<Calendar className="w-5 h-5" />}
-            title="Ø¹Ù…Ù„ÙŠØ§Øª Ø§Ù„ÙŠÙˆÙ…"
+            title="عمليات اليوم"
             value={`${todayCount}`}
-            subValue={`Ù…Ù† ${entries.length} Ù‚ÙŠØ¯`}
+            subValue={`من ${entries.length} قيد`}
             color="text-[#f5f1e8]"
           />
         </div>
       </section>      {/* Quick Actions */}
       <div className="space-y-3">
         <div className="flex items-center gap-3 px-1">
-          <h3 className="text-xs font-black text-[#c9a84c]">Ø¥Ø¬Ø±Ø§Ø¡Ø§Øª Ø³Ø±ÙŠØ¹Ø©</h3>
+          <h3 className="text-xs font-black text-[#c9a84c]">إجراءات سريعة</h3>
           <div className="h-px flex-1 bg-[#1a1e2a]" />
         </div>
         <button
@@ -436,7 +436,7 @@ export const HomeView = React.memo(({
           className="flex min-h-[72px] w-full items-center justify-center gap-3 rounded-2xl bg-[#c9a84c] px-4 py-5 text-[#05070b] shadow-[0_12px_30px_rgba(201,168,76,0.22)] transition-all active:scale-[0.99]"
         >
           <PlusCircle className="h-7 w-7" />
-          <span className="text-xl font-black">Ø¥Ø¶Ø§Ù�?Ø© Ø¹Ù…Ù„ÙŠØ© Ø¬Ø¯ÙŠØ¯Ø©</span>
+          <span className="text-xl font-black">إضافة عملية جديدة</span>
         </button>
         <div className="grid grid-cols-3 gap-3">
           <button
@@ -445,7 +445,7 @@ export const HomeView = React.memo(({
             className="flex min-h-[76px] flex-col items-center justify-center gap-2 rounded-2xl border border-[#1a1e2a] bg-[#0e1018] p-3 text-[#f5f1e8] transition-all active:scale-[0.99]"
           >
             <Calendar className="h-6 w-6 text-[#c9a84c]" />
-            <span className="text-xs font-black">Ù�?ØªØ­ Ø§Ù„ÙŠÙˆÙ…ÙŠØ©</span>
+            <span className="text-xs font-black">فتح اليومية</span>
           </button>
           <button
             type="button"
@@ -453,7 +453,7 @@ export const HomeView = React.memo(({
             className="flex min-h-[76px] flex-col items-center justify-center gap-2 rounded-2xl border border-[#1a1e2a] bg-[#0e1018] p-3 text-[#f5f1e8] transition-all active:scale-[0.99]"
           >
             <Globe className="h-6 w-6 text-[#6a9e6a]" />
-            <span className="text-xs font-black">Ø­Ø§Ù„Ø© ÙˆØ§ØªØ³Ø§Ø¨</span>
+            <span className="text-xs font-black">حالة واتساب</span>
           </button>
           <button
             type="button"
@@ -461,7 +461,7 @@ export const HomeView = React.memo(({
             className="flex min-h-[76px] flex-col items-center justify-center gap-2 rounded-2xl border border-[#1a1e2a] bg-[#0e1018] p-3 text-[#f5f1e8] transition-all active:scale-[0.99]"
           >
             <BarChart3 className="h-6 w-6 text-[#6a8a9e]" />
-            <span className="text-xs font-black">Ø§Ù„ØªÙ‚Ø§Ø±ÙŠØ±</span>
+            <span className="text-xs font-black">التقارير</span>
           </button>
         </div>
       </div>
@@ -471,26 +471,26 @@ export const HomeView = React.memo(({
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-3">
           <KPICard
             icon={<Wallet className="w-4 h-4" />}
-            title="Ø±ØµÙŠØ¯ Ø§Ù„Ø®Ø²Ù†Ø©"
-            value={`${Math.round(totals.cash).toLocaleString()} Ø¬`}
+            title="رصيد الخزنة"
+            value={`${Math.round(totals.cash).toLocaleString()} ج`}
             color="text-[#6a9e6a]"
           />
           <KPICard
             icon={<Database className="w-4 h-4" />}
-            title="المخزون Ø§Ù„Ù�?Ø¹Ù„ÙŠ â€�? Ù�?Ø¶Ø©"
-            value={`${totals.silver.toFixed(2)} Ø¬Ù…`}
+            title="المخزون الفعلي — فضة"
+            value={`${totals.silver.toFixed(2)} جم`}
             color="text-[#6a8a9e]"
           />
           <KPICard
             icon={<Scale className="w-4 h-4" />}
-            title="Ø§Ù„ØªØ²Ø§Ù…Ø§Øª Ø§Ù„ØªØ¬Ø§Ø± â€�? Ù�?Ø¶Ø©"
-            value={`${operationalProjection.merchantWeightLiabilityMovement.silver.toFixed(2)} Ø¬Ù…`}
+            title="التزامات التجار — فضة"
+            value={`${operationalProjection.merchantWeightLiabilityMovement.silver.toFixed(2)} جم`}
             color="text-[#9e6a6a]"
           />
           <KPICard
             icon={<Database className="w-4 h-4" />}
-            title="ØµØ§Ù�?ÙŠ Ù…Ù„ÙƒÙŠØ© Ø§Ù„Ù…Ø­Ù„ â€�? Ù�?Ø¶Ø©"
-            value={`${(totals.silver - operationalProjection.merchantWeightLiabilityMovement.silver).toFixed(2)} Ø¬Ù…`}
+            title="صافي ملكية المحل — فضة"
+            value={`${(totals.silver - operationalProjection.merchantWeightLiabilityMovement.silver).toFixed(2)} جم`}
             color="text-[#c9a84c]"
           />
         </div>
@@ -500,8 +500,8 @@ export const HomeView = React.memo(({
       {entries.length > 0 && (
         <div>
           <div className="flex items-center justify-between mb-4 px-2">
-            <h3 className="text-xs font-bold text-[#3a3530]">Ø¢Ø®Ø± Ø§Ù„Ù‚ÙŠÙˆØ¯</h3>
-            <button onClick={() => setView('journal')} className="text-[10px] text-[#c9a84c] font-bold">Ø¹Ø±Ø¶ Ø§Ù„ÙƒÙ„</button>
+            <h3 className="text-xs font-bold text-[#3a3530]">آخر القيود</h3>
+            <button onClick={() => setView('journal')} className="text-[10px] text-[#c9a84c] font-bold">عرض الكل</button>
           </div>
           <div className="space-y-3">
             {entries.slice(0, 3).map((e) => (
@@ -519,7 +519,7 @@ export const HomeView = React.memo(({
       {/* Daily price cards */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
         <PriceCard
-          title="Ø°Ù‡Ø¨ 21 (Ø¨ÙŠØ¹)"
+          title="ذهب 21 (بيع)"
           price={goldPrice}
           onPriceChange={(val) => {
             setGoldPrice(val);
@@ -540,7 +540,7 @@ export const HomeView = React.memo(({
         />
 
         <PriceCard
-          title="Ù�?Ø¶Ø© (Ø¨ÙŠØ¹)"
+          title="فضة (بيع)"
           price={silverPrice}
           onPriceChange={(val) => {
             setSilverPrice(val);
@@ -589,14 +589,14 @@ export const HomeView = React.memo(({
           <div className="w-12 h-12 rounded-xl flex items-center justify-center border border-[#1a1e2a] bg-[#9e6a6a11] group-hover:bg-[#9e6a6a22] transition-all">
             <Settings className="w-6 h-6 text-[#9e6a6a]" />
           </div>
-          <span className="text-xs font-bold text-[#ddd8cc]">Ø§Ù„Ø¥Ø¹Ø¯Ø§Ø¯Ø§Øª</span>
+          <span className="text-xs font-bold text-[#ddd8cc]">الإعدادات</span>
         </button>
       </div>
 
       {/* Quick report shortcuts */}
       <div className="space-y-4">
         <div className="flex items-center justify-between px-2">
-          <h3 className="text-xs font-bold text-[#3a3530] uppercase tracking-widest">Ø§Ù„ÙˆØµÙˆÙ„ Ø§Ù„Ø³Ø±ÙŠØ¹ Ù„Ù„ØªÙ‚Ø§Ø±ÙŠØ±</h3>
+          <h3 className="text-xs font-bold text-[#3a3530] uppercase tracking-widest">الوصول السريع للتقارير</h3>
           <div className="h-px flex-1 bg-[#1a1e2a] mx-4 opacity-30" />
         </div>
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
@@ -636,21 +636,21 @@ export const HomeView = React.memo(({
               className="bg-[#0e1018] border border-[#1a1e2a] rounded-3xl p-6 w-full max-w-md space-y-4"
             >
               <div className="flex justify-between items-center">
-                <h3 className="text-base font-bold text-[#c9a84c]">Ù„ØµÙ‚ Ø±Ø³Ø§Ù„Ø© Ø§Ù„Ø³Ø¹Ø±</h3>
+                <h3 className="text-base font-bold text-[#c9a84c]">لصق رسالة السعر</h3>
                 <button onClick={() => setShowPasteModal(false)} className="text-[#5a5548]"><X className="w-5 h-5" /></button>
               </div>
-              <p className="text-xs text-[#5a5548]">Ø§Ù†Ø³Ø® Ø±Ø³Ø§Ù„Ø© Ø§Ù„Ø³Ø¹Ø± Ù…Ù† ÙˆØ§ØªØ³Ø§Ø¨ Ø£Ùˆ ØªÙ„ÙŠØ¬Ø±Ø§Ù… ÙˆØ§Ù„ØµÙ‚Ù‡Ø§ Ù‡Ù†Ø§ØŒ ÙˆØ³ÙŠÙ‚ÙˆÙ… Ø§Ù„Ù†Ø¸Ø§Ù… Ø¨Ø§Ø³ØªØ®Ø±Ø§Ø¬ Ø§Ù„Ø³Ø¹Ø± ØªÙ„Ù‚Ø§Ø¦ÙŠØ§.</p>
+              <p className="text-xs text-[#5a5548]">انسخ رسالة السعر من واتساب أو تليجرام والصقها هنا، وسيقوم النظام باستخراج السعر تلقائيا.</p>
               <textarea
                 value={pasteText}
                 onChange={(e) => setPasteText(e.target.value)}
-                placeholder="Ø§Ù„ØµÙ‚ Ø§Ù„Ø±Ø³Ø§Ù„Ø© Ù‡Ù†Ø§..."
+                placeholder="الصق الرسالة هنا..."
                 className="w-full h-32 bg-[#080a0f] border border-[#1a1e2a] rounded-2xl p-4 text-base outline-none focus:border-[#c9a84c55] resize-none"
               />
               <button
                 onClick={() => parseGoldPrice(pasteText)}
                 className="w-full py-4 bg-[#c9a84c] text-[#080a0f] font-bold rounded-2xl"
               >
-                Ø§Ø³ØªØ®Ø±Ø§Ø¬ Ø§Ù„Ø³Ø¹Ø± ÙˆØªØ­Ø¯ÙŠØ« Ø§Ù„Ø¨ÙŠØ§Ù†Ø§Øª
+                استخراج السعر وتحديث البيانات
               </button>
             </motion.div>
           </div>

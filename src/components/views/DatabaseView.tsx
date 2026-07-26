@@ -22,9 +22,9 @@ import { cn } from '../../lib/utils';
 
 export const EntryRow = React.memo(({ e, setEditingEntry }: { e: Entry, setEditingEntry: (e: Entry) => void }) => {
   const [copied, setCopied] = useState(false);
-  const isSilver = (e.tx || '').includes('�?ضة') || (e.debit || '').includes('�?ضة') || (e.credit || '').includes('�?ضة');
+  const isSilver = (e.tx || '').includes('فضة') || (e.debit || '').includes('فضة') || (e.credit || '').includes('فضة');
   const isAcc = (e.tx || '').includes('ملحقات') || (e.debit || '').includes('ملحقات') || (e.credit || '').includes('ملحقات');
-  const unit = isSilver ? "جرام �?ضة" : isAcc ? "قطعة" : "جرام ذهب";
+  const unit = isSilver ? "جرام فضة" : isAcc ? "قطعة" : "جرام ذهب";
 
   const handleCopy = (event: React.MouseEvent) => {
     event.stopPropagation();
@@ -122,7 +122,7 @@ export const EntryRow = React.memo(({ e, setEditingEntry }: { e: Entry, setEditi
               )}
             </div>
           )}
-          {e.cash && e.tx !== 'تي�?يت' && (
+          {e.cash && e.tx !== 'تيفيت' && (
             <div className="text-2xl font-bold text-[#c9a84c] font-mono bg-[#c9a84c11] px-2.5 py-1 rounded-lg border border-[#c9a84c22]">
               {Math.round(parseFloat(e.cash)).toLocaleString()} <span className="text-sm font-sans">ج.م</span>
             </div>
@@ -158,7 +158,7 @@ export const DatabaseView = React.memo(() => {
 
       if (filterType !== 'all') {
         if (filterType === 'gold' && !(tx.includes('ذهب') || debit.includes('ذهب') || credit.includes('ذهب') || [18, 21, 24].includes(Number(karat)))) return false;
-        if (filterType === 'silver' && !(tx.includes('�?ضة') || debit.includes('�?ضة') || credit.includes('�?ضة'))) return false;
+        if (filterType === 'silver' && !(tx.includes('فضة') || debit.includes('فضة') || credit.includes('فضة'))) return false;
         if (filterType === 'cash' && !e.cash) return false;
       }
 
@@ -246,7 +246,7 @@ export const DatabaseView = React.memo(() => {
     
     const headers = [
       "التاريخ", 
-      "رقم ال�?اتورة",
+      "رقم الفاتورة",
       "العملية", 
       "مدين", 
       "دائن", 
@@ -256,11 +256,11 @@ export const DatabaseView = React.memo(() => {
       "الوزن العربي", 
       "العدد", 
       "اسم العميل",
-      "رقم التلي�?ون",
+      "رقم التليفون",
       "سعر السوق",
       "المعامل",
       "ملاحظات",
-      "معر�? العملية"
+      "معرف العملية"
     ];
     
     const rows = entries.map(e => [
@@ -377,7 +377,7 @@ export const DatabaseView = React.memo(() => {
           {[
             { id: 'all', label: 'الكل', icon: <BookOpen className="w-4 h-4" /> },
             { id: 'gold', label: 'ذهب', icon: <Scale className="w-4 h-4" /> },
-            { id: 'silver', label: '�?ضة', icon: <Database className="w-4 h-4" /> },
+            { id: 'silver', label: 'فضة', icon: <Database className="w-4 h-4" /> },
             { id: 'cash', label: 'نقدي', icon: <Wallet className="w-4 h-4" /> },
           ].map(f => (
             <button
@@ -435,7 +435,7 @@ export const DatabaseView = React.memo(() => {
           </button>
           
           <div className="text-xs font-bold text-[#5a5548] font-mono">
-            ص�?حة <span className="text-[#c9a84c] text-sm">{currentPage}</span> من {totalPages}
+            صفحة <span className="text-[#c9a84c] text-sm">{currentPage}</span> من {totalPages}
           </div>
 
           <button 

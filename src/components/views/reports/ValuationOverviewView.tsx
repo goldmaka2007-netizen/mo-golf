@@ -77,20 +77,20 @@ export const ValuationOverviewView = React.memo(({ entries }: { entries: Entry[]
 
   if (costCalculationRun.status !== 'valid' || !costCalculationRun.timeline?.valid) {
     return <div className="rounded-2xl border border-red-500/30 bg-red-500/10 p-4 text-sm text-red-100" dir="rtl">
-      تقارير التكل�?ة غير متاحة حتى يكتمل Cost Run صالح.
+      تقارير التكلفة غير متاحة حتى يكتمل Cost Run صالح.
     </div>;
   }
 
   const cards = [
     { title: 'تقييم الأصول', val: valuation.assets.totalVal, icon: <ShieldCheck />, color: 'text-[#6a9e6a]', sub: 'ما يمتلكه المحل حالياً' },
     { title: 'تقييم الخصوم', val: Math.abs(valuation.liabilities.totalVal), icon: <TrendingUp />, color: 'text-[#9e6a6a]', sub: 'ديون ومستحقات الموردين' },
-    { title: 'صا�?ي حقوق الملكية', val: valuation.netVal, icon: <LayoutDashboard />, color: 'text-[#c9a84c]', sub: 'رأس المال + أرباح ال�?ترة' },
+    { title: 'صافي حقوق الملكية', val: valuation.netVal, icon: <LayoutDashboard />, color: 'text-[#c9a84c]', sub: 'رأس المال + أرباح الفترة' },
   ];
 
   const breakdown = [
     { title: 'السيولة النقدية', val: valuation.assets.cash + valuation.liabilities.cash, unit: 'ج.م', icon: <Wallet />, color: 'bg-[#6a9e6a]' },
     { title: 'الذهب الموحد (ع٢١)', val: valuation.assets.gold + valuation.liabilities.gold, unit: 'جم', icon: <Scale />, color: 'bg-[#c9a84c]' },
-    { title: 'ال�?ضة الحرة', val: valuation.assets.silver + valuation.liabilities.silver, unit: 'جم', icon: <Coins />, color: 'bg-[#6a8a9e]' },
+    { title: 'الفضة الحرة', val: valuation.assets.silver + valuation.liabilities.silver, unit: 'جم', icon: <Coins />, color: 'bg-[#6a8a9e]' },
     { title: 'الملحقات', val: valuation.assets.accsCount + valuation.liabilities.accsCount, unit: 'قطعة', icon: <Package />, color: 'bg-[#9e8a6a]' },
   ];
 
@@ -110,7 +110,7 @@ export const ValuationOverviewView = React.memo(({ entries }: { entries: Entry[]
             </div>
           </div>
           <div className="text-center md:text-left bg-[#080a0f] p-6 rounded-2xl border border-[#c9a84c11]">
-            <p className="text-xs font-bold text-[#c9a84c] uppercase tracking-widest mb-2 opacity-80">إجمالي القيمة التقديرية (صا�?ي)</p>
+            <p className="text-xs font-bold text-[#c9a84c] uppercase tracking-widest mb-2 opacity-80">إجمالي القيمة التقديرية (صافي)</p>
             <div className="flex items-baseline gap-2 justify-center md:justify-end">
               <span className="text-5xl lg:text-6xl font-black text-[#ddd8cc] font-mono tracking-tighter">
                 {new Intl.NumberFormat('en-US').format(Math.round(valuation.netVal))}
@@ -149,7 +149,7 @@ export const ValuationOverviewView = React.memo(({ entries }: { entries: Entry[]
       </div>
 
       {/* Breakdown by Type */}
-      <h4 className="text-sm font-bold text-[#5a5548] uppercase tracking-[0.2em] px-2">توزيع الأرصدة ال�?علية</h4>
+      <h4 className="text-sm font-bold text-[#5a5548] uppercase tracking-[0.2em] px-2">توزيع الأرصدة الفعلية</h4>
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
         {breakdown.map((item, i) => (
           <div key={i} className="bg-[#0e1018] border border-[#1a1e2a] rounded-2xl p-5 flex items-center gap-4">
@@ -173,14 +173,14 @@ export const ValuationOverviewView = React.memo(({ entries }: { entries: Entry[]
             <h4 className="text-base font-bold text-[#ddd8cc] flex items-center gap-2">
                 <LayoutDashboard className="w-5 h-5 text-[#c9a84c]" /> نسب التوزيع المالي
             </h4>
-            <span className="text-xs text-[#5a5548] font-mono">التقييم حسب سعر الإق�?ال</span>
+            <span className="text-xs text-[#5a5548] font-mono">التقييم حسب سعر الإقفال</span>
         </div>
         
         <div className="h-4 bg-[#1a1e2a] rounded-full flex overflow-hidden shadow-inner">
           {[
             { metric: 'السيولة', val: valuation.assets.cash + valuation.liabilities.cash, color: 'bg-[#6a9e6a]' },
             { metric: 'الذهب', val: (valuation.assets.gold + valuation.liabilities.gold) * (goldPrice || 0), color: 'bg-[#c9a84c]' },
-            { metric: 'ال�?ضة', val: (valuation.assets.silver + valuation.liabilities.silver) * (silverPrice || 0), color: 'bg-[#6a8a9e]' },
+            { metric: 'الفضة', val: (valuation.assets.silver + valuation.liabilities.silver) * (silverPrice || 0), color: 'bg-[#6a8a9e]' },
             { metric: 'الملحقات', val: valuation.assets.accsVal + valuation.liabilities.accsVal, color: 'bg-[#9e8a6a]' },
           ].map((item, i) => {
              const grow = Math.max(0, (item.val / valuation.netVal) * 100);
@@ -200,7 +200,7 @@ export const ValuationOverviewView = React.memo(({ entries }: { entries: Entry[]
            {[
              { label: 'نقدية', color: 'bg-[#6a9e6a]' },
              { label: 'ذهب', color: 'bg-[#c9a84c]' },
-             { label: '�?ضة', color: 'bg-[#6a8a9e]' },
+             { label: 'فضة', color: 'bg-[#6a8a9e]' },
              { label: 'ملحقات', color: 'bg-[#9e8a6a]' },
            ].map((item, i) => (
              <div key={i} className="flex items-center gap-2 text-xs text-[#5a5548] font-bold">

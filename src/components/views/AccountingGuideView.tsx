@@ -157,7 +157,7 @@ export const AccountingGuideView = React.memo(() => {
                 <thead className="bg-[#1a1e2a] text-[#c9a84c] font-bold">
                   <tr>
                     <th className="px-4 py-3 min-w-[120px] whitespace-nowrap">اسم العملية</th>
-                    <th className="px-4 py-3 min-w-[100px] whitespace-nowrap">التصني�?</th>
+                    <th className="px-4 py-3 min-w-[100px] whitespace-nowrap">التصنيف</th>
                     <th className="px-4 py-3 min-w-[120px] whitespace-nowrap">الجانب المدين</th>
                     <th className="px-4 py-3 min-w-[120px] whitespace-nowrap">الجانب الدائن</th>
                     <th className="px-4 py-3 min-w-[60px] whitespace-nowrap">العيار</th>

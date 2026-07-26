@@ -23,8 +23,8 @@ export const AnalysisReportView = React.memo(({ entries }: { entries: Entry[] })
     if (entries.length === 0) return null;
 
     // 1. Executive Summary
-    const salesCash = entries.filter(e => e.tx === 'بيع ذهب' || e.tx === 'بيع �?ضة' || e.tx === 'بيع ملحقات' || e.tx === 'ايرادات اخري').reduce((sum, e) => sum + getUnitCash(e), 0);
-    const purchasesCash = entries.filter(e => e.tx === 'شراء ذهب' || e.tx === 'شراء �?ضة' || e.tx === 'شراء اصل' || e.tx === 'شراء ملحقات').reduce((sum, e) => sum + getUnitCash(e), 0);
+    const salesCash = entries.filter(e => e.tx === 'بيع ذهب' || e.tx === 'بيع فضة' || e.tx === 'بيع ملحقات' || e.tx === 'ايرادات اخري').reduce((sum, e) => sum + getUnitCash(e), 0);
+    const purchasesCash = entries.filter(e => e.tx === 'شراء ذهب' || e.tx === 'شراء فضة' || e.tx === 'شراء اصل' || e.tx === 'شراء ملحقات').reduce((sum, e) => sum + getUnitCash(e), 0);
     const rawMargin = salesCash - purchasesCash;
     
     const uniqueDays = new Set(entries.map(e => e.date)).size;
@@ -104,7 +104,7 @@ export const AnalysisReportView = React.memo(({ entries }: { entries: Entry[] })
     Object.values(dateToDay).forEach(d => weekdaySales[d].count++);
 
     // 5. Tefit Analysis
-    const tefitEntries = entries.filter(e => e.tx === 'تي�?يت');
+    const tefitEntries = entries.filter(e => e.tx === 'تيفيت');
     const totalTefitWeight = tefitEntries.reduce((sum, e) => sum + getUnitArabicWeight(e), 0);
     const totalWeightPurchased = entries.filter(e => e.tx === 'شراء ذهب').reduce((sum, e) => sum + getUnitArabicWeight(e), 0);
 
@@ -176,7 +176,7 @@ export const AnalysisReportView = React.memo(({ entries }: { entries: Entry[] })
                 <div className="text-3xl font-black text-[#ddd8cc]">{exec.purchasesCash.toLocaleString()} <span className="text-sm">ج</span></div>
             </div>
             <div className="bg-[#1a1e2a] p-4 rounded-2xl border border-[#c9a84c33] flex flex-col justify-between h-32">
-                <div className="text-xs text-[#5a5548] font-bold">صا�?ي التد�?ق النقدي للنشاط</div>
+                <div className="text-xs text-[#5a5548] font-bold">صافي التدفق النقدي للنشاط</div>
                 <div className={cn("text-3xl font-black", exec.rawMargin >= 0 ? "text-green-400" : "text-red-400")}>
                     {exec.rawMargin.toLocaleString()} <span className="text-sm">ج</span>
                 </div>
@@ -221,13 +221,13 @@ export const AnalysisReportView = React.memo(({ entries }: { entries: Entry[] })
                             <span className="text-left font-bold">{d.sales.toLocaleString()} ج</span>
                             <span className="text-[#5a5548]">المشتريات:</span>
                             <span className="text-left font-bold">{d.purchases.toLocaleString()} ج</span>
-                            <span className="text-[#5a5548]">التد�?ق النقدي:</span>
+                            <span className="text-[#5a5548]">التدفق النقدي:</span>
                             <span className={cn("text-left font-bold", (d.sales - d.purchases) >= 0 ? "text-green-400" : "text-red-400")}>
                                 {(d.sales - d.purchases).toLocaleString()} ج
                             </span>
-                            <span className="text-[#5a5548]">إجمالي المصاري�?:</span>
+                            <span className="text-[#5a5548]">إجمالي المصاريف:</span>
                             <span className="text-left font-bold text-red-400/70">{d.expenses.toLocaleString()} ج</span>
-                            <span className="text-[#5a5548]">صا�?ي تغير الوزن (جم عربي):</span>
+                            <span className="text-[#5a5548]">صافي تغير الوزن (جم عربي):</span>
                             <span className={cn("text-left font-bold", (d.goldBuy - d.goldSell) >= 0 ? "text-[#c9a84c]" : "text-red-400")}>
                                 {(d.goldBuy - d.goldSell).toFixed(2)} جم
                             </span>
@@ -271,7 +271,7 @@ export const AnalysisReportView = React.memo(({ entries }: { entries: Entry[] })
                             </div>
                             <div className="mt-4 pt-3 border-t border-[#1a1e2a] flex items-center gap-2 text-[10px] text-blue-400 italic">
                                 <Lightbulb className="w-4 h-4" />
-                                <span>نصيحة: {k === 18 ? "ركز على مبيعات المشغولات لزيادة المصنعية." : k === 21 ? "يعتبر العيار الأساسي لحجم التداول، حا�?ظ على سيولة كا�?ية �?يه." : "يستخدم غالباً للادخار، تابعه كأحد الأصول الآمنة."}</span>
+                                <span>نصيحة: {k === 18 ? "ركز على مبيعات المشغولات لزيادة المصنعية." : k === 21 ? "يعتبر العيار الأساسي لحجم التداول، حافظ على سيولة كافية فيه." : "يستخدم غالباً للادخار، تابعه كأحد الأصول الآمنة."}</span>
                             </div>
                         </div>
                     );
@@ -303,7 +303,7 @@ export const AnalysisReportView = React.memo(({ entries }: { entries: Entry[] })
         ))}
 
         {/* 5. Tefit Analysis */}
-        {renderCard("تحليل التي�?يت (تحويل كسر)", <ArrowRightLeft className="w-5 h-5" />, (
+        {renderCard("تحليل التيفيت (تحويل كسر)", <ArrowRightLeft className="w-5 h-5" />, (
             <div className="flex flex-col md:flex-row items-center gap-6">
                 <div className="relative w-32 h-32 flex items-center justify-center shrink-0">
                     <svg className="w-full h-full transform -rotate-90">
@@ -317,7 +317,7 @@ export const AnalysisReportView = React.memo(({ entries }: { entries: Entry[] })
                     </svg>
                     <div className="absolute inset-0 flex flex-col items-center justify-center">
                         <span className="text-xl font-black text-[#c9a84c]">{tefit.ratio.toFixed(1)}%</span>
-                        <span className="text-[10px] text-[#5a5548]">نسبة التي�?يت</span>
+                        <span className="text-[10px] text-[#5a5548]">نسبة التيفيت</span>
                     </div>
                 </div>
                 <div className="flex-1 space-y-3 text-center md:text-right">
@@ -332,10 +332,10 @@ export const AnalysisReportView = React.memo(({ entries }: { entries: Entry[] })
         ))}
 
         {/* 6. Expenses Analysis */}
-        {renderCard("هيكل المصاري�? والتشغيل", <BarChart2 className="w-5 h-5" />, (
+        {renderCard("هيكل المصاريف والتشغيل", <BarChart2 className="w-5 h-5" />, (
             <div className="space-y-4">
                 <div className="flex justify-between items-end">
-                    <span className="text-sm text-[#5a5548]">إجمالي المصاري�?:</span>
+                    <span className="text-sm text-[#5a5548]">إجمالي المصاريف:</span>
                     <span className="text-xl font-bold text-red-400">{totalExpenses.toLocaleString()} ج</span>
                 </div>
                 <div className="space-y-4">
@@ -358,7 +358,7 @@ export const AnalysisReportView = React.memo(({ entries }: { entries: Entry[] })
                                 {pct > 50 && (
                                     <div className="text-[10px] text-red-400 flex items-center gap-1">
                                         <AlertTriangle className="w-3 h-3" />
-                                        <span>تنبيه: هذا البند يتجاوز 50% من إجمالي المصاري�?.</span>
+                                        <span>تنبيه: هذا البند يتجاوز 50% من إجمالي المصاريف.</span>
                                     </div>
                                 )}
                             </div>
@@ -369,10 +369,10 @@ export const AnalysisReportView = React.memo(({ entries }: { entries: Entry[] })
         ))}
 
         {/* 7. Big Deals */}
-        {renderCard("أكبر ص�?قات ال�?ترة (Top 10)", <Crown className="w-4 h-4" />, (
+        {renderCard("أكبر صفقات الفترة (Top 10)", <Crown className="w-4 h-4" />, (
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                 <div className="space-y-3">
-                    <div className="text-[10px] font-bold text-green-400 border-b border-[#1a1e2a] pb-1">أكبر ص�?قات البيع</div>
+                    <div className="text-[10px] font-bold text-green-400 border-b border-[#1a1e2a] pb-1">أكبر صفقات البيع</div>
                     {topDeals.sales.map((e, i) => (
                         <div key={i} className="flex justify-between items-center text-[10px] bg-[#080a0f] p-2 rounded">
                             <span className="text-[#5a5548]">{e.credit}</span>
@@ -381,7 +381,7 @@ export const AnalysisReportView = React.memo(({ entries }: { entries: Entry[] })
                     ))}
                 </div>
                 <div className="space-y-3">
-                    <div className="text-[10px] font-bold text-red-400 border-b border-[#1a1e2a] pb-1">أكبر ص�?قات الشراء</div>
+                    <div className="text-[10px] font-bold text-red-400 border-b border-[#1a1e2a] pb-1">أكبر صفقات الشراء</div>
                     {topDeals.purchases.map((e, i) => (
                         <div key={i} className="flex justify-between items-center text-[10px] bg-[#080a0f] p-2 rounded">
                             <span className="text-[#5a5548]">{e.debit}</span>
@@ -405,11 +405,11 @@ export const AnalysisReportView = React.memo(({ entries }: { entries: Entry[] })
                     </thead>
                     <tbody className="divide-y divide-[#1a1e2a]">
                         {[
-                            { name: "التد�?قات النقدية التشغيلية", val: `${((exec.rawMargin / (exec.salesCash || 1)) * 100).toFixed(1)}%`, score: "جيد" },
+                            { name: "التدفقات النقدية التشغيلية", val: `${((exec.rawMargin / (exec.salesCash || 1)) * 100).toFixed(1)}%`, score: "جيد" },
                             { name: "متوسط المبيعات اليومي", val: exec.dailyAvg.toLocaleString(), score: exec.dailyAvg > 10000 ? "ممتاز" : "جيد" },
-                            { name: "ك�?اءة المصاري�?", val: `${((totalExpenses / (exec.salesCash || 1)) * 100).toFixed(1)}%`, score: (totalExpenses/exec.salesCash) < 0.1 ? "ممتاز" : "جيد" },
+                            { name: "كفاءة المصاريف", val: `${((totalExpenses / (exec.salesCash || 1)) * 100).toFixed(1)}%`, score: (totalExpenses/exec.salesCash) < 0.1 ? "ممتاز" : "جيد" },
                             { name: "سيولة الخزنة", val: exec.treasuryBalance.toLocaleString(), score: "جيد" },
-                            { name: "نسبة التي�?يت", val: `${tefit.ratio.toFixed(1)}%`, score: tefit.ratio < 20 ? "جيد" : "يحتاج تحسين" },
+                            { name: "نسبة التيفيت", val: `${tefit.ratio.toFixed(1)}%`, score: tefit.ratio < 20 ? "جيد" : "يحتاج تحسين" },
                             { name: "معدل دوران المخزون", val: "N/A", score: "جيد" },
                             { name: "تغطية الأصول للخصوم", val: "100%", score: "ممتاز" },
                             { name: "ربحية الجرام (18)", val: "62 ج/جم", score: "جيد" },
@@ -446,22 +446,22 @@ export const AnalysisReportView = React.memo(({ entries }: { entries: Entry[] })
                 <div className="space-y-4">
                     <div className="p-4 bg-[#0e1018] rounded-xl space-y-2 border-r-4 border-green-500">
                         <div className="font-bold text-[#ddd8cc]">1. تعزيز نقاط القوة</div>
-                        <p className="text-[#5a5548]">تظهر البيانات استقراراً �?ي مبيعات عيار 18، مما يشير إلى وجود قاعدة عملاء للمشغولات. ي�?نصح بزيادة تنوع التشكيلة �?ي هذا العيار تحديداً لزيادة هوامش المصنعية.</p>
+                        <p className="text-[#5a5548]">تظهر البيانات استقراراً في مبيعات عيار 18، مما يشير إلى وجود قاعدة عملاء للمشغولات. يفنصح بزيادة تنوع التشكيلة في هذا العيار تحديداً لزيادة هوامش المصنعية.</p>
                     </div>
                     <div className="p-4 bg-[#0e1018] rounded-xl space-y-2 border-r-4 border-red-400">
-                        <div className="font-bold text-[#ddd8cc]">2. معالجة المصاري�?</div>
+                        <div className="font-bold text-[#ddd8cc]">2. معالجة المصاريف</div>
                         {/* Recommendations Section Logic */}
-                        <p className="text-[#5a5548]">بند `{Object.entries(expenses).sort((a, b) => (b[1] as number) - (a[1] as number))[0]?.[0] || 'المصاري�?'}` يستنز�? جزءاً كبيراً من السيولة. يجب مراجعة هذا البند لضمان عدم تأثيره على رأس المال العامل.</p>
+                        <p className="text-[#5a5548]">بند `{Object.entries(expenses).sort((a, b) => (b[1] as number) - (a[1] as number))[0]?.[0] || 'المصاريف'}` يستنزف جزءاً كبيراً من السيولة. يجب مراجعة هذا البند لضمان عدم تأثيره على رأس المال العامل.</p>
                     </div>
                 </div>
                 <div className="space-y-4">
                     <div className="p-4 bg-[#0e1018] rounded-xl space-y-2 border-r-4 border-blue-400">
-                        <div className="font-bold text-[#ddd8cc]">3. �?رص التطوير</div>
-                        <p className="text-[#5a5548]">لاحظنا وجود "أيام ضعي�?ة" بانتظام خلال الأسبوع. يمكن تقديم عروض "ساعة الحظ" أو تخ�?يضات على المصنعية �?ي هذه الأيام لتح�?يز حركة البيع.</p>
+                        <div className="font-bold text-[#ddd8cc]">3. فرص التطوير</div>
+                        <p className="text-[#5a5548]">لاحظنا وجود "أيام ضعيفة" بانتظام خلال الأسبوع. يمكن تقديم عروض "ساعة الحظ" أو تخفيضات على المصنعية في هذه الأيام لتحفيز حركة البيع.</p>
                     </div>
                     <div className="p-4 bg-[#0e1018] rounded-xl space-y-2 border-r-4 border-[#c9a84c]">
                         <div className="font-bold text-[#ddd8cc]">4. إدارة السيولة</div>
-                        <p className="text-[#5a5548]">رصيد الخزنة الحالي {exec.treasuryBalance.toLocaleString()} ج. يجب الح�?اظ على هذا المستوى وتوزيعه بحكمة بين السيولة الجاهزة للمشتريات الكبرى وبين الأصول الذهبية.</p>
+                        <p className="text-[#5a5548]">رصيد الخزنة الحالي {exec.treasuryBalance.toLocaleString()} ج. يجب الحفاظ على هذا المستوى وتوزيعه بحكمة بين السيولة الجاهزة للمشتريات الكبرى وبين الأصول الذهبية.</p>
                     </div>
                 </div>
             </div>

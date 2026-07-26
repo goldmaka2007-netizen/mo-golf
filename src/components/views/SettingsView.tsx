@@ -209,13 +209,13 @@ export const SettingsView = React.memo(() => {
     });
   };
   const handleDeleteOpeningPrice = async (year: number) => {
-    if (!window.confirm(`حذ�? أسعار ا�?تتاح سنة ${year}؟`)) return;
+    if (!window.confirm(`حذف أسعار افتتاح سنة ${year}؟`)) return;
     setOpeningPriceError('');
     setIsSavingOpeningPrice(true);
     try {
       await persistOpeningCostConfig(sortedOpeningCostConfig.filter(row => Number(row.year) !== Number(year)));
     } catch (error) {
-      setOpeningPriceError(error instanceof Error ? error.message : 'تعذر حذ�? سنة الا�?تتاح.');
+      setOpeningPriceError(error instanceof Error ? error.message : 'تعذر حذف سنة الافتتاح.');
     } finally {
       setIsSavingOpeningPrice(false);
     }
@@ -223,7 +223,7 @@ export const SettingsView = React.memo(() => {
 
   const handleDeleteAllData = async () => {
     if (operationWritesLocked) {
-      setGlobalError('لا يمكن حذ�? العمليات أثناء تشغيل أو �?شل إعادة احتساب التكل�?ة.');
+      setGlobalError('لا يمكن حذف العمليات أثناء تشغيل أو فشل إعادة احتساب التكلفة.');
       return;
     }
     setIsDeletingAll(true);
@@ -238,10 +238,10 @@ export const SettingsView = React.memo(() => {
         await batch.commit();
       }
       setShowDeleteAllConfirm(false);
-      alert("تم مسح كا�?ة البيانات بنجاح!");
+      alert("تم مسح كافة البيانات بنجاح!");
     } catch (error) {
       console.error("Delete All Error:", error);
-      setGlobalError("�?شل مسح البيانات. يرجى المحاولة لاحقاً.");
+      setGlobalError("فشل مسح البيانات. يرجى المحاولة لاحقاً.");
     } finally {
       setIsDeletingAll(false);
     }
@@ -251,7 +251,7 @@ export const SettingsView = React.memo(() => {
 
   const handleRetroactiveInvoiceNumbers = async () => {
     if (operationWritesLocked) {
-      setGlobalError('لا يمكن تعديل العمليات أثناء تشغيل أو �?شل إعادة احتساب التكل�?ة.');
+      setGlobalError('لا يمكن تعديل العمليات أثناء تشغيل أو فشل إعادة احتساب التكلفة.');
       return;
     }
     setIsImporting(true);
@@ -268,7 +268,7 @@ export const SettingsView = React.memo(() => {
     const missingInvoices = sortedEntries.filter(e => !e.invoiceNumber);
     
     if (missingInvoices.length === 0) {
-      alert("جميع القيود الحالية مرقمة بال�?عل.");
+      alert("جميع القيود الحالية مرقمة بالفعل.");
       setIsImporting(false);
       return;
     }
@@ -304,12 +304,12 @@ export const SettingsView = React.memo(() => {
         const txType = e.tx || '';
         if (txType.includes('بيع')) prefix = 'S';
         else if (txType.includes('شراء')) prefix = 'P';
-        else if (txType.includes('مصاري�?') || txType.includes('مصرو�?')) prefix = 'E';
+        else if (txType.includes('مصاريف') || txType.includes('مصروف')) prefix = 'E';
         else if (txType.includes('مسحوبات')) prefix = 'W';
         else if (txType.includes('قبض')) prefix = 'R';
-        else if (txType.includes('د�?ع')) prefix = 'D';
+        else if (txType.includes('دفع')) prefix = 'D';
         else if (txType.includes('تحويل')) prefix = 'T';
-        else if (txType.includes('تي�?يت')) prefix = 'M';
+        else if (txType.includes('تيفيت')) prefix = 'M';
         else if (txType.includes('تسوية') || txType.includes('عجز') || txType.includes('زيادة')) prefix = 'ADJ';
         else if (txType.includes('تصليح')) prefix = 'RP';
 
@@ -332,10 +332,10 @@ export const SettingsView = React.memo(() => {
         await batch.commit();
       }
       
-      alert(`تم إضا�?ة أرقام تسلسلية لـ ${updatedCount} قيد قديم بنجاح!`);
+      alert(`تم إضافة أرقام تسلسلية لـ ${updatedCount} قيد قديم بنجاح!`);
     } catch (error) {
       console.error("Migration error:", error);
-      setGlobalError("�?شل �?ي ترقيم القيود القديمة.");
+      setGlobalError("فشل في ترقيم القيود القديمة.");
     } finally {
       setIsImporting(false);
     }
@@ -360,7 +360,7 @@ export const SettingsView = React.memo(() => {
       document.body.removeChild(a);
     } catch (error) {
       console.error("Export Code Error:", error);
-      alert("�?شل تصدير الكود. تأكد من اتصالك بالإنترنت.");
+      alert("فشل تصدير الكود. تأكد من اتصالك بالإنترنت.");
     } finally {
       setIsExportingCode(false);
     }
@@ -374,7 +374,7 @@ export const SettingsView = React.memo(() => {
     
     const headers = [
       "التاريخ", 
-      "رقم ال�?اتورة",
+      "رقم الفاتورة",
       "العملية", 
       "مدين", 
       "دائن", 
@@ -384,11 +384,11 @@ export const SettingsView = React.memo(() => {
       "الوزن العربي", 
       "العدد", 
       "اسم العميل",
-      "رقم التلي�?ون",
+      "رقم التليفون",
       "سعر السوق",
       "المعامل",
       "ملاحظات",
-      "معر�? العملية"
+      "معرف العملية"
     ];
     
     const rows = entries.map(e => [
@@ -453,7 +453,7 @@ export const SettingsView = React.memo(() => {
   const handleImport = async () => {
     if (!importText.trim()) return;
     if (operationWritesLocked) {
-      setGlobalError('لا يمكن استيراد عمليات أثناء تشغيل أو �?شل إعادة احتساب التكل�?ة.');
+      setGlobalError('لا يمكن استيراد عمليات أثناء تشغيل أو فشل إعادة احتساب التكلفة.');
       return;
     }
     setIsImporting(true);
@@ -507,7 +507,7 @@ export const SettingsView = React.memo(() => {
         setImportProgress({ current: i + 1, total, success, failed });
       }
       setImportText('');
-      alert(`اكتمل الاستيراد: ${success} ناجح، ${failed} �?شل`);
+      alert(`اكتمل الاستيراد: ${success} ناجح، ${failed} فشل`);
     } catch (error) {
       alert("حدث خطأ أثناء الاستيراد");
     } finally {
@@ -584,9 +584,9 @@ export const SettingsView = React.memo(() => {
           >
             <div className="bg-[#0e1018] border border-[#1a1e2a] rounded-3xl p-6 space-y-5">
               <div className="space-y-1">
-                <h3 className="text-sm font-bold text-[#ddd8cc]">أسعار الا�?تتاح السنوية للتكل�?ة</h3>
+                <h3 className="text-sm font-bold text-[#ddd8cc]">أسعار الافتتاح السنوية للتكلفة</h3>
                 <p className="text-[11px] text-[#8a8172] leading-6">
-                  ت�?ستخدم هذه الأسعار �?قط لتحديد تكل�?ة المخزون الا�?تتاحي وحساب متوسط التكل�?ة. لا ت�?ستخدم كتقييم سوقي حالي.
+                  تفستخدم هذه الأسعار فقط لتحديد تكلفة المخزون الافتتاحي وحساب متوسط التكلفة. لا تفستخدم كتقييم سوقي حالي.
                 </p>
               </div>
 
@@ -597,17 +597,17 @@ export const SettingsView = React.memo(() => {
                   <input value={openingPriceForm.year} onChange={(e) => setOpeningPriceForm(prev => ({ ...prev, year: e.target.value }))} inputMode="numeric" className="w-full bg-[#080a0f] border border-[#1a1e2a] rounded-xl p-3 text-sm text-[#ddd8cc] outline-none focus:border-[#c9a84c55]" placeholder="2026" />
                 </label>
                 <label className="space-y-1">
-                  <span className="text-[10px] font-bold text-[#c9a84c]">سعر ا�?تتاح جرام الذهب عيار 21 بالجنيه</span>
+                  <span className="text-[10px] font-bold text-[#c9a84c]">سعر افتتاح جرام الذهب عيار 21 بالجنيه</span>
                   <input value={openingPriceForm.gold} onChange={(e) => setOpeningPriceForm(prev => ({ ...prev, gold: e.target.value }))} inputMode="decimal" className="w-full bg-[#080a0f] border border-[#1a1e2a] rounded-xl p-3 text-sm text-[#ddd8cc] outline-none focus:border-[#c9a84c55]" placeholder="4000" />
                 </label>
                 <label className="space-y-1">
-                  <span className="text-[10px] font-bold text-[#c9a84c]">سعر ا�?تتاح جرام ال�?ضة بالجنيه</span>
+                  <span className="text-[10px] font-bold text-[#c9a84c]">سعر افتتاح جرام الفضة بالجنيه</span>
                   <input value={openingPriceForm.silver} onChange={(e) => setOpeningPriceForm(prev => ({ ...prev, silver: e.target.value }))} inputMode="decimal" className="w-full bg-[#080a0f] border border-[#1a1e2a] rounded-xl p-3 text-sm text-[#ddd8cc] outline-none focus:border-[#c9a84c55]" placeholder="60" />
                 </label>
                 </div>
                 <div className="rounded-2xl border border-[#1a1e2a] bg-[#080a0f] p-3">
                   <div className="mb-3 text-[11px] font-black text-[#ddd8cc]">
-                    تكل�?ة الا�?تتاح للوحدة — ليست سعر بيع
+                    تكلفة الافتتاح للوحدة — ليست سعر بيع
                   </div>
                   <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
                     {accessoryAccounts.map(account => (
@@ -632,7 +632,7 @@ export const SettingsView = React.memo(() => {
                 </div>
                 <button type="submit" disabled={isSavingOpeningPrice} className="px-5 py-3 bg-[#c9a84c] text-[#080a0f] rounded-xl text-xs font-bold flex items-center justify-center gap-2 disabled:opacity-60">
                   {isSavingOpeningPrice ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
-                  ح�?ظ
+                  حفظ
                 </button>
               </form>
 
@@ -653,7 +653,7 @@ export const SettingsView = React.memo(() => {
                     <tr className="border-b border-[#1a1e2a] [&>th]:p-3 [&>th]:text-[#8a8172]">
                       <th>السنة</th>
                       <th>ذهب 21 بالجنيه</th>
-                      <th>�?ضة بالجنيه</th>
+                      <th>فضة بالجنيه</th>
                       <th>{'\u0645\u0644\u062d\u0642\u0627\u062a'}</th>
                       <th>إجراءات</th>
                     </tr>
@@ -661,7 +661,7 @@ export const SettingsView = React.memo(() => {
                   <tbody className="divide-y divide-[#1a1e2a] [&>tr>td]:p-3">
                     {sortedOpeningCostConfig.length === 0 ? (
                       <tr>
-                        <td colSpan={5} className="text-center text-[#8a8172]">لا توجد أسعار ا�?تتاح مح�?وظة بعد.</td>
+                        <td colSpan={5} className="text-center text-[#8a8172]">لا توجد أسعار افتتاح محفوظة بعد.</td>
                       </tr>
                     ) : sortedOpeningCostConfig.map(row => (
                       <tr key={row.year}>
@@ -691,7 +691,7 @@ export const SettingsView = React.memo(() => {
                         <td>
                           <div className="flex gap-2">
                             <button type="button" onClick={() => handleEditOpeningPrice(row)} className="px-3 py-2 bg-[#1a1e2a] text-[#c9a84c] rounded-lg text-[10px] font-bold">تعديل</button>
-                            <button type="button" onClick={() => handleDeleteOpeningPrice(Number(row.year))} className="px-3 py-2 bg-red-500/10 text-red-300 rounded-lg text-[10px] font-bold">حذ�? السنة</button>
+                            <button type="button" onClick={() => handleDeleteOpeningPrice(Number(row.year))} className="px-3 py-2 bg-red-500/10 text-red-300 rounded-lg text-[10px] font-bold">حذف السنة</button>
                           </div>
                         </td>
                       </tr>
@@ -714,7 +714,7 @@ export const SettingsView = React.memo(() => {
             <div className="bg-[#0e1018] border border-[#1a1e2a] rounded-3xl p-6 space-y-6">
               <div className="pb-6 border-b border-[#1a1e2a] space-y-4">
                 <div>
-                  <div className="text-sm font-bold text-[#ddd8cc]">تصدير كا�?ة البيانات (Excel)</div>
+                  <div className="text-sm font-bold text-[#ddd8cc]">تصدير كافة البيانات (Excel)</div>
                   <div className="text-[10px] text-[#5a5548]">تحميل نسخة احتياطية من جميع القيود المسجلة</div>
                 </div>
                 <div className="flex gap-2">
@@ -723,17 +723,17 @@ export const SettingsView = React.memo(() => {
                     className="flex-1 py-3 bg-[#1a1e2a] text-[#c9a84c] rounded-xl hover:bg-[#c9a84c22] transition-all text-xs font-bold border border-[#c9a84c22] flex items-center justify-center gap-2"
                   >
                     <FilePlus className="w-4 h-4" />
-                    تصدير كمل�? جديد
+                    تصدير كملف جديد
                   </button>
                   <button 
                     onClick={() => handleExportData('update')}
                     className="flex-1 py-3 bg-[#c9a84c] text-[#080a0f] rounded-xl hover:bg-[#d4b455] transition-all text-xs font-bold flex items-center justify-center gap-2 shadow-lg shadow-[#c9a84c22]"
                   >
                     <Save className="w-4 h-4" />
-                    تحديث ن�?س المل�?
+                    تحديث نفس الملف
                   </button>
                 </div>
-                <div className="text-[9px] text-[#5a5548] italic">* عند استبدال المل�? �?ي iCloud، اختر "Keep Both" لمل�? جديد، أو "Replace" لتحديث المل�? الحالي.</div>
+                <div className="text-[9px] text-[#5a5548] italic">* عند استبدال الملف في iCloud، اختر "Keep Both" لملف جديد، أو "Replace" لتحديث الملف الحالي.</div>
               </div>
 
               <div className="pb-6 border-b border-[#1a1e2a] space-y-4">
@@ -751,7 +751,7 @@ export const SettingsView = React.memo(() => {
                   ) : (
                     <Code className="w-5 h-5 text-[#c9a84c]" />
                   )}
-                  {isExportingCode ? 'جاري تجهيز المل�?...' : 'تحميل كود الأبليكشن كاملاً'}
+                  {isExportingCode ? 'جاري تجهيز الملف...' : 'تحميل كود الأبليكشن كاملاً'}
                 </button>
                 <div className="p-3 bg-blue-500/05 border border-blue-500/20 rounded-xl space-y-2">
                   <div className="flex items-center gap-2 text-[#6a8a9e] text-[10px] font-bold">
@@ -759,15 +759,15 @@ export const SettingsView = React.memo(() => {
                     <span>للعلم: يمكنك دائماً تحميل الكود من واجهة AI Studio</span>
                   </div>
                   <p className="text-[9px] text-[#5a5548] leading-relaxed pr-5">
-                    اضغط على أيقونة الإعدادات (الترس ⚙�?) �?ي أعلى يمين شاشة AI Studio، ثم اختر "Download as ZIP" للحصول على النسخة الأصلية دائماً.
+                    اضغط على أيقونة الإعدادات (الترس ⚙ف) في أعلى يمين شاشة AI Studio، ثم اختر "Download as ZIP" للحصول على النسخة الأصلية دائماً.
                   </p>
                 </div>
               </div>
 
               <div className="flex items-center justify-between pt-4">
                 <div>
-                  <div className="text-sm font-bold text-[#ddd8cc]">مسح كا�?ة البيانات</div>
-                  <div className="text-[10px] text-[#5a5548]">سيتم حذ�? جميع القيود المسجلة نهائياً</div>
+                  <div className="text-sm font-bold text-[#ddd8cc]">مسح كافة البيانات</div>
+                  <div className="text-[10px] text-[#5a5548]">سيتم حذف جميع القيود المسجلة نهائياً</div>
                 </div>
                 {!showDeleteAllConfirm ? (
                   <button 
@@ -790,7 +790,7 @@ export const SettingsView = React.memo(() => {
                       className="px-4 py-2 bg-[#9e6a6a] text-[#080a0f] rounded-xl text-[10px] font-bold flex items-center gap-2"
                     >
                       {isDeletingAll ? <Loader2 className="w-3 h-3 animate-spin" /> : <AlertTriangle className="w-3 h-3" />}
-                      تأكيد الحذ�?
+                      تأكيد الحذف
                     </button>
                   </div>
                 )}
@@ -808,8 +808,8 @@ export const SettingsView = React.memo(() => {
                     />
                     <div className="bg-[#080a0f] border-2 border-dashed border-[#1a1e2a] rounded-2xl p-8 text-center group-hover:border-[#c9a84c33] transition-all">
                       <Upload className="w-8 h-8 text-[#5a5548] mx-auto mb-2 group-hover:text-[#c9a84c] transition-colors" />
-                      <div className="text-xs text-[#5a5548]">اسحب المل�? هنا أو اضغط للاختيار</div>
-                      <div className="text-[9px] text-[#5a5548] mt-1">يدعم مل�?ات Excel و CSV</div>
+                      <div className="text-xs text-[#5a5548]">اسحب الملف هنا أو اضغط للاختيار</div>
+                      <div className="text-[9px] text-[#5a5548] mt-1">يدعم ملفات Excel و CSV</div>
                     </div>
                   </div>
                   
@@ -843,7 +843,7 @@ export const SettingsView = React.memo(() => {
                       </div>
                       <div className="flex gap-4 text-[9px]">
                         <span className="text-[#6a9e6a]">ناجح: {importProgress.success}</span>
-                        <span className="text-[#9e6a6a]">�?شل: {importProgress.failed}</span>
+                        <span className="text-[#9e6a6a]">فشل: {importProgress.failed}</span>
                       </div>
                     </div>
                   )}
@@ -854,8 +854,8 @@ export const SettingsView = React.memo(() => {
                     </h4>
                     <div className="p-4 bg-[#6a8a9e11] border border-[#6a8a9e22] rounded-2xl flex items-center justify-between">
                       <div>
-                        <div className="text-xs font-bold text-[#6a8a9e]">تحديث أرقام ال�?واتير للقيود السابقة (تلقائي)</div>
-                        <div className="text-[10px] text-[#5a5548] mt-1 pr-1">إضا�?ة أرقام تسلسلية ذكية (مثل S1 و P1) لكل القيود السابقة الخالية من الأرقام.</div>
+                        <div className="text-xs font-bold text-[#6a8a9e]">تحديث أرقام الفواتير للقيود السابقة (تلقائي)</div>
+                        <div className="text-[10px] text-[#5a5548] mt-1 pr-1">إضافة أرقام تسلسلية ذكية (مثل S1 و P1) لكل القيود السابقة الخالية من الأرقام.</div>
                       </div>
                       <button 
                         onClick={handleRetroactiveInvoiceNumbers}
@@ -869,13 +869,13 @@ export const SettingsView = React.memo(() => {
                     <div className="p-4 bg-[#c9a84c11] border border-[#c9a84c22] rounded-2xl flex items-center justify-between mt-4">
                       <div>
                         <div className="text-xs font-bold text-[#c9a84c]">شاشة جرد ومطابقة المخزون</div>
-                        <div className="text-[10px] text-[#5a5548] mt-1 pr-1">مطابقة القائمة الد�?ترية مع الجرد ال�?علي للمحلات وح�?ظها بالسجلات.</div>
+                        <div className="text-[10px] text-[#5a5548] mt-1 pr-1">مطابقة القائمة الدفترية مع الجرد الفعلي للمحلات وحفظها بالسجلات.</div>
                       </div>
                       <button 
                         onClick={() => useAppStore.getState().setView('inventory')}
                         className="px-4 py-2 bg-[#c9a84c] text-[#0e1018] text-[10px] font-bold rounded-xl hover:bg-[#d4b455] transition-all"
                       >
-                        �?تح الشاشة
+                        فتح الشاشة
                       </button>
                     </div>
                   </div>
@@ -928,7 +928,7 @@ export const SettingsView = React.memo(() => {
               <div>
                 <h3 className="text-lg font-bold text-[#ddd8cc] mb-2">شجرة الحسابات والدليل</h3>
                 <p className="text-xs text-[#5a5548] leading-relaxed">
-                  قم بتنظيم حساباتك (أصول، خصوم، إيرادات...) وإضا�?ة حسابات جديدة للعملاء أو الموردين أو التجار بسهولة من خلال الشجرة الهيكلية.
+                  قم بتنظيم حساباتك (أصول، خصوم، إيرادات...) وإضافة حسابات جديدة للعملاء أو الموردين أو التجار بسهولة من خلال الشجرة الهيكلية.
                 </p>
               </div>
               <button 

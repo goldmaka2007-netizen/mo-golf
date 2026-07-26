@@ -94,7 +94,7 @@ const HistoryCard = React.memo(({
           <div className="flex-1 space-y-2">
             <div className="text-xs text-[#5a5548] bg-[#1a1e2a] px-2 py-0.5 rounded-lg w-fit">الوزن</div>
             <div className="flex justify-between items-center text-sm">
-              <span className="text-[#ddd8cc]">د�?تري: <span className="font-mono">{check.systemWeight.toFixed(2)}</span></span>
+              <span className="text-[#ddd8cc]">دفتري: <span className="font-mono">{check.systemWeight.toFixed(2)}</span></span>
               <ArrowRightLeft className="w-4 h-4 text-[#3a3530]" />
               {editingId === check.id ? (
                 <input
@@ -106,11 +106,11 @@ const HistoryCard = React.memo(({
                   autoFocus
                 />
               ) : (
-                <span className="text-[#c9a84c]">�?علي: <span className="font-mono">{check.actualWeight.toFixed(2)}</span></span>
+                <span className="text-[#c9a84c]">فعلي: <span className="font-mono">{check.actualWeight.toFixed(2)}</span></span>
               )}
             </div>
             <div className={cn("text-xs font-bold font-mono text-center pt-1 border-t border-[#1a1e2a]/50", calculateDiffColor(check.systemWeight, editingId === check.id ? (parseFloat(editW) || 0) : check.actualWeight))}>
-              ال�?رق: {((editingId === check.id ? (parseFloat(editW) || 0) : check.actualWeight) - check.systemWeight).toFixed(2)}
+              الفرق: {((editingId === check.id ? (parseFloat(editW) || 0) : check.actualWeight) - check.systemWeight).toFixed(2)}
             </div>
           </div>
         )}
@@ -119,7 +119,7 @@ const HistoryCard = React.memo(({
           <div className="flex-1 space-y-2">
             <div className="text-xs text-[#5a5548] bg-[#1a1e2a] px-2 py-0.5 rounded-lg w-fit">العدد / القطع</div>
             <div className="flex justify-between items-center text-sm">
-              <span className="text-[#ddd8cc]">د�?تري: <span className="font-mono">{check.systemCount.toFixed(0)}</span></span>
+              <span className="text-[#ddd8cc]">دفتري: <span className="font-mono">{check.systemCount.toFixed(0)}</span></span>
               <ArrowRightLeft className="w-4 h-4 text-[#3a3530]" />
               {editingId === check.id ? (
                 <input
@@ -130,11 +130,11 @@ const HistoryCard = React.memo(({
                   className="w-24 bg-[#080a0f] border border-[#c9a84c] rounded-lg px-2 py-1 text-sm text-[#c9a84c] font-mono outline-none"
                 />
               ) : (
-                <span className="text-[#c9a84c]">�?علي: <span className="font-mono">{check.actualCount.toFixed(0)}</span></span>
+                <span className="text-[#c9a84c]">فعلي: <span className="font-mono">{check.actualCount.toFixed(0)}</span></span>
               )}
             </div>
             <div className={cn("text-xs font-bold font-mono text-center pt-1 border-t border-[#1a1e2a]/50", calculateDiffColor(check.systemCount, editingId === check.id ? (parseFloat(editC) || 0) : check.actualCount))}>
-              ال�?رق: {((editingId === check.id ? (parseFloat(editC) || 0) : check.actualCount) - check.systemCount).toFixed(0)}
+              الفرق: {((editingId === check.id ? (parseFloat(editC) || 0) : check.actualCount) - check.systemCount).toFixed(0)}
             </div>
           </div>
         )}
@@ -154,7 +154,7 @@ const HistoryCard = React.memo(({
               disabled={updateLoading}
               className="flex-1 flex items-center justify-center gap-2 py-2 bg-[#6a9e6a] text-[#080a0f] rounded-xl text-xs font-bold hover:bg-[#7aaf7a] transition-all"
             >
-              {updateLoading ? 'جاري الح�?ظ...' : <><Save className="w-4 h-4" /> ح�?ظ التعديل</>}
+              {updateLoading ? 'جاري الحفظ...' : <><Save className="w-4 h-4" /> حفظ التعديل</>}
             </button>
             <button
               onClick={() => setEditingId(null)}
@@ -185,7 +185,7 @@ const HistoryCard = React.memo(({
                   ) : (isPosted || !!matchingEntry) ? (
                     <><CheckCircle2 className="w-4 h-4" /> تم الترحيل</>
                   ) : hasNoDiff ? (
-                    "لا يوجد �?رق للتسوية"
+                    "لا يوجد فرق للتسوية"
                   ) : (
                     <><CheckSquare className="w-4 h-4" /> ترحيل كتسوية</>
                   )}
@@ -233,11 +233,11 @@ export const InventoryCheckView = React.memo(() => {
       const acc = accountsDb.find(a => a.name === accName);
       const nature = acc ? acc.balanceNature : (
         accountCategories?.assets?.['مخزون ذهب']?.includes(accName) ? 'جرام ذهب' :
-        accountCategories?.assets?.['مخزون �?ضة']?.includes(accName) ? 'جرام �?ضة' : 'قطعة'
+        accountCategories?.assets?.['مخزون فضة']?.includes(accName) ? 'جرام فضة' : 'قطعة'
       );
       
       if (nature.includes('ذهب')) return 1;
-      if (nature.includes('�?ضة')) return 2;
+      if (nature.includes('فضة')) return 2;
       return 3; // Pieces/Accessories
     };
 
@@ -248,7 +248,7 @@ export const InventoryCheckView = React.memo(() => {
         .filter(acc => 
           acc.mainType === 'اصول' && 
           (acc.balanceNature.includes('ذهب') || 
-           acc.balanceNature.includes('�?ضة') || 
+           acc.balanceNature.includes('فضة') || 
            acc.balanceNature.includes('قطعة'))
         )
         .map(acc => acc.name);
@@ -256,8 +256,8 @@ export const InventoryCheckView = React.memo(() => {
       // Priority 2: Fallback
       const assets = accountCategories?.assets || {};
       if (assets['مخزون ذهب']) accounts.push(...assets['مخزون ذهب']);
-      if (assets['مخزون �?ضة']) accounts.push(...assets['مخزون �?ضة']);
-      if (assets['مخزون ملحقات اضا�?ية']) accounts.push(...assets['مخزون ملحقات اضا�?ية']);
+      if (assets['مخزون فضة']) accounts.push(...assets['مخزون فضة']);
+      if (assets['مخزون ملحقات اضافية']) accounts.push(...assets['مخزون ملحقات اضافية']);
       accounts = Array.from(new Set(accounts));
     }
 
@@ -273,14 +273,14 @@ export const InventoryCheckView = React.memo(() => {
 
   const getIsSilver = useCallback((accName: string) => {
     const acc = accountsDb.find(a => a.name === accName);
-    if (acc) return acc.balanceNature.includes('�?ضة');
-    return (accountCategories?.assets?.['مخزون �?ضة'] || []).includes(accName);
+    if (acc) return acc.balanceNature.includes('فضة');
+    return (accountCategories?.assets?.['مخزون فضة'] || []).includes(accName);
   }, [accountsDb, accountCategories]);
 
   const getIsAcc = useCallback((accName: string) => {
     const acc = accountsDb.find(a => a.name === accName);
     if (acc) return acc.balanceNature.includes('قطعة');
-    return (accountCategories?.assets?.['مخزون ملحقات اضا�?ية'] || []).includes(accName);
+    return (accountCategories?.assets?.['مخزون ملحقات اضافية'] || []).includes(accName);
   }, [accountsDb, accountCategories]);
 
   const handleQuickUpdate = useCallback(async (id: string) => {
@@ -324,25 +324,25 @@ export const InventoryCheckView = React.memo(() => {
   const handleDelete = useCallback(async (id: string) => {
     const existing = inventoryChecks.find(check => check.id === id);
     if (existing && effectiveInventoryCheckStatus(existing) === 'posted') {
-      setGlobalError('لا يمكن حذ�? جرد تم ترحيله.');
+      setGlobalError('لا يمكن حذف جرد تم ترحيله.');
       return;
     }
-    if (!window.confirm('هل أنت متأكد من حذ�? هذا الجرد؟')) return;
+    if (!window.confirm('هل أنت متأكد من حذف هذا الجرد؟')) return;
     try {
       await deleteDoc(doc(db, 'inventory_checks', id));
     } catch (error) {
        console.error("Inventory check delete error:", error);
-       alert("�?شل حذ�? الجرد.");
+       alert("فشل حذف الجرد.");
     }
   }, [inventoryChecks, setGlobalError]);
 
   const createAdjustmentEntry = useCallback(async (check: InventoryCheck) => {
     if (operationWritesLocked) {
-      setGlobalError('لا يمكن إنشاء تسوية مخزون أثناء تشغيل أو �?شل إعادة احتساب التكل�?ة.');
+      setGlobalError('لا يمكن إنشاء تسوية مخزون أثناء تشغيل أو فشل إعادة احتساب التكلفة.');
       return;
     }
     if (!check.id) {
-      setGlobalError('لا يمكن ترحيل جرد غير مح�?وظ.');
+      setGlobalError('لا يمكن ترحيل جرد غير محفوظ.');
       return;
     }
     if (effectiveInventoryCheckStatus(check) === 'posted') {
@@ -417,10 +417,10 @@ export const InventoryCheckView = React.memo(() => {
       let debitAcc, creditAcc;
       if (weightDiff < 0) { // Shortage (عجز)
         creditAcc = check.accountId;
-        debitAcc = isGold ? "عجز-الذهب" : isSilver ? "عجز-ال�?ضة" : "م ا ع";
+        debitAcc = isGold ? "عجز-الذهب" : isSilver ? "عجز-الفضة" : "م ا ع";
       } else { // Surplus (زيادة)
         debitAcc = check.accountId;
-        creditAcc = isGold ? "زيادة-الذهب" : isSilver ? "زيادة-ال�?ضة" : "ايرادات اخري";
+        creditAcc = isGold ? "زيادة-الذهب" : isSilver ? "زيادة-الفضة" : "ايرادات اخري";
       }
 
       await addDoc(collection(db, 'entries'), {
@@ -456,12 +456,12 @@ export const InventoryCheckView = React.memo(() => {
     const data = inventoryChecks.map(check => ({
       'الحساب': check.accountId,
       'التاريخ': check.date,
-      'الوزن الد�?تري': check.systemWeight.toFixed(2),
-      'الوزن ال�?علي': check.actualWeight.toFixed(2),
-      'ال�?رق بالوزن': (check.actualWeight - check.systemWeight).toFixed(2),
-      'الالعدد الد�?تري': check.systemCount.toFixed(0),
-      'العدد ال�?علي': check.actualCount.toFixed(0),
-      'ال�?رق بالعدد': (check.actualCount - check.systemCount).toFixed(0),
+      'الوزن الدفتري': check.systemWeight.toFixed(2),
+      'الوزن الفعلي': check.actualWeight.toFixed(2),
+      'الفرق بالوزن': (check.actualWeight - check.systemWeight).toFixed(2),
+      'الالعدد الدفتري': check.systemCount.toFixed(0),
+      'العدد الفعلي': check.actualCount.toFixed(0),
+      'الفرق بالعدد': (check.actualCount - check.systemCount).toFixed(0),
       'الملاحظات': check.notes || '-'
     }));
 
@@ -566,7 +566,7 @@ export const InventoryCheckView = React.memo(() => {
       });
     } catch (error) {
       console.error("Inventory check save error:", error);
-      alert("تنبيه: �?شل ح�?ظ الجرد �?ي السير�?ر. سيتم المحاولة تلقائياً.");
+      alert("تنبيه: فشل حفظ الجرد في السيرفر. سيتم المحاولة تلقائياً.");
     }
   };
 
@@ -650,7 +650,7 @@ export const InventoryCheckView = React.memo(() => {
           </div>
           <div>
             <h1 className="text-2xl font-bold text-[#c9a84c]">جرد ومطابقة المخزون</h1>
-            <p className="text-sm text-[#ddd8cc]">مراجعة الأرصدة الد�?ترية مع الأرصدة ال�?علية</p>
+            <p className="text-sm text-[#ddd8cc]">مراجعة الأرصدة الدفترية مع الأرصدة الفعلية</p>
           </div>
         </div>
         <button
@@ -694,7 +694,7 @@ export const InventoryCheckView = React.memo(() => {
                 <div className="grid grid-cols-2 gap-4">
                   <div className="bg-[#080a0f] border border-[#1a1e2a] rounded-3xl p-5 relative overflow-hidden group">
                     <Scale className="w-6 h-6 text-[#5a5548] mb-2" />
-                    <div className="text-xs font-bold text-[#5a5548] mb-1">الوزن الد�?تري</div>
+                    <div className="text-xs font-bold text-[#5a5548] mb-1">الوزن الدفتري</div>
                     <div className="text-2xl font-bold text-[#ddd8cc] font-mono">
                       {systemState.weight.toFixed(2)} <span className="text-xs font-sans opacity-50">غ</span>
                       {systemState.type === 'gold' && Object.entries(systemState.karats || {}).map(([k, w]) => (
@@ -706,7 +706,7 @@ export const InventoryCheckView = React.memo(() => {
                   </div>
                   <div className="bg-[#080a0f] border border-[#1a1e2a] rounded-3xl p-5 relative overflow-hidden group">
                     <Package className="w-6 h-6 text-[#5a5548] mb-2" />
-                    <div className="text-xs font-bold text-[#5a5548] mb-1">العدد الد�?تري</div>
+                    <div className="text-xs font-bold text-[#5a5548] mb-1">العدد الدفتري</div>
                     <div className="text-2xl font-bold text-[#ddd8cc] font-mono">
                       {systemState.count.toFixed(0)} <span className="text-xs font-sans opacity-50">ق</span>
                     </div>
@@ -715,11 +715,11 @@ export const InventoryCheckView = React.memo(() => {
 
                 {/* Actual Form */}
                 <form onSubmit={handleSave} className="bg-[#0e1018] rounded-3xl p-6 border border-[#c9a84c22] space-y-6">
-                  <label className="text-base font-bold text-[#c9a84c] uppercase tracking-wider block">2. إدخال الأرصدة ال�?علية للمطابقة</label>
+                  <label className="text-base font-bold text-[#c9a84c] uppercase tracking-wider block">2. إدخال الأرصدة الفعلية للمطابقة</label>
                   
                   <div className="grid grid-cols-2 gap-4">
                     <FormInput
-                      label="الوزن ال�?علي"
+                      label="الوزن الفعلي"
                       type="number"
                       step="0.01"
                       value={actualWeight}
@@ -731,7 +731,7 @@ export const InventoryCheckView = React.memo(() => {
                       dir="ltr"
                     />
                     <FormInput
-                      label="العدد ال�?علي"
+                      label="العدد الفعلي"
                       type="number"
                       step="1"
                       value={actualCount}
@@ -756,7 +756,7 @@ export const InventoryCheckView = React.memo(() => {
 
                   {actualWeight !== '' || actualCount !== '' ? (
                     <div className="bg-[#1a1e2a] rounded-2xl p-4 flex justify-between items-center">
-                      <div className="text-xs text-[#ddd8cc]">نتائج المطابقة (ال�?رق)</div>
+                      <div className="text-xs text-[#ddd8cc]">نتائج المطابقة (الفرق)</div>
                       <div className="flex gap-4">
                         {actualWeight !== '' && (
                           <div className={cn("text-base font-bold font-mono", calculateDiffColor(systemState.weight, parseFloat(actualWeight)))}>
@@ -777,7 +777,7 @@ export const InventoryCheckView = React.memo(() => {
                     disabled={saveLoading || (!actualWeight && !actualCount)}
                     className="w-full bg-[#c9a84c] text-[#0e1018] text-lg font-bold py-4 rounded-2xl hover:bg-[#d4b455] disabled:opacity-50 disabled:cursor-not-allowed transition-all flex items-center justify-center gap-2"
                   >
-                    {saveLoading ? <span className="animate-pulse">جاري الح�?ظ...</span> : <><Save className="w-5 h-5" /> ح�?ظ الجرد</>}
+                    {saveLoading ? <span className="animate-pulse">جاري الحفظ...</span> : <><Save className="w-5 h-5" /> حفظ الجرد</>}
                   </button>
                 </form>
               </>

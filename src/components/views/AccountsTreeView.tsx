@@ -21,7 +21,7 @@ export const AccountsTreeView = React.memo(() => {
         // Strict order: Gold, Silver, Cash
         const groups: Record<string, Record<string, Account[]>> = {
           'ذهب': {},
-          '�?ضة': {},
+          'فضة': {},
           'نقدية': {},
           'أخرى': {}
         };
@@ -37,14 +37,14 @@ export const AccountsTreeView = React.memo(() => {
             if (nature === AccountNature.GOLD) {
                 addToCat('ذهب');
             } else if (nature === AccountNature.SILVER) {
-                addToCat('�?ضة');
+                addToCat('فضة');
             } else if (nature === AccountNature.CASH) {
                 addToCat('نقدية');
             } else if (nature === AccountNature.MIXED_GOLD) {
                 addToCat('ذهب');
                 addToCat('نقدية');
             } else if (nature === AccountNature.MIXED_SILVER) {
-                addToCat('�?ضة');
+                addToCat('فضة');
                 addToCat('نقدية');
             } else {
                 addToCat('أخرى');
@@ -58,7 +58,7 @@ export const AccountsTreeView = React.memo(() => {
       'خصوم': {},
       'حقوق ملكية': {},
       'ايرادات': {},
-      'مصرو�?ات': {}
+      'مصروفات': {}
     };
 
     accountsDb.forEach(acc => {
@@ -102,7 +102,7 @@ export const AccountsTreeView = React.memo(() => {
   };
 
   const handleDeleteAcc = async (id: string) => {
-    if (!user || !window.confirm('هل أنت متأكد من مسح هذا الحساب؟ �?كر جيداً، قد يكون له قيود مرتبطة.')) return;
+    if (!user || !window.confirm('هل أنت متأكد من مسح هذا الحساب؟ فكر جيداً، قد يكون له قيود مرتبطة.')) return;
     try {
       await deleteDoc(doc(db, 'accounts', id));
     } catch (error) {
@@ -117,7 +117,7 @@ export const AccountsTreeView = React.memo(() => {
 
     if (groupMode === 'nature') {
         if (main === 'ذهب') balanceNature = 'جرام ذهب';
-        else if (main === '�?ضة') balanceNature = 'جرام �?ضة';
+        else if (main === 'فضة') balanceNature = 'جرام فضة';
         else balanceNature = 'جنية مصري';
         mainType = sub || 'اصول'; // In nature mode, 'sub' was passed as mainType
         subType = 'عام';
@@ -130,13 +130,13 @@ export const AccountsTreeView = React.memo(() => {
   const getMainIcon = (key: string) => {
     switch (key) {
         case 'ذهب': return <Scale className="w-4 h-4 text-[#c9a84c]" />;
-        case '�?ضة': return <Coins className="w-4 h-4 text-[#6a8a9e]" />;
+        case 'فضة': return <Coins className="w-4 h-4 text-[#6a8a9e]" />;
         case 'نقدية': return <Wallet className="w-4 h-4 text-[#6a9e6a]" />;
         case 'اصول': return <Wallet className="w-4 h-4 text-[#ddd8cc]" />;
         case 'خصوم': return <Users className="w-4 h-4 text-[#ddd8cc]" />;
         case 'حقوق ملكية': return <Scale className="w-4 h-4 text-[#ddd8cc]" />;
         case 'ايرادات': return <TrendingUp className="w-4 h-4 text-[#ddd8cc]" />;
-        case 'مصرو�?ات': return <TrendingDown className="w-4 h-4 text-[#ddd8cc]" />;
+        case 'مصروفات': return <TrendingDown className="w-4 h-4 text-[#ddd8cc]" />;
         default: return <Package className="w-4 h-4 text-[#ddd8cc]" />;
     }
   };
@@ -159,19 +159,19 @@ export const AccountsTreeView = React.memo(() => {
                 onClick={() => setGroupMode('nature')}
                 className={cn("flex-1 py-1.5 text-[10px] font-bold rounded-lg transition-all", groupMode === 'nature' ? "bg-[#c9a84c] text-[#080a0f]" : "text-[#5a5548]")}
             >
-                تصني�? (ذهب/�?ضة/كاش)
+                تصنيف (ذهب/فضة/كاش)
             </button>
             <button 
                 onClick={() => setGroupMode('accounting')}
                 className={cn("flex-1 py-1.5 text-[10px] font-bold rounded-lg transition-all", groupMode === 'accounting' ? "bg-[#c9a84c] text-[#080a0f]" : "text-[#5a5548]")}
             >
-                التصني�? المحاسبي
+                التصنيف المحاسبي
             </button>
         </div>
       </div>
 
       <div className="space-y-3">
-        {(groupMode === 'nature' ? ['ذهب', '�?ضة', 'نقدية', 'أخرى'] : ['اصول', 'خصوم', 'حقوق ملكية', 'ايرادات', 'مصرو�?ات']).map(main => {
+        {(groupMode === 'nature' ? ['ذهب', 'فضة', 'نقدية', 'أخرى'] : ['اصول', 'خصوم', 'حقوق ملكية', 'ايرادات', 'مصروفات']).map(main => {
           const subs = (groupedAccounts as any)[main];
           if (!subs || Object.keys(subs).length === 0) return null;
 
@@ -186,7 +186,7 @@ export const AccountsTreeView = React.memo(() => {
                 <span className={cn(
                     "font-bold",
                     main === 'ذهب' ? "text-[#c9a84c]" : 
-                    main === '�?ضة' ? "text-[#6a8a9e]" : 
+                    main === 'فضة' ? "text-[#6a8a9e]" : 
                     main === 'نقدية' ? "text-[#6a9e6a]" : "text-[#ddd8cc]"
                 )}>{main}</span>
               </div>
@@ -220,7 +220,7 @@ export const AccountsTreeView = React.memo(() => {
                                 <div className="flex items-center gap-1.5">
                                     <span className="text-xs font-bold text-[#ddd8cc]">{acc.name}</span>
                                     {(getDynamicAccountNature(acc.name, accountsDb) === AccountNature.GOLD || getDynamicAccountNature(acc.name, accountsDb) === AccountNature.MIXED_GOLD) && <div className="w-1.5 h-1.5 rounded-full bg-[#c9a84c]" title="ذهب" />}
-                                    {(getDynamicAccountNature(acc.name, accountsDb) === AccountNature.SILVER || getDynamicAccountNature(acc.name, accountsDb) === AccountNature.MIXED_SILVER) && <div className="w-1.5 h-1.5 rounded-full bg-[#6a8a9e]" title="�?ضة" />}
+                                    {(getDynamicAccountNature(acc.name, accountsDb) === AccountNature.SILVER || getDynamicAccountNature(acc.name, accountsDb) === AccountNature.MIXED_SILVER) && <div className="w-1.5 h-1.5 rounded-full bg-[#6a8a9e]" title="فضة" />}
                                     {(getDynamicAccountNature(acc.name, accountsDb) === AccountNature.CASH || getDynamicAccountNature(acc.name, accountsDb) === AccountNature.MIXED_GOLD || getDynamicAccountNature(acc.name, accountsDb) === AccountNature.MIXED_SILVER) && <div className="w-1.5 h-1.5 rounded-full bg-[#6a9e6a]" title="نقدية" />}
                                 </div>
                                 <span className="text-[9px] text-[#5a5548]">{acc.balanceNature}</span>
@@ -252,7 +252,7 @@ export const AccountsTreeView = React.memo(() => {
               animate={{ scale: 1, opacity: 1 }}
               className="max-w-md w-full bg-[#0e1018] border border-[#1a1e2a] rounded-3xl p-8 shadow-2xl space-y-6"
             >
-              <h4 className="text-lg font-bold text-[#c9a84c]">{isAddingNew ? 'إضا�?ة حساب جديد' : 'تعديل حساب'}</h4>
+              <h4 className="text-lg font-bold text-[#c9a84c]">{isAddingNew ? 'إضافة حساب جديد' : 'تعديل حساب'}</h4>
               <div className="space-y-4">
                 <FormInput 
                   label="اسم الحساب"
@@ -274,7 +274,7 @@ export const AccountsTreeView = React.memo(() => {
                       <option value="خصوم">خصوم</option>
                       <option value="حقوق ملكية">حقوق ملكية</option>
                       <option value="ايرادات">ايرادات</option>
-                      <option value="مصرو�?ات">مصرو�?ات</option>
+                      <option value="مصروفات">مصروفات</option>
                     </select>
                   </div>
                   <div className="space-y-1">
@@ -286,16 +286,16 @@ export const AccountsTreeView = React.memo(() => {
                     >
                       <option value="جنية مصري">جنية مصري</option>
                       <option value="جرام ذهب">جرام ذهب</option>
-                      <option value="جرام �?ضة">جرام �?ضة</option>
+                      <option value="جرام فضة">جرام فضة</option>
                       <option value="قطعة">قطعة</option>
                       <option value="مختلط (ذهب + نقدي)">مختلط (ذهب + نقدي)</option>
-                      <option value="مختلط (�?ضة + نقدي)">مختلط (�?ضة + نقدي)</option>
+                      <option value="مختلط (فضة + نقدي)">مختلط (فضة + نقدي)</option>
                     </select>
                   </div>
                 </div>
                 
                 <FormInput 
-                  label="التصني�? ال�?رعي"
+                  label="التصنيف الفرعي"
                   value={editingAcc?.subType || ''} 
                   onChangeValue={v => setEditingAcc({...editingAcc, subType: v})}
                   placeholder="مثال: متداول، ثابت، عام..."
@@ -307,7 +307,7 @@ export const AccountsTreeView = React.memo(() => {
                   onClick={handleSaveAcc}
                   className="flex-1 py-3 bg-[#c9a84c] text-[#080a0f] font-bold rounded-xl hover:bg-[#d6b96b]"
                 >
-                  ح�?ظ
+                  حفظ
                 </button>
                 <button 
                   onClick={() => { setIsAddingNew(false); setEditingAcc(null); }}
