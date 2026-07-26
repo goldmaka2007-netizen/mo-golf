@@ -1,7 +1,7 @@
-﻿import { describe, expect, it } from 'vitest';
+import { describe, expect, it } from 'vitest';
 import { Account, Entry } from '../../types';
 import { buildInventoryCycleReport, getDefaultInventoryCycleFilters } from '../inventoryCycleReport';
-import { applyWarningState, createDefaultWarningState, markWarningReviewed, updateWarningTypeConfig } from '../inventoryCycleWarnings';
+import { createDefaultWarningState, markWarningReviewed, updateWarningTypeConfig } from '../inventoryCycleWarnings';
 import { createInventoryCycleFingerprint, findEarliestAffectedOperationId, makeCurrentCacheRecord, makeFailedCacheRecord, resolveCacheStatus } from '../inventoryCycleCache';
 import { buildOpeningCostConfig } from '../openingCostConfig';
 import { buildInventoryCycleExcelSheets, canExportInventoryCycleReport } from '../inventoryCycleExcel';

@@ -1,9 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import { createPortal } from 'react-dom';
 import { motion } from 'framer-motion';
-import { Settings2, X, Printer, LayoutTemplate } from 'lucide-react';
+import { X, Printer, LayoutTemplate } from 'lucide-react';
 import { useAppStore } from '../../store';
-import { Entry } from '../../types';
 
 interface FieldConfig {
   top: number; // in cm
@@ -194,7 +193,7 @@ export const InvoicePrintModal = () => {
               <div>
                 <h3 className="text-xl font-bold text-[#c9a84c] flex items-center gap-2">
                   <LayoutTemplate className="w-5 h-5" />
-                  مُعايرة الطباعة (سطامبة)
+                  م�?عايرة الطباعة (سطامبة)
                 </h3>
                 <p className="text-[10px] text-[#8a8578] mt-1">مقاس القالب: 21.5سم × 16.5سم</p>
               </div>
@@ -219,7 +218,7 @@ export const InvoicePrintModal = () => {
                   onClick={() => setSettings(DEFAULT_SETTINGS)}
                   className="px-4 py-3 bg-[#1a1e2a] text-[#8a8578] text-xs font-bold rounded-xl hover:bg-[#2a2e3a] transition-all"
                 >
-                  استعادة الافتراضي
+                  استعادة الا�?تراضي
                 </button>
               </div>
             </div>
@@ -230,7 +229,7 @@ export const InvoicePrintModal = () => {
                 className="w-full gold-button py-4 flex items-center justify-center gap-2 text-sm font-bold shadow-lg"
               >
                 <Printer className="w-5 h-5" />
-                طباعة الفاتورة الآن
+                طباعة ال�?اتورة الآن
               </button>
             </div>
           </div>
@@ -239,7 +238,7 @@ export const InvoicePrintModal = () => {
           <div className="flex-1 bg-black/40 overflow-auto p-4 flex flex-col items-center justify-start hide-on-print">
             <div className="w-full max-w-max mx-auto shadow-2xl rounded-sm overflow-hidden bg-white/5 relative">
               <div className="absolute top-2 right-2 z-10 bg-black/80 px-2 py-1 rounded text-white text-[10px]">
-                معاينة تقريبية (خلفية الورقة)
+                معاينة تقريبية (خل�?ية الورقة)
               </div>
               {renderPrintLayer(true)}
             </div>

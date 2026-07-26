@@ -28,12 +28,11 @@ export const EquityStatementView = React.memo(({ entries }: { entries: Entry[] }
     const data = (financials as any)[activeTab];
     let unit = 'ج.م';
     let accent = 'text-[#c9a84c]';
-    let title = '';
 
-    if (activeTab === 'cash') { unit = 'ج.م'; accent = 'text-[#6a9e6a]'; title = 'نقدية (الأموال)'; }
-    if (activeTab === 'gold') { unit = 'جم عربي'; accent = 'text-[#c9a84c]'; title = 'ذهب (المشغولات المستحقة)'; }
-    if (activeTab === 'silver') { unit = 'جرام'; accent = 'text-[#6a8a9e]'; title = 'فضة'; }
-    if (activeTab === 'accs') { unit = 'قطعة'; accent = 'text-[#9e8a6a]'; title = 'ملحقات (عدد القطع)'; }
+    if (activeTab === 'cash') { unit = 'ج.م'; accent = 'text-[#6a9e6a]'; }
+    if (activeTab === 'gold') { unit = 'جم عربي'; accent = 'text-[#c9a84c]'; }
+    if (activeTab === 'silver') { unit = 'جرام'; accent = 'text-[#6a8a9e]'; }
+    if (activeTab === 'accs') { unit = 'قطعة'; accent = 'text-[#9e8a6a]'; }
 
     return (
       <motion.div 

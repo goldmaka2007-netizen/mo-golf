@@ -3,7 +3,6 @@ import { motion } from 'framer-motion';
 import { 
   BarChart3, 
   TrendingUp, 
-  Wallet,
   Scale,
   Coins,
   Wrench
@@ -60,7 +59,7 @@ export const MonthlySalesSummaryReportView = React.memo(({ entries }: { entries:
       }
       
       // 2. Silver Sales
-      if (tx === 'بيع فضة') {
+      if (tx === 'بيع �?ضة') {
         months[monthKey].silverSales += cash;
         months[monthKey].silverWeight += silverW;
       }
@@ -83,7 +82,7 @@ export const MonthlySalesSummaryReportView = React.memo(({ entries }: { entries:
 
       // Special Trade Overlay for Net Profit (Sales of Assets)
       const isGold = (acc: string) => acc.includes('ذهب') || getAccountTypeDetails(acc, accountsDb).nature === 2; // GOLD
-      const isSilver = (acc: string) => acc.includes('فضة') || getAccountTypeDetails(acc, accountsDb).nature === 3; // SILVER
+      const isSilver = (acc: string) => acc.includes('�?ضة') || getAccountTypeDetails(acc, accountsDb).nature === 3; // SILVER
       const isAccs = (acc: string) => acc.includes('ملحقات') || getAccountTypeDetails(acc, accountsDb).nature === 6; // ACC
       const isProduct = (acc: string) => isGold(acc) || isSilver(acc) || isAccs(acc);
 
@@ -132,7 +131,7 @@ export const MonthlySalesSummaryReportView = React.memo(({ entries }: { entries:
                 <div className="flex items-center gap-2">
                    <TrendingUp className={data.netProfit >= 0 ? "text-[#6a9e6a] w-5 h-5" : "text-red-500 w-5 h-5"} />
                    <span className={data.netProfit >= 0 ? "text-[#6a9e6a] text-sm font-bold" : "text-red-500 text-sm font-bold"}>
-                     صافي الربح: {data.netProfit.toLocaleString()} ج.م
+                     صا�?ي الربح: {data.netProfit.toLocaleString()} ج.م
                    </span>
                 </div>
               </div>
@@ -155,7 +154,7 @@ export const MonthlySalesSummaryReportView = React.memo(({ entries }: { entries:
                 <div className="space-y-2 p-4 bg-[#0e1018] rounded-xl border border-[#6a8a9e11]">
                   <div className="flex items-center gap-2 text-[#6a8a9e]">
                     <Coins className="w-5 h-5" />
-                    <span className="text-sm font-bold font-['IBM_Plex_Sans_Arabic']">مبيعات الفضة</span>
+                    <span className="text-sm font-bold font-['IBM_Plex_Sans_Arabic']">مبيعات ال�?ضة</span>
                   </div>
                   <div className="flex flex-col">
                     <span className="text-xl font-bold font-mono">{data.silverSales.toLocaleString()} <span className="text-xs opacity-60">ج.م</span></span>
@@ -171,7 +170,7 @@ export const MonthlySalesSummaryReportView = React.memo(({ entries }: { entries:
                   </div>
                   <div className="flex flex-col">
                     <span className="text-xl font-bold font-mono">{data.workmanship.toLocaleString()} <span className="text-xs opacity-60">ج.م</span></span>
-                    <span className="text-xs text-[#5a5548] font-bold">دخل خدمات فنية</span>
+                    <span className="text-xs text-[#5a5548] font-bold">دخل خدمات �?نية</span>
                   </div>
                 </div>
               </div>
@@ -179,7 +178,7 @@ export const MonthlySalesSummaryReportView = React.memo(({ entries }: { entries:
               {/* Bottom Summary Line */}
               <div className="px-5 py-4 bg-[#080a0f] border-t border-[#1a1e2a] flex justify-between items-center text-sm font-bold text-[#5a5548]">
                 <span>إجمالي الإيرادات: <span className="text-[#ddd8cc]">{data.totalRevenue.toLocaleString()} ج.م</span></span>
-                <span>إجمالي المصروفات: <span className="text-[#ddd8cc]">{data.totalExpenses.toLocaleString()} ج.م</span></span>
+                <span>إجمالي المصرو�?ات: <span className="text-[#ddd8cc]">{data.totalExpenses.toLocaleString()} ج.م</span></span>
               </div>
             </motion.div>
           ))}
@@ -187,7 +186,7 @@ export const MonthlySalesSummaryReportView = React.memo(({ entries }: { entries:
           {monthlyData.length === 0 && (
             <div className="text-center py-20 text-[#5a5548] space-y-4">
               <BarChart3 className="w-16 h-16 mx-auto opacity-20" />
-              <p className="text-base font-bold">لا توجد مبيعات مسجلة في الفترة المحددة</p>
+              <p className="text-base font-bold">لا توجد مبيعات مسجلة �?ي ال�?ترة المحددة</p>
             </div>
           )}
         </div>

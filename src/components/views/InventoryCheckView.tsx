@@ -4,15 +4,23 @@ import { ClipboardList, Plus, CheckCircle2, History, X, Save, Scale, Package, Ar
 import { format } from 'date-fns';
 import { ar } from 'date-fns/locale';
 import { useAppStore } from '../../store';
-import { collection, addDoc, serverTimestamp, deleteDoc, doc, updateDoc } from 'firebase/firestore';
+import { collection, addDoc, serverTimestamp, deleteDoc, doc, updateDoc, runTransaction } from 'firebase/firestore';
 import { db, handleFirestoreError } from '../../firebase';
 import { cn } from '../../lib/utils';
 import { parseWeight } from '../../lib/accounting';
-import { getMetricValue, getDynamicAccountNature, belongsToMetric, getMetricActualValue } from '../../utils/accountLogic';
-import { AccountNature, InventoryCheck, Entry, OperationType } from '../../types';
+import { getMetricValue, getDynamicAccountNature, getMetricActualValue } from '../../utils/accountLogic';
+import { AccountNature, InventoryCheck, OperationType } from '../../types';
 import * as XLSX from 'xlsx';
 import { FormInput } from '../ui/FormInput';
 import { areOperationWritesLocked } from '../../lib/costRecalculation';
+import {
+  buildInventoryAdjustmentDraftEntry,
+  calculateInventoryCheckDiff,
+  effectiveInventoryCheckStatus,
+  findAccountByCheck,
+  prepareEntryForCentralSave,
+  statusForInventoryCheck,
+} from '../../lib/inventoryCheckSettlement';
 
 const HistoryCard = React.memo(({
   item,
@@ -43,7 +51,8 @@ const HistoryCard = React.memo(({
   updateLoading: boolean;
   adjustLoading: string | null;
 }) => {
-  const { id, check, matchingEntry, isGold, isAcc, weightDiff, countDiff } = item;
+  const { id, check, matchingEntry, isGold, isAcc, status, weightDiff, countDiff } = item;
+  const isPosted = status === 'posted';
   
   const calculateDiffColor = (expected: number, actual: number) => {
     const diff = actual - expected;
@@ -75,7 +84,7 @@ const HistoryCard = React.memo(({
               })()} | {check.createdAt && check.createdAt.toDate ? format(check.createdAt.toDate(), 'hh:mm a') : ''}
           </div>
         </div>
-        <button onClick={() => handleDelete(check.id!)} className="p-2 rounded-lg bg-red-500/10 text-red-500 hover:bg-red-500/20 transition-colors">
+        <button disabled={isPosted} onClick={() => handleDelete(check.id!)} className="p-2 rounded-lg bg-red-500/10 text-red-500 hover:bg-red-500/20 transition-colors disabled:opacity-30 disabled:cursor-not-allowed">
           <X className="w-4 h-4" />
         </button>
       </div>
@@ -85,7 +94,7 @@ const HistoryCard = React.memo(({
           <div className="flex-1 space-y-2">
             <div className="text-xs text-[#5a5548] bg-[#1a1e2a] px-2 py-0.5 rounded-lg w-fit">الوزن</div>
             <div className="flex justify-between items-center text-sm">
-              <span className="text-[#ddd8cc]">دفتري: <span className="font-mono">{check.systemWeight.toFixed(2)}</span></span>
+              <span className="text-[#ddd8cc]">د�?تري: <span className="font-mono">{check.systemWeight.toFixed(2)}</span></span>
               <ArrowRightLeft className="w-4 h-4 text-[#3a3530]" />
               {editingId === check.id ? (
                 <input
@@ -97,11 +106,11 @@ const HistoryCard = React.memo(({
                   autoFocus
                 />
               ) : (
-                <span className="text-[#c9a84c]">فعلي: <span className="font-mono">{check.actualWeight.toFixed(2)}</span></span>
+                <span className="text-[#c9a84c]">�?علي: <span className="font-mono">{check.actualWeight.toFixed(2)}</span></span>
               )}
             </div>
             <div className={cn("text-xs font-bold font-mono text-center pt-1 border-t border-[#1a1e2a]/50", calculateDiffColor(check.systemWeight, editingId === check.id ? (parseFloat(editW) || 0) : check.actualWeight))}>
-              الفرق: {((editingId === check.id ? (parseFloat(editW) || 0) : check.actualWeight) - check.systemWeight).toFixed(2)}
+              ال�?رق: {((editingId === check.id ? (parseFloat(editW) || 0) : check.actualWeight) - check.systemWeight).toFixed(2)}
             </div>
           </div>
         )}
@@ -110,7 +119,7 @@ const HistoryCard = React.memo(({
           <div className="flex-1 space-y-2">
             <div className="text-xs text-[#5a5548] bg-[#1a1e2a] px-2 py-0.5 rounded-lg w-fit">العدد / القطع</div>
             <div className="flex justify-between items-center text-sm">
-              <span className="text-[#ddd8cc]">دفتري: <span className="font-mono">{check.systemCount.toFixed(0)}</span></span>
+              <span className="text-[#ddd8cc]">د�?تري: <span className="font-mono">{check.systemCount.toFixed(0)}</span></span>
               <ArrowRightLeft className="w-4 h-4 text-[#3a3530]" />
               {editingId === check.id ? (
                 <input
@@ -121,11 +130,11 @@ const HistoryCard = React.memo(({
                   className="w-24 bg-[#080a0f] border border-[#c9a84c] rounded-lg px-2 py-1 text-sm text-[#c9a84c] font-mono outline-none"
                 />
               ) : (
-                <span className="text-[#c9a84c]">فعلي: <span className="font-mono">{check.actualCount.toFixed(0)}</span></span>
+                <span className="text-[#c9a84c]">�?علي: <span className="font-mono">{check.actualCount.toFixed(0)}</span></span>
               )}
             </div>
             <div className={cn("text-xs font-bold font-mono text-center pt-1 border-t border-[#1a1e2a]/50", calculateDiffColor(check.systemCount, editingId === check.id ? (parseFloat(editC) || 0) : check.actualCount))}>
-              الفرق: {((editingId === check.id ? (parseFloat(editC) || 0) : check.actualCount) - check.systemCount).toFixed(0)}
+              ال�?رق: {((editingId === check.id ? (parseFloat(editC) || 0) : check.actualCount) - check.systemCount).toFixed(0)}
             </div>
           </div>
         )}
@@ -145,7 +154,7 @@ const HistoryCard = React.memo(({
               disabled={updateLoading}
               className="flex-1 flex items-center justify-center gap-2 py-2 bg-[#6a9e6a] text-[#080a0f] rounded-xl text-xs font-bold hover:bg-[#7aaf7a] transition-all"
             >
-              {updateLoading ? 'جاري الحفظ...' : <><Save className="w-4 h-4" /> حفظ التعديل</>}
+              {updateLoading ? 'جاري الح�?ظ...' : <><Save className="w-4 h-4" /> ح�?ظ التعديل</>}
             </button>
             <button
               onClick={() => setEditingId(null)}
@@ -161,10 +170,10 @@ const HistoryCard = React.memo(({
               return (
                 <button
                   onClick={() => createAdjustmentEntry(check)}
-                  disabled={adjustLoading === id || !!matchingEntry || (hasNoDiff && !matchingEntry)}
+                  disabled={adjustLoading === id || isPosted || !!matchingEntry || (hasNoDiff && !matchingEntry)}
                   className={cn(
                     "flex-[2] flex items-center justify-center gap-2 py-2 rounded-xl text-xs font-bold transition-all border disabled:opacity-70",
-                    !!matchingEntry 
+                    (isPosted || !!matchingEntry)
                       ? "bg-[#6a9e6a]/10 text-[#6a9e6a] border-[#6a9e6a]/30 cursor-default" 
                       : hasNoDiff
                         ? "bg-[#1a1e2a] text-[#5a5548] border-transparent cursor-default"
@@ -173,22 +182,22 @@ const HistoryCard = React.memo(({
                 >
                   {adjustLoading === id ? (
                     <span className="animate-pulse">جاري...</span>
-                  ) : !!matchingEntry ? (
-                    <><CheckCircle2 className="w-4 h-4" /> تم إنشاء القيد</>
+                  ) : (isPosted || !!matchingEntry) ? (
+                    <><CheckCircle2 className="w-4 h-4" /> تم الترحيل</>
                   ) : hasNoDiff ? (
-                    "لا يوجد فرق للتسوية"
+                    "لا يوجد �?رق للتسوية"
                   ) : (
-                    <><CheckSquare className="w-4 h-4" /> إنشاء قيد تسوية</>
+                    <><CheckSquare className="w-4 h-4" /> ترحيل كتسوية</>
                   )}
                 </button>
               );
             })()}
-            <button
+            {!isPosted && <button
               onClick={() => startEdit(check)}
               className="flex-1 flex items-center justify-center gap-2 py-2 bg-[#1a1e2a] text-[#5a5548] rounded-xl text-xs font-bold hover:text-[#ddd8cc] transition-all border border-transparent hover:border-[#3a3a3a]"
             >
               <Plus className="w-4 h-4 rotate-45" /> تعديل
-            </button>
+            </button>}
           </>
         )}
       </div>
@@ -197,7 +206,7 @@ const HistoryCard = React.memo(({
 });
 
 export const InventoryCheckView = React.memo(() => {
-  const { entries, accountCategories, inventoryChecks, user, accountsDb, setGlobalError, costCalculationRun } = useAppStore();
+  const { entries, accountCategories, inventoryChecks, user, accountsDb, setGlobalError, costCalculationRun, openingCostConfig, canonicalAccounts } = useAppStore();
   const operationWritesLocked = areOperationWritesLocked(costCalculationRun);
   
   // UI States
@@ -224,11 +233,11 @@ export const InventoryCheckView = React.memo(() => {
       const acc = accountsDb.find(a => a.name === accName);
       const nature = acc ? acc.balanceNature : (
         accountCategories?.assets?.['مخزون ذهب']?.includes(accName) ? 'جرام ذهب' :
-        accountCategories?.assets?.['مخزون فضة']?.includes(accName) ? 'جرام فضة' : 'قطعة'
+        accountCategories?.assets?.['مخزون �?ضة']?.includes(accName) ? 'جرام �?ضة' : 'قطعة'
       );
       
       if (nature.includes('ذهب')) return 1;
-      if (nature.includes('فضة')) return 2;
+      if (nature.includes('�?ضة')) return 2;
       return 3; // Pieces/Accessories
     };
 
@@ -239,7 +248,7 @@ export const InventoryCheckView = React.memo(() => {
         .filter(acc => 
           acc.mainType === 'اصول' && 
           (acc.balanceNature.includes('ذهب') || 
-           acc.balanceNature.includes('فضة') || 
+           acc.balanceNature.includes('�?ضة') || 
            acc.balanceNature.includes('قطعة'))
         )
         .map(acc => acc.name);
@@ -247,8 +256,8 @@ export const InventoryCheckView = React.memo(() => {
       // Priority 2: Fallback
       const assets = accountCategories?.assets || {};
       if (assets['مخزون ذهب']) accounts.push(...assets['مخزون ذهب']);
-      if (assets['مخزون فضة']) accounts.push(...assets['مخزون فضة']);
-      if (assets['مخزون ملحقات اضافية']) accounts.push(...assets['مخزون ملحقات اضافية']);
+      if (assets['مخزون �?ضة']) accounts.push(...assets['مخزون �?ضة']);
+      if (assets['مخزون ملحقات اضا�?ية']) accounts.push(...assets['مخزون ملحقات اضا�?ية']);
       accounts = Array.from(new Set(accounts));
     }
 
@@ -264,22 +273,38 @@ export const InventoryCheckView = React.memo(() => {
 
   const getIsSilver = useCallback((accName: string) => {
     const acc = accountsDb.find(a => a.name === accName);
-    if (acc) return acc.balanceNature.includes('فضة');
-    return (accountCategories?.assets?.['مخزون فضة'] || []).includes(accName);
+    if (acc) return acc.balanceNature.includes('�?ضة');
+    return (accountCategories?.assets?.['مخزون �?ضة'] || []).includes(accName);
   }, [accountsDb, accountCategories]);
 
   const getIsAcc = useCallback((accName: string) => {
     const acc = accountsDb.find(a => a.name === accName);
     if (acc) return acc.balanceNature.includes('قطعة');
-    return (accountCategories?.assets?.['مخزون ملحقات اضافية'] || []).includes(accName);
+    return (accountCategories?.assets?.['مخزون ملحقات اضا�?ية'] || []).includes(accName);
   }, [accountsDb, accountCategories]);
 
   const handleQuickUpdate = useCallback(async (id: string) => {
+    const existing = inventoryChecks.find(check => check.id === id);
+    if (existing && effectiveInventoryCheckStatus(existing) === 'posted') {
+      setGlobalError('لا يمكن تعديل جرد تم ترحيله.');
+      return;
+    }
     setUpdateLoading(true);
     try {
+      const actualWeightValue = parseFloat(editW) || 0;
+      const actualCountValue = parseFloat(editC) || 0;
+      const diff = calculateInventoryCheckDiff({
+        systemWeight: existing?.systemWeight || 0,
+        actualWeight: actualWeightValue,
+        systemCount: existing?.systemCount || 0,
+        actualCount: actualCountValue,
+      });
       await updateDoc(doc(db, 'inventory_checks', id), {
-        actualWeight: parseFloat(editW) || 0,
-        actualCount: parseFloat(editC) || 0,
+        actualWeight: actualWeightValue,
+        actualCount: actualCountValue,
+        weightDiff: diff.weightDiff,
+        countDiff: diff.countDiff,
+        status: diff.hasDiff ? 'draft' : 'matched',
         updatedAt: serverTimestamp()
       });
       setEditingId(null);
@@ -288,7 +313,7 @@ export const InventoryCheckView = React.memo(() => {
     } finally {
       setUpdateLoading(false);
     }
-  }, [editW, editC]);
+  }, [editW, editC, inventoryChecks, setGlobalError]);
 
   const startEdit = useCallback((check: InventoryCheck) => {
     setEditingId(check.id!);
@@ -297,22 +322,91 @@ export const InventoryCheckView = React.memo(() => {
   }, []);
 
   const handleDelete = useCallback(async (id: string) => {
-    if (!window.confirm('هل أنت متأكد من حذف هذا الجرد؟')) return;
+    const existing = inventoryChecks.find(check => check.id === id);
+    if (existing && effectiveInventoryCheckStatus(existing) === 'posted') {
+      setGlobalError('لا يمكن حذ�? جرد تم ترحيله.');
+      return;
+    }
+    if (!window.confirm('هل أنت متأكد من حذ�? هذا الجرد؟')) return;
     try {
       await deleteDoc(doc(db, 'inventory_checks', id));
     } catch (error) {
        console.error("Inventory check delete error:", error);
-       alert("فشل حذف الجرد.");
+       alert("�?شل حذ�? الجرد.");
     }
-  }, []);
+  }, [inventoryChecks, setGlobalError]);
 
   const createAdjustmentEntry = useCallback(async (check: InventoryCheck) => {
     if (operationWritesLocked) {
-      setGlobalError('لا يمكن إنشاء تسوية مخزون أثناء تشغيل أو فشل إعادة احتساب التكلفة.');
+      setGlobalError('لا يمكن إنشاء تسوية مخزون أثناء تشغيل أو �?شل إعادة احتساب التكل�?ة.');
+      return;
+    }
+    if (!check.id) {
+      setGlobalError('لا يمكن ترحيل جرد غير مح�?وظ.');
+      return;
+    }
+    if (effectiveInventoryCheckStatus(check) === 'posted') {
+      setGlobalError('تم ترحيل هذا الجرد من قبل.');
       return;
     }
     setAdjustLoading(check.id || null);
     try {
+      const draft = buildInventoryAdjustmentDraftEntry({
+        check,
+        accountsDb,
+        entries,
+        userId: user!.uid,
+      });
+      if (!draft.ok) {
+        setGlobalError(draft.message);
+        return;
+      }
+      const prepared = prepareEntryForCentralSave({
+        entry: draft.entry,
+        entries,
+        accountsDb,
+        openingCostConfig,
+        canonicalAccounts,
+      });
+      if (!prepared.ok) {
+        setGlobalError(prepared.message);
+        return;
+      }
+
+      const checkRef = doc(db, 'inventory_checks', check.id);
+      const entryRef = doc(collection(db, 'entries'));
+      const auditRef = doc(collection(db, 'audit_logs'));
+      await runTransaction(db, async transaction => {
+        const currentCheck = await transaction.get(checkRef);
+        if (!currentCheck.exists()) throw new Error('جرد غير موجود.');
+        const current = { id: currentCheck.id, ...currentCheck.data() } as InventoryCheck;
+        if (effectiveInventoryCheckStatus(current) === 'posted' || current.postedEntryId) {
+          throw new Error('تم ترحيل هذا الجرد من قبل.');
+        }
+        transaction.set(entryRef, {
+          ...prepared.entry,
+          createdAt: serverTimestamp(),
+        });
+        transaction.update(checkRef, {
+          status: 'posted',
+          isResolved: true,
+          postedEntryId: entryRef.id,
+          postedAt: serverTimestamp(),
+          postedBy: user!.uid,
+          updatedAt: serverTimestamp(),
+        });
+        transaction.set(auditRef, {
+          action: 'inventory_check_posted',
+          collection: 'entries',
+          documentId: entryRef.id,
+          inventoryCheckId: check.id,
+          userId: user!.uid,
+          userEmail: user?.email || '',
+          timestamp: serverTimestamp(),
+        });
+      });
+      return;
+
       const weightDiff = check.actualWeight - check.systemWeight;
       const countDiff = check.actualCount - check.systemCount;
       if (Math.abs(weightDiff) < 0.001 && Math.abs(countDiff) < 0.001) return;
@@ -323,10 +417,10 @@ export const InventoryCheckView = React.memo(() => {
       let debitAcc, creditAcc;
       if (weightDiff < 0) { // Shortage (عجز)
         creditAcc = check.accountId;
-        debitAcc = isGold ? "عجز-الذهب" : isSilver ? "عجز-الفضة" : "م ا ع";
+        debitAcc = isGold ? "عجز-الذهب" : isSilver ? "عجز-ال�?ضة" : "م ا ع";
       } else { // Surplus (زيادة)
         debitAcc = check.accountId;
-        creditAcc = isGold ? "زيادة-الذهب" : isSilver ? "زيادة-الفضة" : "ايرادات اخري";
+        creditAcc = isGold ? "زيادة-الذهب" : isSilver ? "زيادة-ال�?ضة" : "ايرادات اخري";
       }
 
       await addDoc(collection(db, 'entries'), {
@@ -354,7 +448,7 @@ export const InventoryCheckView = React.memo(() => {
     } finally {
       setAdjustLoading(null);
     }
-  }, [user, getIsGold, getIsSilver, operationWritesLocked, setGlobalError]);
+  }, [user, getIsGold, getIsSilver, operationWritesLocked, setGlobalError, accountsDb, entries, openingCostConfig, canonicalAccounts]);
 
   const exportHistory = () => {
     if (inventoryChecks.length === 0) return;
@@ -362,12 +456,12 @@ export const InventoryCheckView = React.memo(() => {
     const data = inventoryChecks.map(check => ({
       'الحساب': check.accountId,
       'التاريخ': check.date,
-      'الوزن الدفتري': check.systemWeight.toFixed(2),
-      'الوزن الفعلي': check.actualWeight.toFixed(2),
-      'الفرق بالوزن': (check.actualWeight - check.systemWeight).toFixed(2),
-      'الالعدد الدفتري': check.systemCount.toFixed(0),
-      'العدد الفعلي': check.actualCount.toFixed(0),
-      'الفرق بالعدد': (check.actualCount - check.systemCount).toFixed(0),
+      'الوزن الد�?تري': check.systemWeight.toFixed(2),
+      'الوزن ال�?علي': check.actualWeight.toFixed(2),
+      'ال�?رق بالوزن': (check.actualWeight - check.systemWeight).toFixed(2),
+      'الالعدد الد�?تري': check.systemCount.toFixed(0),
+      'العدد ال�?علي': check.actualCount.toFixed(0),
+      'ال�?رق بالعدد': (check.actualCount - check.systemCount).toFixed(0),
       'الملاحظات': check.notes || '-'
     }));
 
@@ -404,7 +498,7 @@ export const InventoryCheckView = React.memo(() => {
           val = getMetricValue(e, metric!, accountsDb);
         }
         
-        const countValue = parseFloat(e.count || '0') || 0;
+        const countValue = isAcc ? (parseWeight(e.weight) || parseFloat(e.count || '0') || 0) : (parseFloat(e.count || '0') || 0);
         
         if (e.debit === selectedAcc) {
           sysW += val;
@@ -440,11 +534,20 @@ export const InventoryCheckView = React.memo(() => {
     
     const data: InventoryCheck = {
       accountId: selectedAcc,
+      accountDbId: findAccountByCheck({ accountId: selectedAcc } as InventoryCheck, accountsDb)?.id,
       date: format(new Date(), 'yyyy-MM-dd'),
       systemWeight: systemState.weight,
       actualWeight: w,
       systemCount: systemState.count,
       actualCount: c,
+      weightDiff: w - systemState.weight,
+      countDiff: c - systemState.count,
+      status: statusForInventoryCheck({
+        systemWeight: systemState.weight,
+        actualWeight: w,
+        systemCount: systemState.count,
+        actualCount: c,
+      }),
       notes: notes.trim(),
       userId: user.uid,
     };
@@ -463,7 +566,7 @@ export const InventoryCheckView = React.memo(() => {
       });
     } catch (error) {
       console.error("Inventory check save error:", error);
-      alert("تنبيه: فشل حفظ الجرد في السيرفر. سيتم المحاولة تلقائياً.");
+      alert("تنبيه: �?شل ح�?ظ الجرد �?ي السير�?ر. سيتم المحاولة تلقائياً.");
     }
   };
 
@@ -502,8 +605,11 @@ export const InventoryCheckView = React.memo(() => {
       
       const weightDiff = check.actualWeight - check.systemWeight;
       const countDiff = check.actualCount - check.systemCount;
+      const status = effectiveInventoryCheckStatus(check);
 
       const matchingEntry = entries.find(e => {
+        if (check.postedEntryId && e.id === check.postedEntryId) return true;
+        if (e.inventoryCheckId && e.inventoryCheckId === check.id) return true;
         if (e.debit !== check.accountId && e.credit !== check.accountId) return false;
         if (e.date < check.date) return false;
         if (check.notes && e.notes && e.notes.includes(check.notes)) return true;
@@ -523,6 +629,7 @@ export const InventoryCheckView = React.memo(() => {
         matchingEntry, 
         isGold, 
         isAcc, 
+        status,
         weightDiff, 
         countDiff 
       };
@@ -543,7 +650,7 @@ export const InventoryCheckView = React.memo(() => {
           </div>
           <div>
             <h1 className="text-2xl font-bold text-[#c9a84c]">جرد ومطابقة المخزون</h1>
-            <p className="text-sm text-[#ddd8cc]">مراجعة الأرصدة الدفترية مع الأرصدة الفعلية</p>
+            <p className="text-sm text-[#ddd8cc]">مراجعة الأرصدة الد�?ترية مع الأرصدة ال�?علية</p>
           </div>
         </div>
         <button
@@ -587,7 +694,7 @@ export const InventoryCheckView = React.memo(() => {
                 <div className="grid grid-cols-2 gap-4">
                   <div className="bg-[#080a0f] border border-[#1a1e2a] rounded-3xl p-5 relative overflow-hidden group">
                     <Scale className="w-6 h-6 text-[#5a5548] mb-2" />
-                    <div className="text-xs font-bold text-[#5a5548] mb-1">الوزن الدفتري</div>
+                    <div className="text-xs font-bold text-[#5a5548] mb-1">الوزن الد�?تري</div>
                     <div className="text-2xl font-bold text-[#ddd8cc] font-mono">
                       {systemState.weight.toFixed(2)} <span className="text-xs font-sans opacity-50">غ</span>
                       {systemState.type === 'gold' && Object.entries(systemState.karats || {}).map(([k, w]) => (
@@ -599,7 +706,7 @@ export const InventoryCheckView = React.memo(() => {
                   </div>
                   <div className="bg-[#080a0f] border border-[#1a1e2a] rounded-3xl p-5 relative overflow-hidden group">
                     <Package className="w-6 h-6 text-[#5a5548] mb-2" />
-                    <div className="text-xs font-bold text-[#5a5548] mb-1">العدد الدفتري</div>
+                    <div className="text-xs font-bold text-[#5a5548] mb-1">العدد الد�?تري</div>
                     <div className="text-2xl font-bold text-[#ddd8cc] font-mono">
                       {systemState.count.toFixed(0)} <span className="text-xs font-sans opacity-50">ق</span>
                     </div>
@@ -608,11 +715,11 @@ export const InventoryCheckView = React.memo(() => {
 
                 {/* Actual Form */}
                 <form onSubmit={handleSave} className="bg-[#0e1018] rounded-3xl p-6 border border-[#c9a84c22] space-y-6">
-                  <label className="text-base font-bold text-[#c9a84c] uppercase tracking-wider block">2. إدخال الأرصدة الفعلية للمطابقة</label>
+                  <label className="text-base font-bold text-[#c9a84c] uppercase tracking-wider block">2. إدخال الأرصدة ال�?علية للمطابقة</label>
                   
                   <div className="grid grid-cols-2 gap-4">
                     <FormInput
-                      label="الوزن الفعلي"
+                      label="الوزن ال�?علي"
                       type="number"
                       step="0.01"
                       value={actualWeight}
@@ -624,7 +731,7 @@ export const InventoryCheckView = React.memo(() => {
                       dir="ltr"
                     />
                     <FormInput
-                      label="العدد الفعلي"
+                      label="العدد ال�?علي"
                       type="number"
                       step="1"
                       value={actualCount}
@@ -649,7 +756,7 @@ export const InventoryCheckView = React.memo(() => {
 
                   {actualWeight !== '' || actualCount !== '' ? (
                     <div className="bg-[#1a1e2a] rounded-2xl p-4 flex justify-between items-center">
-                      <div className="text-xs text-[#ddd8cc]">نتائج المطابقة (الفرق)</div>
+                      <div className="text-xs text-[#ddd8cc]">نتائج المطابقة (ال�?رق)</div>
                       <div className="flex gap-4">
                         {actualWeight !== '' && (
                           <div className={cn("text-base font-bold font-mono", calculateDiffColor(systemState.weight, parseFloat(actualWeight)))}>
@@ -670,7 +777,7 @@ export const InventoryCheckView = React.memo(() => {
                     disabled={saveLoading || (!actualWeight && !actualCount)}
                     className="w-full bg-[#c9a84c] text-[#0e1018] text-lg font-bold py-4 rounded-2xl hover:bg-[#d4b455] disabled:opacity-50 disabled:cursor-not-allowed transition-all flex items-center justify-center gap-2"
                   >
-                    {saveLoading ? <span className="animate-pulse">جاري الحفظ...</span> : <><Save className="w-5 h-5" /> حفظ الجرد</>}
+                    {saveLoading ? <span className="animate-pulse">جاري الح�?ظ...</span> : <><Save className="w-5 h-5" /> ح�?ظ الجرد</>}
                   </button>
                 </form>
               </>

@@ -3,7 +3,6 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { Share2, Image as ImageIcon, Settings2, Coins, Package, X } from 'lucide-react';
 import { useAppStore } from '../../store';
 import { cn } from '../../lib/utils';
-import html2canvas from 'html2canvas';
 
 // --- Configuration & Constants ---
 
@@ -18,7 +17,7 @@ const BULLION_LIST = [
 
 const COIN_LIST = [
   { weight: 8, label: 'جنيه ذهب 8 جرام' },
-  { weight: 4, label: 'نصف جنيه 4 جرام' },
+  { weight: 4, label: 'نص�? جنيه 4 جرام' },
   { weight: 2, label: 'ربع جنيه 2 جرام' },
 ];
 
@@ -163,7 +162,7 @@ const generateStoryCanvas = (canvas: HTMLCanvasElement, ctx: CanvasRenderingCont
   ctx.textAlign = 'center';
   ctx.fillText('شراء', startX + tableWidth/5.4, currentY + 48);
   ctx.fillText('بيـــــع', startX + tableWidth/2 + 20, currentY + 48);
-  ctx.fillText('الصنف', startX + 5.5*tableWidth/6, currentY + 48);
+  ctx.fillText('الصن�?', startX + 5.5*tableWidth/6, currentY + 48);
   
   currentY += 75;
 
@@ -267,7 +266,7 @@ const generateStoryCanvas = (canvas: HTMLCanvasElement, ctx: CanvasRenderingCont
   ctx.textAlign = 'center';
   ctx.fillStyle = '#6a8a9e';
   ctx.font = 'bold 30px "Tajawal", sans-serif';
-  ctx.fillText('الفضة (ش/ب): ', bStartX + bTableWidth - 150, currentY + 50);
+  ctx.fillText('ال�?ضة (ش/ب): ', bStartX + bTableWidth - 150, currentY + 50);
   
   ctx.fillStyle = '#ddd8cc';
   ctx.font = 'bold 36px "JetBrains Mono", sans-serif';
@@ -310,7 +309,7 @@ const generateStoryCanvas = (canvas: HTMLCanvasElement, ctx: CanvasRenderingCont
   
   ctx.fillStyle = '#5a5548';
   ctx.font = 'bold 22px "Tajawal", sans-serif';
-  ctx.fillText('الأسعار استرشادية وتتحدد بدقة عند التنفيذ الفعلي', centerX, canvas.height - 135);
+  ctx.fillText('الأسعار استرشادية وتتحدد بدقة عند التن�?يذ ال�?علي', centerX, canvas.height - 135);
 };
 
 // --- Main Component ---
@@ -361,7 +360,7 @@ export const StoryBuilderView = () => {
         setCapturedImage(canvas.toDataURL('image/png', 1.0));
       } catch (err) {
         console.error(err);
-        alert('حدث خطأ فني أثناء إنشاء الصورة، يرجى المحاولة مرة أخرى.');
+        alert('حدث خطأ �?ني أثناء إنشاء الصورة، يرجى المحاولة مرة أخرى.');
       }
     }
     setIsProcessing(false);
@@ -407,7 +406,7 @@ export const StoryBuilderView = () => {
                 </div>
                 <h3 className="text-xl font-bold text-[#c9a84c] mb-1">جاهز للمشاركة</h3>
                 <p className="text-xs text-[#8a8578] mb-6 leading-relaxed">
-                  <span className="text-[#ddd8cc] font-bold">لمستخدمي الايفون:</span> اضغط مطولاً على الصورة ثم اختر <span className="text-[#c9a84c]">"حفظ في الصور"</span>.
+                  <span className="text-[#ddd8cc] font-bold">لمستخدمي الاي�?ون:</span> اضغط مطولاً على الصورة ثم اختر <span className="text-[#c9a84c]">"ح�?ظ �?ي الصور"</span>.
                 </p>
                 <img src={capturedImage} alt="Story Result" className="rounded-2xl shadow-2xl border border-[#ffffff11] w-full object-contain mb-6 pointer-events-auto ring-1 ring-white/10" />
                 <button onClick={() => setCapturedImage(null)} className="w-full py-4 bg-[#c9a84c] text-[#080a0f] rounded-2xl font-bold shadow-[0_4px_20px_rgba(201,168,76,0.3)] flex items-center justify-center gap-2 hover:bg-[#e5d08f] transition-all">
@@ -485,7 +484,7 @@ export const StoryBuilderView = () => {
                   value={customerMessage}
                   onChange={(e) => setCustomerMessage(e.target.value)}
                   className="w-full bg-[#1a1e2a]/30 border border-[#1a1e2a] rounded-2xl p-4 text-xs text-[#ddd8cc] outline-none focus:border-[#c9a84c33] h-28 resize-none transition-all leading-relaxed"
-                  placeholder="اكتب هنا ملاحظات إضافية تظهر أسفل الصورة..."
+                  placeholder="اكتب هنا ملاحظات إضا�?ية تظهر أس�?ل الصورة..."
                 />
               </div>
             </div>
@@ -517,7 +516,7 @@ export const StoryBuilderView = () => {
               <div className="space-y-4 z-10 flex-1 overflow-hidden">
                 <div className="bg-black/40 backdrop-blur-md rounded-2xl border border-[#c9a84c11] p-4 shadow-xl">
                   <div className="grid grid-cols-3 text-[10px] text-[#8a8578] font-bold mb-3 text-center pb-2 border-b border-[#c9a84c11]">
-                    <span>شراء</span><span>بيــــع</span><span>الصنف</span>
+                    <span>شراء</span><span>بيــــع</span><span>الصن�?</span>
                   </div>
                   {[
                     { label: 'عيار ٢٤', sell: p24Sell, buy: p24Buy },
@@ -556,7 +555,7 @@ export const StoryBuilderView = () => {
                 </div>
 
                 <div className="bg-black/40 backdrop-blur-md rounded-2xl border border-[#6a8a9e22] p-4 shadow-xl flex justify-between items-center ring-1 ring-[#6a8a9e11]">
-                   <span className="text-xs font-bold text-[#6a8a9e]">سعر جرام الفضة:</span>
+                   <span className="text-xs font-bold text-[#6a8a9e]">سعر جرام ال�?ضة:</span>
                    <span className="text-[13px] font-mono font-bold text-[#ddd8cc]">{silverSwissBuy.toLocaleString()} / {silverSwissSell.toLocaleString()}</span>
                 </div>
 
@@ -568,7 +567,7 @@ export const StoryBuilderView = () => {
               </div>
               
               <div className="z-10 mt-auto text-center pt-6 border-t border-[#c9a84c11]">
-                <p className="text-[10px] text-[#5a5548] mb-1 font-bold underline decoration-[#c9a84c33]">الأسعار استرشادية وتتحدد بدقة وقت التنفيــــذ</p>
+                <p className="text-[10px] text-[#5a5548] mb-1 font-bold underline decoration-[#c9a84c33]">الأسعار استرشادية وتتحدد بدقة وقت التن�?يــــذ</p>
                 <div className="text-sm text-[#c9a84c] font-black tracking-[0.2em] uppercase">Makkah Jewelry</div>
               </div>
             </div>
@@ -590,7 +589,7 @@ export const StoryBuilderView = () => {
             ) : (
               <>
                 <ImageIcon className="w-6 h-6" />
-                حفظ الصورة للواتساب
+                ح�?ظ الصورة للواتساب
               </>
             )}
           </button>

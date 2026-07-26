@@ -1,16 +1,16 @@
 import React, { useMemo, useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { BookOpen, Search, Edit2, Trash2, CheckCircle2, X, LayoutGrid, List } from 'lucide-react';
+import { BookOpen, Search, Edit2, Trash2, CheckCircle2, X } from 'lucide-react';
 import { useAppStore } from '../../store';
 import { RAW_DATA } from '../../constants';
-import { doc, deleteDoc, updateDoc, writeBatch, collection, addDoc, serverTimestamp } from 'firebase/firestore';
+import { doc, deleteDoc, updateDoc, collection, addDoc, serverTimestamp } from 'firebase/firestore';
 import { db, handleFirestoreError } from '../../firebase';
 import { cn } from '../../lib/utils';
 import { AccountsTreeView } from './AccountsTreeView';
 import { OperationType } from '../../types';
 
 export const AccountingGuideView = React.memo(() => {
-  const { transactionRules, accountsDb, user } = useAppStore();
+  const { transactionRules, user } = useAppStore();
   const [searchTerm, setSearchTerm] = useState('');
   const [subView, setSubView] = useState<'rules' | 'accounts'>('rules');
   const [editingRule, setEditingRule] = useState<any>(null);
@@ -157,7 +157,7 @@ export const AccountingGuideView = React.memo(() => {
                 <thead className="bg-[#1a1e2a] text-[#c9a84c] font-bold">
                   <tr>
                     <th className="px-4 py-3 min-w-[120px] whitespace-nowrap">اسم العملية</th>
-                    <th className="px-4 py-3 min-w-[100px] whitespace-nowrap">التصنيف</th>
+                    <th className="px-4 py-3 min-w-[100px] whitespace-nowrap">التصني�?</th>
                     <th className="px-4 py-3 min-w-[120px] whitespace-nowrap">الجانب المدين</th>
                     <th className="px-4 py-3 min-w-[120px] whitespace-nowrap">الجانب الدائن</th>
                     <th className="px-4 py-3 min-w-[60px] whitespace-nowrap">العيار</th>

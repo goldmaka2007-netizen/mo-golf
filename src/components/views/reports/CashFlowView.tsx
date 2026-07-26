@@ -17,7 +17,7 @@ import { belongsToMetric, getMetricValue, getAccountTypeDetails } from '../../..
 type LedgerType = 'cash' | 'gold' | 'silver' | 'accs';
 
 export const CashFlowView = React.memo(({ entries }: { entries: Entry[] }) => {
-  const { accountCategories: cats, accountsDb } = useAppStore();
+  const { accountsDb } = useAppStore();
   const [activeTab, setActiveTab] = useState<LedgerType>('cash');
 
   const flowData = useMemo(() => {

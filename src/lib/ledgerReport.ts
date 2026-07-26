@@ -1,6 +1,6 @@
 import { Account, AccountNature, CanonicalAccountDefinition, Entry } from '../types';
-import { getEntryArabicWeight, getMerchantMetals, resolveOperationKind } from './engine';
-import { getDynamicAccountNature, getMetricActualValue, getMetricValue } from '../utils/accountLogic';
+import { getMerchantMetals } from './engine';
+import { getDynamicAccountNature, getMetricActualValue } from '../utils/accountLogic';
 import { buildLegacyLedgerLegs, legacyLedgerEntityId, type LegacyLedgerBuildOptions } from './legacyLedger';
 import { splitLegsByPeriod } from './periodLegs';
 
@@ -33,57 +33,12 @@ const creditMainTypes = new Set(['liability', 'liabilities', 'equity', 'revenue'
 export const getAccountKey = (account: Account): string => account.id || account.name;
 export const isCreditNatureAccount = (account: Account | undefined): boolean => !!account && creditMainTypes.has(account.mainType);
 
-const accountMatches = (entry: Entry, side: 'debit' | 'credit', account: Account): boolean => {
-  const entryId = side === 'debit' ? entry.debitAccountId : entry.creditAccountId;
-  const entryName = side === 'debit' ? entry.debit : entry.credit;
-  return entryId ? entryId === account.id : entryName === account.name;
-};
-
-/** Account metadata defines which dimensions an account may own. An entry's
- * cash/weight payload never grants a dimension to the other side. */
-const supportsDimension = (account: Account, dimension: LedgerDimension, _accounts: Account[], entries: Entry[] = []): boolean => {
-  if (account.type === 'accessory') return dimension === 'quantity';
-  // The inventory engine owns merchant metal classification, including legacy
-  // merchants whose metal field was never migrated.
-  if (account.type === 'merchant') {
-    if (dimension === 'cash') return true;
-    if (dimension === 'quantity') return false;
-    return getMerchantMetals(account, entries, _accounts).includes(dimension);
-  }
-  if (account.is_inventory || ['gold_product', 'gold_raw', 'gold_direct'].includes(account.type || '')) return dimension === 'gold';
-  if (account.type === 'silver' || account.metal === 'silver') return dimension === 'silver';
-  if (account.metal === 'gold') return dimension === 'gold';
-  const nature = getDynamicAccountNature(account.name, _accounts);
-  if (nature === AccountNature.MIXED_GOLD) return dimension === 'cash' || dimension === 'gold';
-  if (nature === AccountNature.MIXED_SILVER) return dimension === 'cash' || dimension === 'silver';
-  return dimension === 'cash';
-};
-
-const entryWithMasterNames = (entry: Entry, accounts: Account[]): Entry => {
-  const debit = entry.debitAccountId ? accounts.find(account => account.id === entry.debitAccountId)?.name ?? entry.debit : entry.debit;
-  const credit = entry.creditAccountId ? accounts.find(account => account.id === entry.creditAccountId)?.name ?? entry.credit : entry.credit;
-  return debit === entry.debit && credit === entry.credit ? entry : { ...entry, debit, credit };
-};
-
-const valueFor = (entry: Entry, account: Account, dimension: LedgerDimension, accounts: Account[]): number => {
-  if (!supportsDimension(account, dimension, accounts, [entry])) return 0;
-  const resolved = entryWithMasterNames(entry, accounts);
-  // Match the exact merchant-weight calculation used by processInventory. It
-  // intentionally does not require the opposite side to be a metal account.
-  if (account.type === 'merchant' && (dimension === 'gold' || dimension === 'silver')) {
-    return getEntryArabicWeight(resolved, { ...account, metal: dimension });
-  }
-  if (dimension === 'quantity') return getMetricValue(resolved, 'accs', accounts);
-  return dimension === 'cash' ? getMetricValue(resolved, 'cash', accounts) : getMetricValue(resolved, dimension, accounts);
-};
-
 const originalWeightFor = (entry: Entry, dimension: LedgerDimension, accounts: Account[]): number | undefined => {
   if (dimension !== 'gold') return undefined;
   const value = getMetricActualValue(entry, 'gold', accounts);
   return value > 0 && typeof entry.karat === 'number' ? value : undefined;
 };
 
-const compareEntries = (a: Entry, b: Entry): number => (a.date || '').localeCompare(b.date || '');
 
 /** The only user-facing operation identifier in the persisted model is invoiceNumber. */
 export const getVisibleOperationNumber = (entry: Entry): string => entry.invoiceNumber || String(entry.seq || '');

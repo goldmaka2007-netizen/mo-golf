@@ -9,7 +9,7 @@ import {
   isValidAccountingEntry,
 } from '../src/lib/canonicalAccounting';
 import { buildTrialBalanceReport } from '../src/lib/trialBalanceReport';
-import { buildLedgerReport, type LedgerDimension } from '../src/lib/ledgerReport';
+import { buildLedgerReport } from '../src/lib/ledgerReport';
 import { getEntryArabicWeight, parseCash, processInventory, resolveOperationKind } from '../src/lib/engine';
 
 type CsvRow = Record<string, string>;

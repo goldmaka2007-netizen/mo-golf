@@ -16,7 +16,7 @@ const dimensions: { id: DailyJournalDimension; title: string; unit: string; icon
 
 const entryKey = (entry: Entry) => entry.id || String(entry.seq);
 const unique = (items: string[]) => [...new Set(items)].filter(Boolean);
-const amount = (value: number, dimension: DailyJournalDimension) => value.toLocaleString(undefined, dimension === 'cash' ? { maximumFractionDigits: 0 } : { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+const amount = (value: number, dimension: DailyJournalDimension) => value.toLocaleString(undefined, dimension === 'cash' || dimension === 'quantity' ? { maximumFractionDigits: 0 } : { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 
 export const DailyJournalView = React.memo(() => {
   const { entries, setEditingEntry, accountsDb, setView } = useAppStore();
@@ -32,7 +32,7 @@ export const DailyJournalView = React.memo(() => {
   const rawEntries = useMemo(() => entries.filter(entry => entry.date === selectedDate), [entries, selectedDate]);
   const legsByEntry = useMemo(() => {
     const result = new Map<string, AccountingLeg[]>();
-    (['cash', 'gold', 'silver'] as DailyJournalDimension[]).flatMap(dimension => report.dimensions[dimension].periodLegs).forEach(leg => {
+    (['cash', 'gold', 'silver', 'quantity'] as DailyJournalDimension[]).flatMap(dimension => report.dimensions[dimension].periodLegs).forEach(leg => {
       const rows = result.get(leg.sourceEntryId) || [];
       rows.push(leg);
       result.set(leg.sourceEntryId, rows);
@@ -115,13 +115,13 @@ const JournalEntryRow = ({ entry, legs, setEditingEntry }: { entry: Entry; legs:
   const [copied, setCopied] = useState(false);
   const debit = unique(legs.filter(leg => leg.side === 'debit').map(leg => leg.accountName));
   const credit = unique(legs.filter(leg => leg.side === 'credit').map(leg => leg.accountName));
-  const posting = legs.length ? `${debit.join(' + ')} ← ${credit.join(' + ')}` : `${entry.debit} ← ${entry.credit}`;
+  const posting = legs.length ? `${debit.join(' + ')} �? ${credit.join(' + ')}` : `${entry.debit} �? ${entry.credit}`;
   const copy = (event: React.MouseEvent) => { event.stopPropagation(); navigator.clipboard.writeText(`${entry.tx}: ${posting}`); setCopied(true); setTimeout(() => setCopied(false), 2000); };
   return <div className="relative w-full rounded-2xl border border-[#1a1e2a] bg-[#0e1018] text-right transition-all hover:border-[#c9a84c33]">
-    <button type="button" aria-label={`فتح القيد ${entry.tx}`} onClick={() => setEditingEntry(entry)} className="absolute inset-0 z-0 rounded-2xl focus:outline-none focus:ring-2 focus:ring-[#c9a84c]" />
+    <button type="button" aria-label={`�?تح القيد ${entry.tx}`} onClick={() => setEditingEntry(entry)} className="absolute inset-0 z-0 rounded-2xl focus:outline-none focus:ring-2 focus:ring-[#c9a84c]" />
     <div className="relative z-0 p-5 pl-14 pointer-events-none">
       <div className="flex items-start justify-between gap-3"><div className="min-w-0 flex-1"><div className="mb-1 flex items-center gap-2"><span className="font-bold text-[#c9a84c]">{entry.tx}</span>{entry.invoiceNumber && <span className="rounded-lg bg-[#1a1e2a] px-2 py-0.5 font-mono text-[10px] text-[#6a8a9e]">#{entry.invoiceNumber}</span>}<span className="text-[10px] text-[#8a8172]">{legs.length ? '\u0642\u064a\u062f \u0642\u0627\u0646\u0648\u0646\u064a' : '\u0642\u064a\u062f \u062e\u0627\u0645'}</span></div><div className="text-xs font-bold text-[#ddd8cc]">{posting}</div>{entry.notes && <div className="mt-2 text-[10px] italic text-[#8a8172]">{entry.notes}</div>}</div></div>
-      <div className="mt-3 flex flex-wrap gap-2 text-[11px] text-[#ddd8cc]"><span>{'\u0646\u0642\u062f: '}{entry.cash || '0'}</span><span>{'\u0648\u0632\u0646 \u0641\u0639\u0644\u064a: '}{entry.weight || '0'}</span><span>{'\u0639\u062f\u062f: '}{entry.count || '0'}</span>{entry.karat && <span>{'\u0639\u064a\u0627\u0631: '}{entry.karat}</span>}</div>
+      <div className="mt-3 flex flex-wrap gap-2 text-[11px] text-[#ddd8cc]"><span>{'\u0646\u0642\u062f: '}{entry.cash || '0'}</span><span>{'\u0648\u0632\u0646/\u0639\u062f\u062f: '}{entry.weight || '0'}</span>{entry.karat && <span>{'\u0639\u064a\u0627\u0631: '}{entry.karat}</span>}</div>
     </div>
     <button type="button" onClick={copy} className="absolute left-5 top-5 z-10 rounded-lg bg-[#1a1e2a] p-2 text-[#8a8172] focus:outline-none focus:ring-2 focus:ring-[#c9a84c]">{copied ? <CheckCircle2 className="h-3 w-3 text-[#6a9e6a]" /> : <ClipboardPaste className="h-3 w-3" />}</button>
   </div>;};

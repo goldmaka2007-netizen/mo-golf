@@ -1,7 +1,6 @@
 import React, { useMemo } from 'react';
 import { useAppStore } from '../../../store';
 import { Entry } from '../../../types';
-import { motion } from 'framer-motion';
 import { getMetricValue, getAccountTypeDetails, belongsToMetric } from '../../../utils/accountLogic';
 
 interface FinalReportViewProps {
@@ -116,25 +115,25 @@ export const FinalReportView: React.FC<FinalReportViewProps> = ({ entries, balan
       <div className="bg-[#0e1018] border border-[#1a1e2a] rounded-2xl overflow-hidden shadow-xl">
         <div className="bg-[#1a1e2a] px-6 py-3 border-b border-[#c9a84c22] flex justify-between items-center">
            <h3 className="text-lg font-bold text-[#c9a84c]">١. قائمة الدخل (الأرباح والخسائر)</h3>
-           <span className="text-xs text-[#5a5548]">للفترة المحددة</span>
+           <span className="text-xs text-[#5a5548]">لل�?ترة المحددة</span>
         </div>
         <div className="p-6 space-y-4">
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
             <div className="bg-[#080a0f] p-4 rounded-xl border border-[#1a1e2a]">
-              <div className="text-xs text-[#5a5548] font-bold">صافي النقدية</div>
+              <div className="text-xs text-[#5a5548] font-bold">صا�?ي النقدية</div>
               <div className="text-xl font-black text-[#6a9e6a]">{incomeData.cashNet.toLocaleString()} ج.م</div>
             </div>
             <div className="bg-[#080a0f] p-4 rounded-xl border border-[#1a1e2a]">
-              <div className="text-xs text-[#5a5548] font-bold">قيمة فائض الذهب ({incomeData.goldNetWeight.toFixed(3)} ج)</div>
+              <div className="text-xs text-[#5a5548] font-bold">قيمة �?ائض الذهب ({incomeData.goldNetWeight.toFixed(3)} ج)</div>
               <div className="text-xl font-black text-[#c9a84c]">{(incomeData.goldNetWeight * (goldPrice || 0)).toLocaleString(undefined, {maximumFractionDigits: 0})} ج.م</div>
             </div>
             <div className="bg-[#080a0f] p-4 rounded-xl border border-[#1a1e2a]">
-              <div className="text-xs text-[#5a5548] font-bold">قيمة فائض الفضة ({incomeData.silverNetWeight.toFixed(2)} ج)</div>
+              <div className="text-xs text-[#5a5548] font-bold">قيمة �?ائض ال�?ضة ({incomeData.silverNetWeight.toFixed(2)} ج)</div>
               <div className="text-xl font-black text-[#6a8a9e]">{(incomeData.silverNetWeight * (silverPrice || 0)).toLocaleString(undefined, {maximumFractionDigits: 0})} ج.م</div>
             </div>
           </div>
           <div className="bg-gradient-to-r from-[#6a9e6a22] to-transparent p-5 rounded-xl border border-[#6a9e6a44]">
-            <div className="text-sm text-[#6a9e6a] font-bold mb-1">صافي ربح الفترة التقريبي</div>
+            <div className="text-sm text-[#6a9e6a] font-bold mb-1">صا�?ي ربح ال�?ترة التقريبي</div>
             <div className="text-3xl font-black text-[#ddd8cc]">{totalIncomeProfits.toLocaleString(undefined, {maximumFractionDigits: 0})} <span className="text-sm font-normal">ج.م</span></div>
           </div>
         </div>
@@ -149,7 +148,7 @@ export const FinalReportView: React.FC<FinalReportViewProps> = ({ entries, balan
           <div className="bg-[#080a0f] p-5 rounded-2xl border-2 border-[#c9a84c33] flex flex-col md:flex-row justify-between items-center gap-4">
              <div className="space-y-1">
                <div className="text-sm text-[#5a5548] font-bold uppercase">إجمالي حقوق الملكية (رأس المال + أرباح)</div>
-               <div className="text-xs text-[#5a5548]">(نقدية + ذهب + فضة) مقومة بالسوق</div>
+               <div className="text-xs text-[#5a5548]">(نقدية + ذهب + �?ضة) مقومة بالسوق</div>
              </div>
              <div className="text-4xl md:text-5xl font-black text-[#c9a84c]">
                {positionData.totalEquity.toLocaleString(undefined, {maximumFractionDigits: 0})} <span className="text-base font-normal">ج.م</span>
@@ -165,7 +164,7 @@ export const FinalReportView: React.FC<FinalReportViewProps> = ({ entries, balan
                <div className="text-sm font-bold text-[#c9a84c]">{Math.abs(positionData.equity.gold).toFixed(3)} ج</div>
              </div>
              <div className="bg-[#080a0f] p-2 rounded-lg border border-[#1a1e2a]">
-               <div className="text-[10px] text-[#5a5548]">فضة</div>
+               <div className="text-[10px] text-[#5a5548]">�?ضة</div>
                <div className="text-sm font-bold text-[#6a8a9e]">{Math.abs(positionData.equity.silver).toFixed(2)} ج</div>
              </div>
           </div>
@@ -189,7 +188,7 @@ export const FinalReportView: React.FC<FinalReportViewProps> = ({ entries, balan
               <div className="text-[10px] text-[#5a5548] space-y-1">
                 <div className="flex justify-between"><span>نقدية:</span> <span>{positionData.assets.cash.toLocaleString()} ج.م</span></div>
                 <div className="flex justify-between"><span>ذهب ({positionData.assets.gold.toFixed(3)} ج):</span> <span>{(positionData.assets.gold * (goldPrice || 0)).toLocaleString(undefined, {maximumFractionDigits: 0})} ج.م</span></div>
-                <div className="flex justify-between"><span>فضة ({positionData.assets.silver.toFixed(2)} ج):</span> <span>{(positionData.assets.silver * (silverPrice || 0)).toLocaleString(undefined, {maximumFractionDigits: 0})} ج.م</span></div>
+                <div className="flex justify-between"><span>�?ضة ({positionData.assets.silver.toFixed(2)} ج):</span> <span>{(positionData.assets.silver * (silverPrice || 0)).toLocaleString(undefined, {maximumFractionDigits: 0})} ج.م</span></div>
               </div>
            </div>
 
@@ -204,13 +203,13 @@ export const FinalReportView: React.FC<FinalReportViewProps> = ({ entries, balan
               <div className="text-[10px] text-[#5a5548] space-y-1">
                 <div className="flex justify-between"><span>نقدية:</span> <span>{Math.abs(positionData.liabilities.cash).toLocaleString()} ج.م</span></div>
                 <div className="flex justify-between"><span>ذهب ({Math.abs(positionData.liabilities.gold).toFixed(3)} ج):</span> <span>{(Math.abs(positionData.liabilities.gold) * (goldPrice || 0)).toLocaleString(undefined, {maximumFractionDigits: 0})} ج.م</span></div>
-                <div className="flex justify-between"><span>فضة ({Math.abs(positionData.liabilities.silver).toFixed(2)} ج):</span> <span>{(Math.abs(positionData.liabilities.silver) * (silverPrice || 0)).toLocaleString(undefined, {maximumFractionDigits: 0})} ج.م</span></div>
+                <div className="flex justify-between"><span>�?ضة ({Math.abs(positionData.liabilities.silver).toFixed(2)} ج):</span> <span>{(Math.abs(positionData.liabilities.silver) * (silverPrice || 0)).toLocaleString(undefined, {maximumFractionDigits: 0})} ج.م</span></div>
               </div>
            </div>
 
            <div className="md:col-span-2 pt-4 border-t border-[#1a1e2a]">
               <div className="flex justify-between items-center font-black">
-                <span className="text-[#ddd8cc]">صافي المركز المالي (Net Asset Value)</span>
+                <span className="text-[#ddd8cc]">صا�?ي المركز المالي (Net Asset Value)</span>
                 <span className="text-2xl text-[#c9a84c]">{(positionData.totalAssets - positionData.totalLiabilities).toLocaleString(undefined, {maximumFractionDigits: 0})} ج.م</span>
               </div>
            </div>

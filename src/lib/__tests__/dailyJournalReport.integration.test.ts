@@ -2,8 +2,6 @@ import { describe, expect, it } from 'vitest';
 import { Account, Entry } from '../../types';
 import { buildCanonicalAccountRegistry, buildCanonicalAccountingLegs } from '../canonicalAccounting';
 import { buildDailyJournalReport } from '../dailyJournalReport';
-import { buildLedgerReport } from '../ledgerReport';
-import { buildTrialBalanceReport } from '../trialBalanceReport';
 
 const date = '2026-07-22';
 const accounts: Account[] = [

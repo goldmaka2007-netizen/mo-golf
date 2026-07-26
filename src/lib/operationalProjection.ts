@@ -1,5 +1,5 @@
 import type { Account, AccountingOperationKind, Entry } from '../types';
-import { affectsInventory, getEntryArabicWeight, parseCash, processInventory, resolveOperationKind } from './engine';
+import { affectsInventory, parseCash, processInventory, resolveOperationKind } from './engine';
 import { isValidAccountingEntry } from './canonicalAccounting';
 
 export type CanonicalRuleStatus = 'legacy_only' | 'operational_only' | 'canonical_balanced' | 'unresolved';
@@ -68,7 +68,7 @@ export const buildUnresolvedCanonicalPostings = (entries: Entry[], accounts: Acc
     storedGoldEquivalent21: Math.abs(Number(entry.arabicWeight) || 0),
     debitAccountMetadata: resolveSide(entry, 'debit', index),
     creditAccountMetadata: resolveSide(entry, 'credit', index),
-    warning: 'TX42 متزن تاريخيًا، لكنه مستبعد من الـcanonical operational posting حتى اعتماد الطرف المقابل.',
+    warning: 'TX42 متزن تاريخيًا، لكنه مستبعد من الـcanonical operational posting حتى اعتماد الطر�? المقابل.',
   }));
 };
 
@@ -121,11 +121,11 @@ export const buildOperationalProjection = (entries: Entry[], accounts: Account[]
 };
 
 const statusFor = (entry: Entry): Pick<CanonicalRuleStatusRow, 'status' | 'reason'> => {
-  if (isTx42(entry)) return { status: 'unresolved', reason: 'الطرف المقابل للـcanonical gold posting غير معتمد.' };
+  if (isTx42(entry)) return { status: 'unresolved', reason: 'الطر�? المقابل للـcanonical gold posting غير معتمد.' };
   const kind = resolveOperationKind(entry);
-  if (kind === 'sale' || kind === 'purchase') return { status: 'operational_only', reason: 'حركة النقدية والمخزون فقط؛ Revenue/COGS/Clearing غير معتمدة.' };
+  if (kind === 'sale' || kind === 'purchase') return { status: 'operational_only', reason: 'حركة النقدية والمخزون �?قط؛ Revenue/COGS/Clearing غير معتمدة.' };
   if (['transfer', 'tifeet', 'merchant_settlement', 'adjustment'].includes(kind)) return { status: 'operational_only', reason: 'معالجة تشغيلية دون اعتمادها كقيد canonical مزدوج.' };
-  return { status: 'legacy_only', reason: 'يظهر في الدفتر التاريخي فقط حتى اعتماد Canonical Double-entry Mapping.' };
+  return { status: 'legacy_only', reason: 'يظهر �?ي الد�?تر التاريخي �?قط حتى اعتماد Canonical Double-entry Mapping.' };
 };
 
 export const buildCanonicalRuleStatusReport = (entries: Entry[]): CanonicalRuleStatusRow[] => {

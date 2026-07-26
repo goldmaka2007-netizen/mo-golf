@@ -3,7 +3,6 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { 
   Settings as SettingsIcon, 
   ChevronRight, 
-  Plus, 
   Trash2, 
   Upload, 
   Download, 
@@ -20,24 +19,22 @@ import {
 import { 
   collection, 
   addDoc, 
-  deleteDoc, 
   doc, 
   setDoc,
   writeBatch 
 } from 'firebase/firestore';
-import { User as FirebaseUser } from 'firebase/auth';
 import * as XLSX from 'xlsx';
-import { db, OperationType, handleFirestoreError } from '../../firebase';
-import { Entry, CustomRule, AnnualOpeningCostConfig } from '../../types';
+import { db } from '../../firebase';
+import { AnnualOpeningCostConfig } from '../../types';
 import { useAppStore } from '../../store';
 import { cn } from '../../lib/utils';
-import { formatMinorUnitsToEgpInput, parseEgpToMinorUnits } from '../../lib/openingCostConfig';
+import { formatMinorUnitsToEgpInput, getAccessoryOpeningCostsMinorByAccountId, getGoldOpeningPriceMinor, getSilverOpeningPriceMinor, mergeAnnualOpeningCostRows, parseEgpToMinorUnits } from '../../lib/openingCostConfig';
+import { normalizeNumerals } from '../../lib/accounting';
 import { areOperationWritesLocked } from '../../lib/costRecalculation';
 
 export const SettingsView = React.memo(() => {
-  const { setView, customRules, user, entries, accountsDb, setGlobalError, openingCostConfig, setOpeningCostConfig, costCalculationRun } = useAppStore();
+  const { setView, user, entries, accountsDb, setGlobalError, openingCostConfig, setOpeningCostConfig, costCalculationRun } = useAppStore();
   const operationWritesLocked = areOperationWritesLocked(costCalculationRun);
-  const [newRule, setNewRule] = useState({ t: '', d: '', c: '', k: '', m: '1' });
   const [openingPriceForm, setOpeningPriceForm] = useState<{
     year: string;
     gold: string;
@@ -45,6 +42,7 @@ export const SettingsView = React.memo(() => {
     accessories: Record<string, string>;
   }>({ year: String(new Date().getFullYear()), gold: '', silver: '', accessories: {} });
   const [openingPriceError, setOpeningPriceError] = useState('');
+  const [openingPriceSuccess, setOpeningPriceSuccess] = useState('');
   const [isSavingOpeningPrice, setIsSavingOpeningPrice] = useState(false);
   const [importText, setImportText] = useState('');
   const [isImporting, setIsImporting] = useState(false);
@@ -62,62 +60,109 @@ export const SettingsView = React.memo(() => {
       .sort((left, right) => left.name.localeCompare(right.name, 'ar')),
     [accountsDb],
   );
+  const accessoryAccountIdByLookup = useMemo(() => {
+    const lookup = new Map<string, string>();
+    for (const account of accessoryAccounts) {
+      if (!account.id) continue;
+      lookup.set(account.id, account.id);
+      lookup.set(account.name, account.id);
+    }
+    return lookup;
+  }, [accessoryAccounts]);
 
-  const validateOpeningPriceForm = (): AnnualOpeningCostConfig => {
+  const toEgpNumber = (value: string): number => Number(normalizeNumerals(value).trim());
+
+  const getAccessoryOpeningQuantities = (year: number): Record<string, number> => {
+    const quantities: Record<string, number> = {};
+    for (const entry of entries) {
+      if (String(entry.date || '').slice(0, 4) !== String(year)) continue;
+      const isOpening = entry.operationKind === 'opening' || entry.tx === '\u0642\u064a\u062f \u0627\u0641\u062a\u062a\u0627\u062d\u064a' || entry.subTx?.startsWith('\u0631\u0635\u064a\u062f \u0627\u0641\u062a\u062a\u0627\u062d\u064a') === true;
+      if (!isOpening) continue;
+      const account = entry.debitAccountId
+        ? accessoryAccounts.find(item => item.id === entry.debitAccountId)
+        : accessoryAccounts.find(item => item.name === entry.debit);
+      if (!account?.id) continue;
+      const quantity = Number(normalizeNumerals(String(entry.weight ?? '0')));
+      const safeQuantity = Number.isFinite(quantity) ? quantity : 0;
+      if (safeQuantity > 0) quantities[account.id] = (quantities[account.id] || 0) + safeQuantity;
+    }
+    return quantities;
+  };
+
+  const accessoryCostSummary = (row: AnnualOpeningCostConfig): string => {
+    const costs = getAccessoryOpeningCostsMinorByAccountId(row);
+    const saved = accessoryAccounts.filter(account => account.id && costs[account.id] !== undefined && costs[account.id] !== '');
+    const lines = saved.map(account => `${account.name}: ${formatMinorUnitsToEgpInput(costs[account.id!])} \u062c\u0646\u064a\u0647`);
+    return [`\u0645\u0644\u062d\u0642\u0627\u062a \u0645\u062d\u0641\u0648\u0638\u0629: ${saved.length}`, ...lines].join('\n');
+  };
+
+  const validateOpeningPriceForm = (existingRow?: AnnualOpeningCostConfig): AnnualOpeningCostConfig => {
     const year = Number(openingPriceForm.year);
     if (!Number.isInteger(year) || year < 2000 || year > 2100) {
-      throw new Error('أدخل سنة صحيحة بين 2000 و 2100.');
+      throw new Error('\u0623\u062f\u062e\u0644 \u0633\u0646\u0629 \u0635\u062d\u064a\u062d\u0629 \u0628\u064a\u0646 2000 \u0648 2100.');
     }
 
-    const next: AnnualOpeningCostConfig = { year };
+    const draft: AnnualOpeningCostConfig = { year };
     const gold = openingPriceForm.gold.trim();
     const silver = openingPriceForm.silver.trim();
     const accessoryValues: Record<string, string> = Object.fromEntries(
       (Object.entries(openingPriceForm.accessories) as Array<[string, string]>)
-        .map(([accountId, value]) => [accountId, value.trim()])
+        .map(([accountKey, value]) => [accessoryAccountIdByLookup.get(accountKey) ?? accountKey, value.trim()])
         .filter(([, value]) => !!value),
     ) as Record<string, string>;
-    if (!gold && !silver && Object.keys(accessoryValues).length === 0) {
-      throw new Error('أدخل قيمة Opening Cost واحدة على الأقل.');
+    if (!gold && !silver && Object.keys(accessoryValues).length === 0 && !existingRow) {
+      throw new Error('\u0623\u062f\u062e\u0644 \u0642\u064a\u0645\u0629 Opening Cost \u0648\u0627\u062d\u062f\u0629 \u0639\u0644\u0649 \u0627\u0644\u0623\u0642\u0644.');
     }
     if (gold) {
       let goldMinor: number;
       try {
         goldMinor = parseEgpToMinorUnits(gold);
       } catch {
-        throw new Error('سعر افتتاح الذهب يجب أن يكون رقمًا صحيحًا أو عشريًا حتى قرشين.');
+        throw new Error('\u0633\u0639\u0631 \u0627\u0641\u062a\u062a\u0627\u062d \u0627\u0644\u0645\u0639\u062f\u0646 \u064a\u062c\u0628 \u0623\u0646 \u064a\u0643\u0648\u0646 \u0631\u0642\u0645\u064b\u0627 \u0635\u062d\u064a\u062d\u064b\u0627 \u0623\u0648 \u0639\u0634\u0631\u064a\u064b\u0627 \u062d\u062a\u0649 \u0642\u0631\u0634\u064a\u0646.');
       }
-      if (goldMinor <= 0) throw new Error('سعر افتتاح الذهب يجب أن يكون أكبر من صفر.');
-      next.gold21PriceMinorPerGram = goldMinor;
+      if (goldMinor <= 0) throw new Error('\u0633\u0639\u0631 \u0627\u0641\u062a\u062a\u0627\u062d \u0627\u0644\u0630\u0647\u0628 \u064a\u062c\u0628 \u0623\u0646 \u064a\u0643\u0648\u0646 \u0623\u0643\u0628\u0631 \u0645\u0646 \u0635\u0641\u0631.');
+      draft.gold21PriceEgp = toEgpNumber(gold);
     }
     if (silver) {
       let silverMinor: number;
       try {
         silverMinor = parseEgpToMinorUnits(silver);
       } catch {
-        throw new Error('سعر افتتاح الفضة يجب أن يكون رقمًا صحيحًا أو عشريًا حتى قرشين.');
+        throw new Error('\u0633\u0639\u0631 \u0627\u0641\u062a\u062a\u0627\u062d \u0627\u0644\u0645\u0639\u062f\u0646 \u064a\u062c\u0628 \u0623\u0646 \u064a\u0643\u0648\u0646 \u0631\u0642\u0645\u064b\u0627 \u0635\u062d\u064a\u062d\u064b\u0627 \u0623\u0648 \u0639\u0634\u0631\u064a\u064b\u0627 \u062d\u062a\u0649 \u0642\u0631\u0634\u064a\u0646.');
       }
-      if (silverMinor <= 0) throw new Error('سعر افتتاح الفضة يجب أن يكون أكبر من صفر.');
-      next.silverPriceMinorPerGram = silverMinor;
+      if (silverMinor <= 0) throw new Error('\u0633\u0639\u0631 \u0627\u0641\u062a\u062a\u0627\u062d \u0627\u0644\u0641\u0636\u0629 \u064a\u062c\u0628 \u0623\u0646 \u064a\u0643\u0648\u0646 \u0623\u0643\u0628\u0631 \u0645\u0646 \u0635\u0641\u0631.');
+      draft.silverPriceEgp = toEgpNumber(silver);
     }
     if (Object.keys(accessoryValues).length > 0) {
-      next.accessoryUnitCostMinorByAccountId = {};
+      draft.accessoryOpeningCosts = {};
       for (const [accountId, value] of Object.entries(accessoryValues)) {
+        const account = accessoryAccounts.find(item => item.id === accountId);
+        if (!account) throw new Error(`Accessory opening cost must be saved by a real accountId. Unknown key: ${accountId}`);
         let minor: number;
         try {
           minor = parseEgpToMinorUnits(value);
         } catch {
-          throw new Error(`تكلفة افتتاح الملحق ${accountId} يجب أن تكون رقمًا حتى قرشين.`);
+          throw new Error(`\u062a\u0643\u0644\u0641\u0629 \u0627\u0641\u062a\u062a\u0627\u062d \u0627\u0644\u0645\u0644\u062d\u0642 ${account.name} \u064a\u062c\u0628 \u0623\u0646 \u062a\u0643\u0648\u0646 \u0631\u0642\u0645\u064b\u0627 \u062d\u062a\u0649 \u0642\u0631\u0634\u064a\u0646.`);
         }
-        if (minor <= 0) throw new Error(`تكلفة افتتاح الملحق ${accountId} يجب أن تكون أكبر من صفر.`);
-        next.accessoryUnitCostMinorByAccountId[accountId] = minor;
+        if (minor <= 0) throw new Error(`\u062a\u0643\u0644\u0641\u0629 \u0627\u0641\u062a\u062a\u0627\u062d \u0627\u0644\u0645\u0644\u062d\u0642 ${account.name} \u064a\u062c\u0628 \u0623\u0646 \u062a\u0643\u0648\u0646 \u0623\u0643\u0628\u0631 \u0645\u0646 \u0635\u0641\u0631.`);
+        draft.accessoryOpeningCosts[accountId] = toEgpNumber(value);
       }
     }
-    return next;
+
+    const merged = mergeAnnualOpeningCostRows(existingRow, draft);
+    const openingQuantities = getAccessoryOpeningQuantities(year);
+    const mergedAccessoryCosts = getAccessoryOpeningCostsMinorByAccountId(merged);
+    const missing = accessoryAccounts.filter(account =>
+      account.id && (openingQuantities[account.id] || 0) > 0 && mergedAccessoryCosts[account.id] === undefined,
+    );
+    if (missing.length > 0) {
+      throw new Error(`\u0623\u062f\u062e\u0644 \u062a\u0643\u0644\u0641\u0629 \u0627\u0641\u062a\u062a\u0627\u062d \u0627\u0644\u0645\u0644\u062d\u0642\u0627\u062a \u0630\u0627\u062a \u0627\u0644\u0631\u0635\u064a\u062f \u0627\u0644\u0627\u0641\u062a\u062a\u0627\u062d\u064a: ${missing.map(account => account.name).join('\u060c ')}`);
+    }
+    return merged;
   };
 
   const persistOpeningCostConfig = async (nextConfig: AnnualOpeningCostConfig[]) => {
-    if (!user?.uid) throw new Error('لا يوجد مستخدم نشط لحفظ الإعدادات.');
+    if (!user?.uid) throw new Error('\u0644\u0627 \u064a\u0648\u062c\u062f \u0645\u0633\u062a\u062e\u062f\u0645 \u0646\u0634\u0637 \u0644\u062d\u0641\u0638 \u0627\u0644\u0625\u0639\u062f\u0627\u062f\u0627\u062a.');
     const sorted = [...nextConfig].sort((a, b) => Number(a.year) - Number(b.year));
     const previous = openingCostConfig;
     setOpeningCostConfig(sorted);
@@ -132,40 +177,45 @@ export const SettingsView = React.memo(() => {
   const handleSaveOpeningPrice = async (e: React.FormEvent) => {
     e.preventDefault();
     setOpeningPriceError('');
+    setOpeningPriceSuccess('');
     setIsSavingOpeningPrice(true);
     try {
-      const nextRow = validateOpeningPriceForm();
+      const year = Number(openingPriceForm.year);
+      const existingRow = sortedOpeningCostConfig.find(row => Number(row.year) === year);
+      const nextRow = validateOpeningPriceForm(existingRow);
       const nextConfig = sortedOpeningCostConfig.filter(row => Number(row.year) !== nextRow.year);
       await persistOpeningCostConfig([...nextConfig, nextRow]);
+      setOpeningPriceSuccess(accessoryCostSummary(nextRow));
       setOpeningPriceForm({ year: String(nextRow.year + 1), gold: '', silver: '', accessories: {} });
     } catch (error) {
-      setOpeningPriceError(error instanceof Error ? error.message : 'تعذر حفظ سعر الافتتاح. راجع القيم المدخلة.');
+      setOpeningPriceError(error instanceof Error ? error.message : '\u062a\u0639\u0630\u0631 \u062d\u0641\u0638 \u0633\u0639\u0631 \u0627\u0644\u0627\u0641\u062a\u062a\u0627\u062d. \u0631\u0627\u062c\u0639 \u0627\u0644\u0642\u064a\u0645 \u0627\u0644\u0645\u062f\u062e\u0644\u0629.');
     } finally {
       setIsSavingOpeningPrice(false);
     }
   };
 
   const handleEditOpeningPrice = (row: AnnualOpeningCostConfig) => {
+    const accessoryCosts = getAccessoryOpeningCostsMinorByAccountId(row);
     setOpeningPriceError('');
+    setOpeningPriceSuccess('');
     setOpeningPriceForm({
       year: String(row.year),
-      gold: formatMinorUnitsToEgpInput(row.gold21PriceMinorPerGram),
-      silver: formatMinorUnitsToEgpInput(row.silverPriceMinorPerGram),
+      gold: formatMinorUnitsToEgpInput(getGoldOpeningPriceMinor(row)),
+      silver: formatMinorUnitsToEgpInput(getSilverOpeningPriceMinor(row)),
       accessories: Object.fromEntries(
-        Object.entries(row.accessoryUnitCostMinorByAccountId || {})
+        Object.entries(accessoryCosts)
           .map(([accountId, value]) => [accountId, formatMinorUnitsToEgpInput(value)]),
       ),
     });
   };
-
   const handleDeleteOpeningPrice = async (year: number) => {
-    if (!window.confirm(`حذف أسعار افتتاح سنة ${year}؟`)) return;
+    if (!window.confirm(`حذ�? أسعار ا�?تتاح سنة ${year}؟`)) return;
     setOpeningPriceError('');
     setIsSavingOpeningPrice(true);
     try {
       await persistOpeningCostConfig(sortedOpeningCostConfig.filter(row => Number(row.year) !== Number(year)));
     } catch (error) {
-      setOpeningPriceError(error instanceof Error ? error.message : 'تعذر حذف سنة الافتتاح.');
+      setOpeningPriceError(error instanceof Error ? error.message : 'تعذر حذ�? سنة الا�?تتاح.');
     } finally {
       setIsSavingOpeningPrice(false);
     }
@@ -173,7 +223,7 @@ export const SettingsView = React.memo(() => {
 
   const handleDeleteAllData = async () => {
     if (operationWritesLocked) {
-      setGlobalError('لا يمكن حذف العمليات أثناء تشغيل أو فشل إعادة احتساب التكلفة.');
+      setGlobalError('لا يمكن حذ�? العمليات أثناء تشغيل أو �?شل إعادة احتساب التكل�?ة.');
       return;
     }
     setIsDeletingAll(true);
@@ -188,41 +238,12 @@ export const SettingsView = React.memo(() => {
         await batch.commit();
       }
       setShowDeleteAllConfirm(false);
-      alert("تم مسح كافة البيانات بنجاح!");
+      alert("تم مسح كا�?ة البيانات بنجاح!");
     } catch (error) {
       console.error("Delete All Error:", error);
-      setGlobalError("فشل مسح البيانات. يرجى المحاولة لاحقاً.");
+      setGlobalError("�?شل مسح البيانات. يرجى المحاولة لاحقاً.");
     } finally {
       setIsDeletingAll(false);
-    }
-  };
-
-  const handleAddRule = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!newRule.t || !newRule.d || !newRule.c) return;
-    try {
-      await addDoc(collection(db, 'customRules'), {
-        ...newRule,
-        k: newRule.k ? parseInt(newRule.k) : null,
-        m: parseFloat(newRule.m),
-        userId: user.uid
-      });
-      setNewRule({ t: '', d: '', c: '', k: '', m: '1' });
-    } catch (error) {
-      console.error("Add Rule Error:", error);
-      setGlobalError("فشل إضافة القاعدة. يرجى مراجعة الاتصال.");
-    }
-  };
-
-  const [deleteRuleConfirmId, setDeleteRuleConfirmId] = useState<string | null>(null);
-
-  const handleDeleteRule = async (id: string) => {
-    try {
-      await deleteDoc(doc(db, 'customRules', id));
-      setDeleteRuleConfirmId(null);
-    } catch (error) {
-      console.error("Delete Rule Error:", error);
-      setGlobalError("فشل حذف القاعدة.");
     }
   };
 
@@ -230,7 +251,7 @@ export const SettingsView = React.memo(() => {
 
   const handleRetroactiveInvoiceNumbers = async () => {
     if (operationWritesLocked) {
-      setGlobalError('لا يمكن تعديل العمليات أثناء تشغيل أو فشل إعادة احتساب التكلفة.');
+      setGlobalError('لا يمكن تعديل العمليات أثناء تشغيل أو �?شل إعادة احتساب التكل�?ة.');
       return;
     }
     setIsImporting(true);
@@ -247,7 +268,7 @@ export const SettingsView = React.memo(() => {
     const missingInvoices = sortedEntries.filter(e => !e.invoiceNumber);
     
     if (missingInvoices.length === 0) {
-      alert("جميع القيود الحالية مرقمة بالفعل.");
+      alert("جميع القيود الحالية مرقمة بال�?عل.");
       setIsImporting(false);
       return;
     }
@@ -283,12 +304,12 @@ export const SettingsView = React.memo(() => {
         const txType = e.tx || '';
         if (txType.includes('بيع')) prefix = 'S';
         else if (txType.includes('شراء')) prefix = 'P';
-        else if (txType.includes('مصاريف') || txType.includes('مصروف')) prefix = 'E';
+        else if (txType.includes('مصاري�?') || txType.includes('مصرو�?')) prefix = 'E';
         else if (txType.includes('مسحوبات')) prefix = 'W';
         else if (txType.includes('قبض')) prefix = 'R';
-        else if (txType.includes('دفع')) prefix = 'D';
+        else if (txType.includes('د�?ع')) prefix = 'D';
         else if (txType.includes('تحويل')) prefix = 'T';
-        else if (txType.includes('تيفيت')) prefix = 'M';
+        else if (txType.includes('تي�?يت')) prefix = 'M';
         else if (txType.includes('تسوية') || txType.includes('عجز') || txType.includes('زيادة')) prefix = 'ADJ';
         else if (txType.includes('تصليح')) prefix = 'RP';
 
@@ -311,10 +332,10 @@ export const SettingsView = React.memo(() => {
         await batch.commit();
       }
       
-      alert(`تم إضافة أرقام تسلسلية لـ ${updatedCount} قيد قديم بنجاح!`);
+      alert(`تم إضا�?ة أرقام تسلسلية لـ ${updatedCount} قيد قديم بنجاح!`);
     } catch (error) {
       console.error("Migration error:", error);
-      setGlobalError("فشل في ترقيم القيود القديمة.");
+      setGlobalError("�?شل �?ي ترقيم القيود القديمة.");
     } finally {
       setIsImporting(false);
     }
@@ -339,7 +360,7 @@ export const SettingsView = React.memo(() => {
       document.body.removeChild(a);
     } catch (error) {
       console.error("Export Code Error:", error);
-      alert("فشل تصدير الكود. تأكد من اتصالك بالإنترنت.");
+      alert("�?شل تصدير الكود. تأكد من اتصالك بالإنترنت.");
     } finally {
       setIsExportingCode(false);
     }
@@ -353,7 +374,7 @@ export const SettingsView = React.memo(() => {
     
     const headers = [
       "التاريخ", 
-      "رقم الفاتورة",
+      "رقم ال�?اتورة",
       "العملية", 
       "مدين", 
       "دائن", 
@@ -363,11 +384,11 @@ export const SettingsView = React.memo(() => {
       "الوزن العربي", 
       "العدد", 
       "اسم العميل",
-      "رقم التليفون",
+      "رقم التلي�?ون",
       "سعر السوق",
       "المعامل",
       "ملاحظات",
-      "معرف العملية"
+      "معر�? العملية"
     ];
     
     const rows = entries.map(e => [
@@ -432,7 +453,7 @@ export const SettingsView = React.memo(() => {
   const handleImport = async () => {
     if (!importText.trim()) return;
     if (operationWritesLocked) {
-      setGlobalError('لا يمكن استيراد عمليات أثناء تشغيل أو فشل إعادة احتساب التكلفة.');
+      setGlobalError('لا يمكن استيراد عمليات أثناء تشغيل أو �?شل إعادة احتساب التكل�?ة.');
       return;
     }
     setIsImporting(true);
@@ -486,7 +507,7 @@ export const SettingsView = React.memo(() => {
         setImportProgress({ current: i + 1, total, success, failed });
       }
       setImportText('');
-      alert(`اكتمل الاستيراد: ${success} ناجح، ${failed} فشل`);
+      alert(`اكتمل الاستيراد: ${success} ناجح، ${failed} �?شل`);
     } catch (error) {
       alert("حدث خطأ أثناء الاستيراد");
     } finally {
@@ -563,9 +584,9 @@ export const SettingsView = React.memo(() => {
           >
             <div className="bg-[#0e1018] border border-[#1a1e2a] rounded-3xl p-6 space-y-5">
               <div className="space-y-1">
-                <h3 className="text-sm font-bold text-[#ddd8cc]">أسعار الافتتاح السنوية للتكلفة</h3>
+                <h3 className="text-sm font-bold text-[#ddd8cc]">أسعار الا�?تتاح السنوية للتكل�?ة</h3>
                 <p className="text-[11px] text-[#8a8172] leading-6">
-                  تُستخدم هذه الأسعار فقط لتحديد تكلفة المخزون الافتتاحي وحساب متوسط التكلفة. لا تُستخدم كتقييم سوقي حالي.
+                  ت�?ستخدم هذه الأسعار �?قط لتحديد تكل�?ة المخزون الا�?تتاحي وحساب متوسط التكل�?ة. لا ت�?ستخدم كتقييم سوقي حالي.
                 </p>
               </div>
 
@@ -576,17 +597,17 @@ export const SettingsView = React.memo(() => {
                   <input value={openingPriceForm.year} onChange={(e) => setOpeningPriceForm(prev => ({ ...prev, year: e.target.value }))} inputMode="numeric" className="w-full bg-[#080a0f] border border-[#1a1e2a] rounded-xl p-3 text-sm text-[#ddd8cc] outline-none focus:border-[#c9a84c55]" placeholder="2026" />
                 </label>
                 <label className="space-y-1">
-                  <span className="text-[10px] font-bold text-[#c9a84c]">سعر افتتاح جرام الذهب عيار 21 بالجنيه</span>
+                  <span className="text-[10px] font-bold text-[#c9a84c]">سعر ا�?تتاح جرام الذهب عيار 21 بالجنيه</span>
                   <input value={openingPriceForm.gold} onChange={(e) => setOpeningPriceForm(prev => ({ ...prev, gold: e.target.value }))} inputMode="decimal" className="w-full bg-[#080a0f] border border-[#1a1e2a] rounded-xl p-3 text-sm text-[#ddd8cc] outline-none focus:border-[#c9a84c55]" placeholder="4000" />
                 </label>
                 <label className="space-y-1">
-                  <span className="text-[10px] font-bold text-[#c9a84c]">سعر افتتاح جرام الفضة بالجنيه</span>
+                  <span className="text-[10px] font-bold text-[#c9a84c]">سعر ا�?تتاح جرام ال�?ضة بالجنيه</span>
                   <input value={openingPriceForm.silver} onChange={(e) => setOpeningPriceForm(prev => ({ ...prev, silver: e.target.value }))} inputMode="decimal" className="w-full bg-[#080a0f] border border-[#1a1e2a] rounded-xl p-3 text-sm text-[#ddd8cc] outline-none focus:border-[#c9a84c55]" placeholder="60" />
                 </label>
                 </div>
                 <div className="rounded-2xl border border-[#1a1e2a] bg-[#080a0f] p-3">
                   <div className="mb-3 text-[11px] font-black text-[#ddd8cc]">
-                    تكلفة الافتتاح للوحدة — ليست سعر بيع
+                    تكل�?ة الا�?تتاح للوحدة — ليست سعر بيع
                   </div>
                   <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
                     {accessoryAccounts.map(account => (
@@ -611,7 +632,7 @@ export const SettingsView = React.memo(() => {
                 </div>
                 <button type="submit" disabled={isSavingOpeningPrice} className="px-5 py-3 bg-[#c9a84c] text-[#080a0f] rounded-xl text-xs font-bold flex items-center justify-center gap-2 disabled:opacity-60">
                   {isSavingOpeningPrice ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
-                  حفظ
+                  ح�?ظ
                 </button>
               </form>
 
@@ -620,31 +641,57 @@ export const SettingsView = React.memo(() => {
                   {openingPriceError}
                 </div>
               )}
+              {openingPriceSuccess && (
+                <div className="whitespace-pre-line rounded-2xl border border-green-500/30 bg-green-500/10 p-3 text-xs font-bold text-green-300">
+                  {openingPriceSuccess}
+                </div>
+              )}
 
               <div className="overflow-x-auto border border-[#1a1e2a] rounded-2xl">
-                <table className="w-full text-right text-xs min-w-[620px]">
+                <table className="w-full text-right text-xs min-w-[760px]">
                   <thead>
                     <tr className="border-b border-[#1a1e2a] [&>th]:p-3 [&>th]:text-[#8a8172]">
                       <th>السنة</th>
                       <th>ذهب 21 بالجنيه</th>
-                      <th>فضة بالجنيه</th>
+                      <th>�?ضة بالجنيه</th>
+                      <th>{'\u0645\u0644\u062d\u0642\u0627\u062a'}</th>
                       <th>إجراءات</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-[#1a1e2a] [&>tr>td]:p-3">
                     {sortedOpeningCostConfig.length === 0 ? (
                       <tr>
-                        <td colSpan={4} className="text-center text-[#8a8172]">لا توجد أسعار افتتاح محفوظة بعد.</td>
+                        <td colSpan={5} className="text-center text-[#8a8172]">لا توجد أسعار ا�?تتاح مح�?وظة بعد.</td>
                       </tr>
                     ) : sortedOpeningCostConfig.map(row => (
                       <tr key={row.year}>
                         <td className="font-mono font-bold text-[#ddd8cc]">{row.year}</td>
-                        <td className="font-mono text-[#ddd8cc]">{formatMinorUnitsToEgpInput(row.gold21PriceMinorPerGram) || "-"}</td>
-                        <td className="font-mono text-[#ddd8cc]">{formatMinorUnitsToEgpInput(row.silverPriceMinorPerGram) || "-"}</td>
+                        <td className="font-mono text-[#ddd8cc]">{formatMinorUnitsToEgpInput(getGoldOpeningPriceMinor(row)) || "-"}</td>
+                        <td className="font-mono text-[#ddd8cc]">{formatMinorUnitsToEgpInput(getSilverOpeningPriceMinor(row)) || "-"}</td>
+                        <td className="text-[#ddd8cc]">
+                          {(() => {
+                            const accessoryCosts = getAccessoryOpeningCostsMinorByAccountId(row);
+                            const savedAccessories = accessoryAccounts.filter(account => account.id && accessoryCosts[account.id] !== undefined && accessoryCosts[account.id] !== '');
+                            if (savedAccessories.length === 0) return <span className="text-[#8a8172]">0</span>;
+                            return (
+                              <details>
+                                <summary className="cursor-pointer font-bold text-[#c9a84c]">{savedAccessories.length} {'\u0645\u062d\u0641\u0648\u0638'}</summary>
+                                <div className="mt-2 space-y-1">
+                                  {savedAccessories.map(account => (
+                                    <div key={account.id} className="flex justify-between gap-3 font-mono text-[10px]">
+                                      <span className="font-sans text-[#8a8172]">{account.name}</span>
+                                      <span>{formatMinorUnitsToEgpInput(accessoryCosts[account.id!])} {'\u062c.\u0645'}</span>
+                                    </div>
+                                  ))}
+                                </div>
+                              </details>
+                            );
+                          })()}
+                        </td>
                         <td>
                           <div className="flex gap-2">
                             <button type="button" onClick={() => handleEditOpeningPrice(row)} className="px-3 py-2 bg-[#1a1e2a] text-[#c9a84c] rounded-lg text-[10px] font-bold">تعديل</button>
-                            <button type="button" onClick={() => handleDeleteOpeningPrice(Number(row.year))} className="px-3 py-2 bg-red-500/10 text-red-300 rounded-lg text-[10px] font-bold">حذف السنة</button>
+                            <button type="button" onClick={() => handleDeleteOpeningPrice(Number(row.year))} className="px-3 py-2 bg-red-500/10 text-red-300 rounded-lg text-[10px] font-bold">حذ�? السنة</button>
                           </div>
                         </td>
                       </tr>
@@ -667,7 +714,7 @@ export const SettingsView = React.memo(() => {
             <div className="bg-[#0e1018] border border-[#1a1e2a] rounded-3xl p-6 space-y-6">
               <div className="pb-6 border-b border-[#1a1e2a] space-y-4">
                 <div>
-                  <div className="text-sm font-bold text-[#ddd8cc]">تصدير كافة البيانات (Excel)</div>
+                  <div className="text-sm font-bold text-[#ddd8cc]">تصدير كا�?ة البيانات (Excel)</div>
                   <div className="text-[10px] text-[#5a5548]">تحميل نسخة احتياطية من جميع القيود المسجلة</div>
                 </div>
                 <div className="flex gap-2">
@@ -676,17 +723,17 @@ export const SettingsView = React.memo(() => {
                     className="flex-1 py-3 bg-[#1a1e2a] text-[#c9a84c] rounded-xl hover:bg-[#c9a84c22] transition-all text-xs font-bold border border-[#c9a84c22] flex items-center justify-center gap-2"
                   >
                     <FilePlus className="w-4 h-4" />
-                    تصدير كملف جديد
+                    تصدير كمل�? جديد
                   </button>
                   <button 
                     onClick={() => handleExportData('update')}
                     className="flex-1 py-3 bg-[#c9a84c] text-[#080a0f] rounded-xl hover:bg-[#d4b455] transition-all text-xs font-bold flex items-center justify-center gap-2 shadow-lg shadow-[#c9a84c22]"
                   >
                     <Save className="w-4 h-4" />
-                    تحديث نفس الملف
+                    تحديث ن�?س المل�?
                   </button>
                 </div>
-                <div className="text-[9px] text-[#5a5548] italic">* عند استبدال الملف في iCloud، اختر "Keep Both" لملف جديد، أو "Replace" لتحديث الملف الحالي.</div>
+                <div className="text-[9px] text-[#5a5548] italic">* عند استبدال المل�? �?ي iCloud، اختر "Keep Both" لمل�? جديد، أو "Replace" لتحديث المل�? الحالي.</div>
               </div>
 
               <div className="pb-6 border-b border-[#1a1e2a] space-y-4">
@@ -704,7 +751,7 @@ export const SettingsView = React.memo(() => {
                   ) : (
                     <Code className="w-5 h-5 text-[#c9a84c]" />
                   )}
-                  {isExportingCode ? 'جاري تجهيز الملف...' : 'تحميل كود الأبليكشن كاملاً'}
+                  {isExportingCode ? 'جاري تجهيز المل�?...' : 'تحميل كود الأبليكشن كاملاً'}
                 </button>
                 <div className="p-3 bg-blue-500/05 border border-blue-500/20 rounded-xl space-y-2">
                   <div className="flex items-center gap-2 text-[#6a8a9e] text-[10px] font-bold">
@@ -712,15 +759,15 @@ export const SettingsView = React.memo(() => {
                     <span>للعلم: يمكنك دائماً تحميل الكود من واجهة AI Studio</span>
                   </div>
                   <p className="text-[9px] text-[#5a5548] leading-relaxed pr-5">
-                    اضغط على أيقونة الإعدادات (الترس ⚙️) في أعلى يمين شاشة AI Studio، ثم اختر "Download as ZIP" للحصول على النسخة الأصلية دائماً.
+                    اضغط على أيقونة الإعدادات (الترس ⚙�?) �?ي أعلى يمين شاشة AI Studio، ثم اختر "Download as ZIP" للحصول على النسخة الأصلية دائماً.
                   </p>
                 </div>
               </div>
 
               <div className="flex items-center justify-between pt-4">
                 <div>
-                  <div className="text-sm font-bold text-[#ddd8cc]">مسح كافة البيانات</div>
-                  <div className="text-[10px] text-[#5a5548]">سيتم حذف جميع القيود المسجلة نهائياً</div>
+                  <div className="text-sm font-bold text-[#ddd8cc]">مسح كا�?ة البيانات</div>
+                  <div className="text-[10px] text-[#5a5548]">سيتم حذ�? جميع القيود المسجلة نهائياً</div>
                 </div>
                 {!showDeleteAllConfirm ? (
                   <button 
@@ -743,7 +790,7 @@ export const SettingsView = React.memo(() => {
                       className="px-4 py-2 bg-[#9e6a6a] text-[#080a0f] rounded-xl text-[10px] font-bold flex items-center gap-2"
                     >
                       {isDeletingAll ? <Loader2 className="w-3 h-3 animate-spin" /> : <AlertTriangle className="w-3 h-3" />}
-                      تأكيد الحذف
+                      تأكيد الحذ�?
                     </button>
                   </div>
                 )}
@@ -761,8 +808,8 @@ export const SettingsView = React.memo(() => {
                     />
                     <div className="bg-[#080a0f] border-2 border-dashed border-[#1a1e2a] rounded-2xl p-8 text-center group-hover:border-[#c9a84c33] transition-all">
                       <Upload className="w-8 h-8 text-[#5a5548] mx-auto mb-2 group-hover:text-[#c9a84c] transition-colors" />
-                      <div className="text-xs text-[#5a5548]">اسحب الملف هنا أو اضغط للاختيار</div>
-                      <div className="text-[9px] text-[#5a5548] mt-1">يدعم ملفات Excel و CSV</div>
+                      <div className="text-xs text-[#5a5548]">اسحب المل�? هنا أو اضغط للاختيار</div>
+                      <div className="text-[9px] text-[#5a5548] mt-1">يدعم مل�?ات Excel و CSV</div>
                     </div>
                   </div>
                   
@@ -796,7 +843,7 @@ export const SettingsView = React.memo(() => {
                       </div>
                       <div className="flex gap-4 text-[9px]">
                         <span className="text-[#6a9e6a]">ناجح: {importProgress.success}</span>
-                        <span className="text-[#9e6a6a]">فشل: {importProgress.failed}</span>
+                        <span className="text-[#9e6a6a]">�?شل: {importProgress.failed}</span>
                       </div>
                     </div>
                   )}
@@ -807,8 +854,8 @@ export const SettingsView = React.memo(() => {
                     </h4>
                     <div className="p-4 bg-[#6a8a9e11] border border-[#6a8a9e22] rounded-2xl flex items-center justify-between">
                       <div>
-                        <div className="text-xs font-bold text-[#6a8a9e]">تحديث أرقام الفواتير للقيود السابقة (تلقائي)</div>
-                        <div className="text-[10px] text-[#5a5548] mt-1 pr-1">إضافة أرقام تسلسلية ذكية (مثل S1 و P1) لكل القيود السابقة الخالية من الأرقام.</div>
+                        <div className="text-xs font-bold text-[#6a8a9e]">تحديث أرقام ال�?واتير للقيود السابقة (تلقائي)</div>
+                        <div className="text-[10px] text-[#5a5548] mt-1 pr-1">إضا�?ة أرقام تسلسلية ذكية (مثل S1 و P1) لكل القيود السابقة الخالية من الأرقام.</div>
                       </div>
                       <button 
                         onClick={handleRetroactiveInvoiceNumbers}
@@ -822,13 +869,13 @@ export const SettingsView = React.memo(() => {
                     <div className="p-4 bg-[#c9a84c11] border border-[#c9a84c22] rounded-2xl flex items-center justify-between mt-4">
                       <div>
                         <div className="text-xs font-bold text-[#c9a84c]">شاشة جرد ومطابقة المخزون</div>
-                        <div className="text-[10px] text-[#5a5548] mt-1 pr-1">مطابقة القائمة الدفترية مع الجرد الفعلي للمحلات وحفظها بالسجلات.</div>
+                        <div className="text-[10px] text-[#5a5548] mt-1 pr-1">مطابقة القائمة الد�?ترية مع الجرد ال�?علي للمحلات وح�?ظها بالسجلات.</div>
                       </div>
                       <button 
                         onClick={() => useAppStore.getState().setView('inventory')}
                         className="px-4 py-2 bg-[#c9a84c] text-[#0e1018] text-[10px] font-bold rounded-xl hover:bg-[#d4b455] transition-all"
                       >
-                        فتح الشاشة
+                        �?تح الشاشة
                       </button>
                     </div>
                   </div>
@@ -881,7 +928,7 @@ export const SettingsView = React.memo(() => {
               <div>
                 <h3 className="text-lg font-bold text-[#ddd8cc] mb-2">شجرة الحسابات والدليل</h3>
                 <p className="text-xs text-[#5a5548] leading-relaxed">
-                  قم بتنظيم حساباتك (أصول، خصوم، إيرادات...) وإضافة حسابات جديدة للعملاء أو الموردين أو التجار بسهولة من خلال الشجرة الهيكلية.
+                  قم بتنظيم حساباتك (أصول، خصوم، إيرادات...) وإضا�?ة حسابات جديدة للعملاء أو الموردين أو التجار بسهولة من خلال الشجرة الهيكلية.
                 </p>
               </div>
               <button 

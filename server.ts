@@ -1,8 +1,6 @@
-﻿import express from "express";
+import express from "express";
 import { createServer as createViteServer } from "vite";
 import path from "path";
-import axios from "axios";
-import * as cheerio from "cheerio";
 import AdmZip from "adm-zip";
 import fs from "fs";
 
@@ -73,7 +71,7 @@ async function startServer() {
   } else {
     const distPath = path.join(process.cwd(), 'dist');
     app.use(express.static(distPath));
-    app.get('*', (req, res) => {
+    app.get('*', (_req, res) => {
       res.sendFile(path.join(distPath, 'index.html'));
     });
   }

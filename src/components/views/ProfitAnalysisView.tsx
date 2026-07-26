@@ -1,4 +1,4 @@
-﻿import React, { useMemo, useState } from "react";
+import React, { useMemo, useState } from "react";
 import { format, parseISO } from "date-fns";
 import { ar } from "date-fns/locale";
 import { AlertTriangle, Download, Layers, TrendingUp } from "lucide-react";
@@ -42,11 +42,11 @@ export const ProfitAnalysisView = () => {
     { openingAr: 0, purchAr: 0, purchCash: 0, salesAr: 0, salesCash: 0, closingAr: 0 },
   );
 
-  const goldCOGS = (Object.entries(accData) as [string, ProfitAccountRow][]).reduce((sum, [name, row]) => {
+  const goldCOGS = (Object.entries(accData) as [string, ProfitAccountRow][]).reduce((sum, [, row]) => {
     if (row.karat === "silver") return sum;
     return sum + row.cogs;
   }, 0);
-  const silverCOGS = (Object.entries(accData) as [string, ProfitAccountRow][]).reduce((sum, [name, row]) => {
+  const silverCOGS = (Object.entries(accData) as [string, ProfitAccountRow][]).reduce((sum, [, row]) => {
     if (row.karat !== "silver") return sum;
     return sum + row.cogs;
   }, 0);

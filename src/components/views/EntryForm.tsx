@@ -3,12 +3,11 @@ import { motion } from 'framer-motion';
 import { 
   CheckCircle2,
 } from 'lucide-react';
-import { format, isValid } from 'date-fns';
-import { ar } from 'date-fns/locale';
-import { collection, addDoc, serverTimestamp, query, orderBy, limit, getDocs, where } from 'firebase/firestore';
-import { db, handleFirestoreError } from '../../firebase';
-import { Entry, FirebaseUser, OperationType, AccountCategories } from '../../types';
-import { CATS, ACCOUNTS, GOLD_ORDER, RAW_DATA, OPERATION_RULES } from '../../constants';
+import { format } from 'date-fns';
+import { collection, addDoc, serverTimestamp } from 'firebase/firestore';
+import { db } from '../../firebase';
+import { Entry } from '../../types';
+import { CATS, RAW_DATA } from '../../constants';
 import { useAppStore } from '../../store';
 import { cn } from '../../lib/utils';
 import { 
@@ -30,6 +29,10 @@ import { validateEntryNumberingPolicy } from '../../lib/entryValidation';
 import { OperationSelector } from '../ui/OperationSelector';
 import { buildAccountRegistry } from '../../lib/accountRegistry';
 import { buildCanonicalPosting } from '../../lib/postingMatrix';
+
+export const normalizeAccessoryEntryPayload = <T extends { weight?: string; count?: string }>(entry: T, isAccessory: boolean): T => (
+  isAccessory ? { ...entry, weight: entry.weight || '0', count: '0' } : entry
+);
 
 export const EntryForm = React.memo(() => {
   const { 
@@ -53,8 +56,6 @@ export const EntryForm = React.memo(() => {
 
   const [step, setStep] = useState(1);
   const [isSaving, setIsSaving] = useState(false);
-  const [debitSearch, setDebitSearch] = useState('');
-  const [creditSearch, setCreditSearch] = useState('');
 
   const [usageStats, setUsageStats] = useState<Record<string, number>>({});
 
