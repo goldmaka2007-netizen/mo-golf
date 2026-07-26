@@ -12,14 +12,14 @@ import {
   TrendingUp,
   Download
 } from 'lucide-react';
-import { Entry, AccountCategories, AccountNature } from '../../../types';
+import { Entry } from '../../../types';
 import { useAppStore } from '../../../store';
 import { cn } from '../../../lib/utils';
-import { getDynamicAccountNature, getAccountTypeDetails, belongsToMetric, getMetricValue } from '../../../utils/accountLogic';
+import { buildIncomeStatementReport } from '../../../lib/incomeStatementReport';
 import { exportToExcel } from '../../../utils/exportUtils';
 
 export const IncomeStatementView = React.memo(({ entries }: { entries: Entry[] }) => {
-  const { accountCategories, accountsDb } = useAppStore();
+  const { accountsDb } = useAppStore();
   const [activeTab, setActiveTab] = useState<'cash' | 'gold' | 'silver' | 'accs'>('cash');
   const [selectedMonth, setSelectedMonth] = useState<string>('all');
 
@@ -39,174 +39,10 @@ export const IncomeStatementView = React.memo(({ entries }: { entries: Entry[] }
     return entries.filter(e => e.date && e.date.startsWith(selectedMonth));
   }, [entries, selectedMonth]);
 
-  const financials = useMemo(() => {
-    const createLedger = (metric: 'cash' | 'gold' | 'silver' | 'accs') => {
-      const revenueCats: Record<string, { total: number; totalWeight: number; details: { name: string; val: number; weight: number }[] }> = {};
-      const expenseCats: Record<string, { total: number; totalWeight: number; details: { name: string; val: number; weight: number }[] }> = {};
-      let totalRev = 0;
-      let totalExp = 0;
-
-      // Classify and sum accounts belonging to Revenue or Expenses
-      filteredEntries.forEach(entry => {
-        const val = getMetricValue(entry, metric, accountsDb);
-        if (val === 0) return;
-
-        // Calculate actual weight involved for Cash price analysis
-        // For gold, we prefer arabicWeight. For silver, regular weight.
-        const isEntrySilver = (entry.tx || '').includes('فضة') || (entry.debit || '').includes('فضة') || (entry.credit || '').includes('فضة');
-        const weightRaw = isEntrySilver ? parseFloat(entry.weight || '0') : parseFloat(entry.arabicWeight || entry.weight || '0');
-        const entryWeight = isNaN(weightRaw) ? 0 : weightRaw;
-
-        const debitDetails = getAccountTypeDetails(entry.debit, accountsDb);
-        const creditDetails = getAccountTypeDetails(entry.credit, accountsDb);
-
-        // -- 1. Standard Revenue Check (Credit is Revenue) --
-        if (belongsToMetric(entry.credit, metric, accountsDb)) {
-          if (creditDetails.main === 'revenue') {
-            if (!revenueCats[creditDetails.sub]) revenueCats[creditDetails.sub] = { total: 0, totalWeight: 0, details: [] };
-            
-            const existing = revenueCats[creditDetails.sub].details.find(d => d.name === entry.credit);
-            if (existing) {
-              existing.val += val;
-              existing.weight += entryWeight;
-            } else {
-              revenueCats[creditDetails.sub].details.push({ name: entry.credit, val, weight: entryWeight });
-            }
-
-            revenueCats[creditDetails.sub].total += val;
-            revenueCats[creditDetails.sub].totalWeight += entryWeight;
-            totalRev += val;
-          }
-        }
-
-        // -- 2. Standard Expense Check (Debit is Expense) --
-        if (belongsToMetric(entry.debit, metric, accountsDb)) {
-          if (debitDetails.main === 'expenses') {
-            if (!expenseCats[debitDetails.sub]) expenseCats[debitDetails.sub] = { total: 0, totalWeight: 0, details: [] };
-            
-            const existing = expenseCats[debitDetails.sub].details.find(d => d.name === entry.debit);
-            if (existing) {
-              existing.val += val;
-              existing.weight += entryWeight;
-            } else {
-              expenseCats[debitDetails.sub].details.push({ name: entry.debit, val, weight: entryWeight });
-            }
-
-            expenseCats[debitDetails.sub].total += val;
-            expenseCats[debitDetails.sub].totalWeight += entryWeight;
-            totalExp += val;
-          }
-        }
-
-        // -- 3. Trade Overlay (Cash flows for Cash, Weight flows for Gold/Silver) --
-        if (metric === 'cash') {
-          const isGold = (acc: string) => belongsToMetric(acc, 'gold', accountsDb);
-          const isSilver = (acc: string) => belongsToMetric(acc, 'silver', accountsDb);
-          const isAccs = (acc: string) => belongsToMetric(acc, 'accs', accountsDb);
-          const isProduct = (acc: string) => isGold(acc) || isSilver(acc) || isAccs(acc);
-
-          // Cash Sale: Debit Cash / Credit Product (Asset Account)
-          if (belongsToMetric(entry.debit, 'cash', accountsDb) && isProduct(entry.credit) && creditDetails.main === 'assets') {
-            const cat = "إيراد مبيعات تجارة";
-            if (!revenueCats[cat]) revenueCats[cat] = { total: 0, totalWeight: 0, details: [] };
-            
-            const label = `مبيعات نقدية (${entry.credit})`;
-            const existing = revenueCats[cat].details.find(d => d.name === label);
-            if (existing) {
-              existing.val += val;
-              existing.weight += entryWeight;
-            } else {
-              revenueCats[cat].details.push({ name: label, val, weight: entryWeight });
-            }
-
-            revenueCats[cat].total += val;
-            revenueCats[cat].totalWeight += entryWeight;
-            totalRev += val;
-          }
-
-          // Cash Purchase: Debit Product (Asset) / Credit Cash
-          if (belongsToMetric(entry.credit, 'cash', accountsDb) && isProduct(entry.debit) && debitDetails.main === 'assets') {
-            const cat = "تكلفة مشتريات تجارة";
-            if (!expenseCats[cat]) expenseCats[cat] = { total: 0, totalWeight: 0, details: [] };
-            
-            const label = `مشتريات نقدية (${entry.debit})`;
-            const existing = expenseCats[cat].details.find(d => d.name === label);
-            if (existing) {
-              existing.val += val;
-              existing.weight += entryWeight;
-            } else {
-              expenseCats[cat].details.push({ name: label, val, weight: entryWeight });
-            }
-
-            expenseCats[cat].total += val;
-            expenseCats[cat].totalWeight += entryWeight;
-            totalExp += val;
-          }
-        } else if (metric === 'gold' || metric === 'silver' || metric === 'accs') {
-          // Weight/Count Trade Overlay
-          // Purchase Gold/Silver/Accs: Debit Asset (Increases) / Credit Cash/Liability
-          if (belongsToMetric(entry.debit, metric, accountsDb) && debitDetails.main === 'assets' && !belongsToMetric(entry.credit, metric, accountsDb)) {
-            const cat = metric === 'accs' ? 'وارد عدد (مشتريات ملحقات)' : `وزن ${metric === 'gold' ? 'ذهب' : 'فضة'} وارد (مشتريات)`;
-            if (!revenueCats[cat]) revenueCats[cat] = { total: 0, totalWeight: 0, details: [] };
-            
-            const label = `${metric === 'accs' ? 'شراء عدد' : 'شراء وزن'} (${entry.debit})`;
-            const existing = revenueCats[cat].details.find(d => d.name === label);
-            if (existing) {
-              existing.val += val;
-              existing.weight += entryWeight;
-            } else {
-              revenueCats[cat].details.push({ name: label, val, weight: entryWeight });
-            }
-
-            revenueCats[cat].total += val;
-            revenueCats[cat].totalWeight += entryWeight;
-            totalRev += val;
-          }
-
-          // Sale Gold/Silver/Accs: Credit Asset (Decreases) / Debit Cash/Receivable
-          if (belongsToMetric(entry.credit, metric, accountsDb) && creditDetails.main === 'assets' && !belongsToMetric(entry.debit, metric, accountsDb)) {
-            const cat = metric === 'accs' ? 'صادر عدد (مبيعات ملحقات)' : `وزن ${metric === 'gold' ? 'ذهب' : 'فضة'} صادر (مبيعات)`;
-            if (!expenseCats[cat]) expenseCats[cat] = { total: 0, totalWeight: 0, details: [] };
-            
-            const label = `${metric === 'accs' ? 'بيع عدد' : 'بيع وزن'} (${entry.credit})`;
-            const existing = expenseCats[cat].details.find(d => d.name === label);
-            if (existing) {
-              existing.val += val;
-              existing.weight += entryWeight;
-            } else {
-              expenseCats[cat].details.push({ name: label, val, weight: entryWeight });
-            }
-
-            expenseCats[cat].total += val;
-            expenseCats[cat].totalWeight += entryWeight;
-            totalExp += val;
-          }
-        }
-      });
-
-      const sortCats = (cats: Record<string, { details: { val: number; weight?: number }[] }>) => {
-        Object.values(cats).forEach((cat) => {
-          cat.details.sort((a, b) => Math.abs(b.val) - Math.abs(a.val));
-        });
-      };
-      
-      sortCats(revenueCats);
-      sortCats(expenseCats);
-
-      return {
-        revenue: { categories: revenueCats, total: totalRev },
-        expenses: { categories: expenseCats, total: totalExp },
-        net: totalRev - totalExp
-      };
-    };
-
-    return {
-      cash: createLedger('cash'),
-      gold: createLedger('gold'),
-      silver: createLedger('silver'),
-      accs: createLedger('accs')
-    };
-  }, [filteredEntries, accountsDb]);
+  const financials = useMemo(
+    () => buildIncomeStatementReport(filteredEntries, accountsDb),
+    [filteredEntries, accountsDb],
+  );
 
   const handleExport = () => {
     const unitMap = { cash: 'ج.م', gold: 'جم عربي', silver: 'جرام', accs: 'قطعة' };

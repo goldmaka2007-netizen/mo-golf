@@ -1,9 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import { createPortal } from 'react-dom';
 import { motion } from 'framer-motion';
-import { Settings2, X, Printer, LayoutTemplate } from 'lucide-react';
+import { X, Printer, LayoutTemplate } from 'lucide-react';
 import { useAppStore } from '../../store';
-import { Entry } from '../../types';
 
 interface FieldConfig {
   top: number; // in cm
@@ -194,7 +193,7 @@ export const InvoicePrintModal = () => {
               <div>
                 <h3 className="text-xl font-bold text-[#c9a84c] flex items-center gap-2">
                   <LayoutTemplate className="w-5 h-5" />
-                  مُعايرة الطباعة (سطامبة)
+                  مفعايرة الطباعة (سطامبة)
                 </h3>
                 <p className="text-[10px] text-[#8a8578] mt-1">مقاس القالب: 21.5سم × 16.5سم</p>
               </div>

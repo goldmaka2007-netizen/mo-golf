@@ -6,24 +6,33 @@ import { buildLedgerAccountSelection, buildLedgerCsv, buildLedgerReport, filterL
 
 const today = () => new Date().toISOString().slice(0, 10);
 const yearStart = () => `${new Date().getFullYear()}-01-01`;
-const labels: Record<LedgerDimension, string> = { cash: 'نقدية', gold: 'ذهب', silver: 'فضة' };
+const labels: Record<LedgerDimension, string> = { cash: 'نقدية', gold: 'ذهب', silver: 'فضة', quantity: 'عدد' };
 const original = (row: LedgerRow, value: number, dimension: LedgerDimension, mode: GoldDisplayMode) => mode === 'original' && dimension === 'gold' && row.originalWeight !== undefined && row.karat ? `${formatLedgerAmount(row.originalWeight, 'gold')} — عيار ${row.karat}` : formatLedgerAmount(value, dimension);
 
 export const GeneralLedgerView = React.memo(({ entries }: { entries: Entry[]; startDate?: string; endDate?: string }) => {
-  const { accountsDb } = useAppStore();
+  const { accountsDb, canonicalAccounts, costCalculationRun } = useAppStore();
   const [accountKey, setAccountKey] = useState<string | null>(null);
   const [search, setSearch] = useState('');
   const [expanded, setExpanded] = useState<Set<string>>(new Set());
-  const accounts = useMemo(() => accountsDb.filter(a => a.isActive !== false), [accountsDb]);
+  const accounts = useMemo(() => [
+    ...accountsDb.filter(a => a.isActive !== false),
+    ...canonicalAccounts.filter(item => item.isActive && !item.sourceAccountId).map(item => ({
+      id: item.id, name: item.displayName, mainType: item.mainGroup, subType: item.entityType,
+      balanceNature: item.tracksGold ? 'جرام ذهب' : item.tracksSilver ? 'جرام فضة' : item.tracksQuantity ? 'قطعة' : 'جنية مصري',
+      userId: item.userId || '', type: item.isMerchant ? 'merchant' as const : item.entityType === 'cash' ? 'cash' as const : item.metal === 'silver' ? 'silver' as const : item.metal === 'accessory' ? 'accessory' as const : item.metal === 'gold' ? 'gold_product' as const : 'other' as const,
+      metal: item.metal === 'gold' || item.metal === 'silver' ? item.metal : null, is_inventory: item.isInventory, karat: item.karat ? String(item.karat) as '18' | '21' | '24' : null, isActive: item.isActive,
+    })),
+  ], [accountsDb, canonicalAccounts]);
   const groups = useMemo(() => buildLedgerAccountSelection(accounts, search), [accounts, search]);
   const account = useMemo(() => accounts.find(a => getAccountKey(a) === accountKey), [accounts, accountKey]);
 
   if (!account) return <AccountSelection groups={groups} search={search} setSearch={setSearch} expanded={expanded} setExpanded={setExpanded} onSelect={a => setAccountKey(getAccountKey(a))} />;
-  return <LedgerDetails account={account} accounts={accounts} entries={entries} onBack={() => setAccountKey(null)} />;
+  const costTimeline = costCalculationRun.status === 'valid' && costCalculationRun.timeline?.valid ? costCalculationRun.timeline : null;
+  return <LedgerDetails account={account} accounts={accounts} entries={entries} canonicalAccounts={canonicalAccounts} costTimeline={costTimeline} onBack={() => setAccountKey(null)} />;
 });
 
 const AccountSelection = ({ groups, search, setSearch, expanded, setExpanded, onSelect }: { groups: ReturnType<typeof buildLedgerAccountSelection>; search: string; setSearch: (value: string) => void; expanded: Set<string>; setExpanded: React.Dispatch<React.SetStateAction<Set<string>>>; onSelect: (account: Account) => void }) => <section className="space-y-3" dir="rtl">
-  <div className="flex items-center gap-2 text-[#f5f1e8]"><Book className="h-5 w-5 text-[#c9a84c]" /><h3 className="font-black">دفتر الأستاذ</h3></div>
+  <div className="flex items-center gap-2 text-[#f5f1e8]"><Book className="h-5 w-5 text-[#c9a84c]" /><h3 className="font-black">دفتر الأستاذ التاريخي</h3></div>
   <label className="relative block"><Search className="absolute right-3 top-3 h-4 w-4 text-[#8a8172]" /><input value={search} onChange={e => setSearch(e.target.value)} placeholder="ابحث باسم الحساب" className="w-full rounded-xl border border-[#1a1e2a] bg-[#080a0f] py-2.5 pr-9 pl-3 text-sm text-[#f5f1e8]" /></label>
   <div className="overflow-hidden rounded-2xl border border-[#1a1e2a] bg-[#0e1018]">
     {groups.map(group => { const open = !!search || expanded.has(group.id); return <div key={group.id} className="border-b border-[#1a1e2a] last:border-b-0"><button type="button" onClick={() => setExpanded(previous => { const next = new Set(previous); next.has(group.id) ? next.delete(group.id) : next.add(group.id); return next; })} className="flex w-full items-center gap-2 px-3 py-3 text-right text-xs font-black text-[#c9a84c]">{open ? <ChevronDown className="h-4 w-4" /> : <ChevronRight className="h-4 w-4" />}<span>{group.label}</span></button>{open && group.accounts.map(item => <button key={item.ledgerEntityId} type="button" onClick={() => onSelect(item.account)} className="flex w-full items-center border-t border-[#1a1e2a]/70 px-5 py-3 text-right text-sm text-[#ddd8cc] active:bg-[#c9a84c]/10"><span className="flex-1">{item.displayName}</span><ChevronRight className="h-4 w-4 text-[#8a8172]" /></button>)}</div>; })}
@@ -31,14 +40,14 @@ const AccountSelection = ({ groups, search, setSearch, expanded, setExpanded, on
   </div>
 </section>;
 
-const LedgerDetails = ({ account, accounts, entries, onBack }: { account: Account; accounts: Account[]; entries: Entry[]; onBack: () => void }) => {
+const LedgerDetails = ({ account, accounts, entries, canonicalAccounts, costTimeline, onBack }: { account: Account; accounts: Account[]; entries: Entry[]; canonicalAccounts: import('../../../types').CanonicalAccountDefinition[]; costTimeline: import('../../../lib/inventoryCostTypes').InventoryCostTimeline | null; onBack: () => void }) => {
   const dimensions = useMemo(() => getAvailableDimensions(account, entries, accounts), [account, entries, accounts]);
   const [dimension, setDimension] = useState<LedgerDimension>('cash');
   const [from, setFrom] = useState(yearStart); const [to, setTo] = useState(today);
   const [operation, setOperation] = useState(''); const [opposite, setOpposite] = useState(''); const [mode, setMode] = useState<GoldDisplayMode>('equivalent21'); const [detail, setDetail] = useState<LedgerRow | null>(null);
   useEffect(() => { if (dimensions.length && !dimensions.includes(dimension)) setDimension(dimensions[0]); }, [dimensions, dimension]);
-  const report = useMemo(() => dimensions.includes(dimension) ? buildLedgerReport(entries, accounts, account, dimension, from, to) : null, [entries, accounts, account, dimension, dimensions, from, to]);
-  const summary = useMemo(() => dimensions.map(item => ({ dimension: item, report: buildLedgerReport(entries, accounts, account, item, '0000-01-01', today()) })), [dimensions, entries, accounts, account]);
+  const report = useMemo(() => dimensions.includes(dimension) ? buildLedgerReport(entries, accounts, account, dimension, from, to, canonicalAccounts, { enableFinancialProjection: true, costTimeline }) : null, [entries, accounts, account, dimension, dimensions, from, to, canonicalAccounts, costTimeline]);
+  const summary = useMemo(() => dimensions.map(item => ({ dimension: item, report: buildLedgerReport(entries, accounts, account, item, '0000-01-01', today(), canonicalAccounts, { enableFinancialProjection: true, costTimeline }) })), [dimensions, entries, accounts, account, canonicalAccounts, costTimeline]);
   const rows = useMemo(() => report ? filterLedgerRows(report.rows, operation, opposite) : [], [report, operation, opposite]);
   const totals = useMemo(() => getFilteredTotals(rows), [rows]);
   const types = useMemo(() => [...new Set(report?.rows.map(row => row.operationType) || [])], [report]);

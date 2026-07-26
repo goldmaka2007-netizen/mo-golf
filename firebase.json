@@ -1,7 +1,6 @@
 {
   "firestore": {
-    "rules": "firestore.rules",
-    "database": "ai-studio-031a525c-7a85-4304-b0ca-6d60bd34adbf"
+    "rules": "firestore.rules"
   },
   "hosting": {
     "public": "dist",
@@ -18,20 +17,38 @@
     ],
     "headers": [
       {
-        "source": "/sw.js",
+        "source": "/index.html",
         "headers": [
           {
             "key": "Cache-Control",
-            "value": "no-cache, no-store, must-revalidate"
+            "value": "no-cache"
           }
         ]
       },
       {
-        "source": "/**/*.html",
+        "source": "/sw.js",
         "headers": [
           {
             "key": "Cache-Control",
-            "value": "no-cache, no-store, must-revalidate"
+            "value": "no-cache"
+          }
+        ]
+      },
+      {
+        "source": "/manifest.json",
+        "headers": [
+          {
+            "key": "Cache-Control",
+            "value": "no-cache"
+          }
+        ]
+      },
+      {
+        "source": "/assets/**",
+        "headers": [
+          {
+            "key": "Cache-Control",
+            "value": "public, max-age=31536000, immutable"
           }
         ]
       }

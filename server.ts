@@ -1,8 +1,6 @@
-﻿import express from "express";
+import express from "express";
 import { createServer as createViteServer } from "vite";
 import path from "path";
-import axios from "axios";
-import * as cheerio from "cheerio";
 import AdmZip from "adm-zip";
 import fs from "fs";
 
@@ -13,6 +11,16 @@ async function startServer() {
   // Middleware to handle JSON
   app.use(express.json({ limit: '50mb' }));
   app.use(express.urlencoded({ limit: '50mb', extended: true }));
+
+  // LAN development must always load the current Vite modules. This does not
+  // clear browser databases or affect production hosting.
+  if (process.env.NODE_ENV !== "production") {
+    app.use((_req, res, next) => {
+      res.set('Cache-Control', 'no-store, max-age=0');
+      res.set('Pragma', 'no-cache');
+      next();
+    });
+  }
 
   // API endpoint to export code. Disabled by default because it exposes source files.
   app.get("/api/export-code", (req, res) => {
@@ -63,7 +71,7 @@ async function startServer() {
   } else {
     const distPath = path.join(process.cwd(), 'dist');
     app.use(express.static(distPath));
-    app.get('*', (req, res) => {
+    app.get('*', (_req, res) => {
       res.sendFile(path.join(distPath, 'index.html'));
     });
   }

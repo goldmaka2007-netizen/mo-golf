@@ -4,14 +4,23 @@ import { ClipboardList, Plus, CheckCircle2, History, X, Save, Scale, Package, Ar
 import { format } from 'date-fns';
 import { ar } from 'date-fns/locale';
 import { useAppStore } from '../../store';
-import { collection, addDoc, serverTimestamp, deleteDoc, doc, updateDoc } from 'firebase/firestore';
+import { collection, addDoc, serverTimestamp, deleteDoc, doc, updateDoc, runTransaction } from 'firebase/firestore';
 import { db, handleFirestoreError } from '../../firebase';
 import { cn } from '../../lib/utils';
 import { parseWeight } from '../../lib/accounting';
-import { getMetricValue, getDynamicAccountNature, belongsToMetric, getMetricActualValue } from '../../utils/accountLogic';
-import { AccountNature, InventoryCheck, Entry, OperationType } from '../../types';
+import { getMetricValue, getDynamicAccountNature, getMetricActualValue } from '../../utils/accountLogic';
+import { AccountNature, InventoryCheck, OperationType } from '../../types';
 import * as XLSX from 'xlsx';
 import { FormInput } from '../ui/FormInput';
+import { areOperationWritesLocked } from '../../lib/costRecalculation';
+import {
+  buildInventoryAdjustmentDraftEntry,
+  calculateInventoryCheckDiff,
+  effectiveInventoryCheckStatus,
+  findAccountByCheck,
+  prepareEntryForCentralSave,
+  statusForInventoryCheck,
+} from '../../lib/inventoryCheckSettlement';
 
 const HistoryCard = React.memo(({
   item,
@@ -42,7 +51,8 @@ const HistoryCard = React.memo(({
   updateLoading: boolean;
   adjustLoading: string | null;
 }) => {
-  const { id, check, matchingEntry, isGold, isAcc, weightDiff, countDiff } = item;
+  const { id, check, matchingEntry, isGold, isAcc, status, weightDiff, countDiff } = item;
+  const isPosted = status === 'posted';
   
   const calculateDiffColor = (expected: number, actual: number) => {
     const diff = actual - expected;
@@ -74,7 +84,7 @@ const HistoryCard = React.memo(({
               })()} | {check.createdAt && check.createdAt.toDate ? format(check.createdAt.toDate(), 'hh:mm a') : ''}
           </div>
         </div>
-        <button onClick={() => handleDelete(check.id!)} className="p-2 rounded-lg bg-red-500/10 text-red-500 hover:bg-red-500/20 transition-colors">
+        <button disabled={isPosted} onClick={() => handleDelete(check.id!)} className="p-2 rounded-lg bg-red-500/10 text-red-500 hover:bg-red-500/20 transition-colors disabled:opacity-30 disabled:cursor-not-allowed">
           <X className="w-4 h-4" />
         </button>
       </div>
@@ -160,10 +170,10 @@ const HistoryCard = React.memo(({
               return (
                 <button
                   onClick={() => createAdjustmentEntry(check)}
-                  disabled={adjustLoading === id || !!matchingEntry || (hasNoDiff && !matchingEntry)}
+                  disabled={adjustLoading === id || isPosted || !!matchingEntry || (hasNoDiff && !matchingEntry)}
                   className={cn(
                     "flex-[2] flex items-center justify-center gap-2 py-2 rounded-xl text-xs font-bold transition-all border disabled:opacity-70",
-                    !!matchingEntry 
+                    (isPosted || !!matchingEntry)
                       ? "bg-[#6a9e6a]/10 text-[#6a9e6a] border-[#6a9e6a]/30 cursor-default" 
                       : hasNoDiff
                         ? "bg-[#1a1e2a] text-[#5a5548] border-transparent cursor-default"
@@ -172,22 +182,22 @@ const HistoryCard = React.memo(({
                 >
                   {adjustLoading === id ? (
                     <span className="animate-pulse">جاري...</span>
-                  ) : !!matchingEntry ? (
-                    <><CheckCircle2 className="w-4 h-4" /> تم إنشاء القيد</>
+                  ) : (isPosted || !!matchingEntry) ? (
+                    <><CheckCircle2 className="w-4 h-4" /> تم الترحيل</>
                   ) : hasNoDiff ? (
                     "لا يوجد فرق للتسوية"
                   ) : (
-                    <><CheckSquare className="w-4 h-4" /> إنشاء قيد تسوية</>
+                    <><CheckSquare className="w-4 h-4" /> ترحيل كتسوية</>
                   )}
                 </button>
               );
             })()}
-            <button
+            {!isPosted && <button
               onClick={() => startEdit(check)}
               className="flex-1 flex items-center justify-center gap-2 py-2 bg-[#1a1e2a] text-[#5a5548] rounded-xl text-xs font-bold hover:text-[#ddd8cc] transition-all border border-transparent hover:border-[#3a3a3a]"
             >
               <Plus className="w-4 h-4 rotate-45" /> تعديل
-            </button>
+            </button>}
           </>
         )}
       </div>
@@ -196,7 +206,8 @@ const HistoryCard = React.memo(({
 });
 
 export const InventoryCheckView = React.memo(() => {
-  const { entries, accountCategories, inventoryChecks, user, accountsDb, setGlobalError } = useAppStore();
+  const { entries, accountCategories, inventoryChecks, user, accountsDb, setGlobalError, costCalculationRun, openingCostConfig, canonicalAccounts } = useAppStore();
+  const operationWritesLocked = areOperationWritesLocked(costCalculationRun);
   
   // UI States
   const [selectedAcc, setSelectedAcc] = useState('');
@@ -273,11 +284,27 @@ export const InventoryCheckView = React.memo(() => {
   }, [accountsDb, accountCategories]);
 
   const handleQuickUpdate = useCallback(async (id: string) => {
+    const existing = inventoryChecks.find(check => check.id === id);
+    if (existing && effectiveInventoryCheckStatus(existing) === 'posted') {
+      setGlobalError('لا يمكن تعديل جرد تم ترحيله.');
+      return;
+    }
     setUpdateLoading(true);
     try {
+      const actualWeightValue = parseFloat(editW) || 0;
+      const actualCountValue = parseFloat(editC) || 0;
+      const diff = calculateInventoryCheckDiff({
+        systemWeight: existing?.systemWeight || 0,
+        actualWeight: actualWeightValue,
+        systemCount: existing?.systemCount || 0,
+        actualCount: actualCountValue,
+      });
       await updateDoc(doc(db, 'inventory_checks', id), {
-        actualWeight: parseFloat(editW) || 0,
-        actualCount: parseFloat(editC) || 0,
+        actualWeight: actualWeightValue,
+        actualCount: actualCountValue,
+        weightDiff: diff.weightDiff,
+        countDiff: diff.countDiff,
+        status: diff.hasDiff ? 'draft' : 'matched',
         updatedAt: serverTimestamp()
       });
       setEditingId(null);
@@ -286,7 +313,7 @@ export const InventoryCheckView = React.memo(() => {
     } finally {
       setUpdateLoading(false);
     }
-  }, [editW, editC]);
+  }, [editW, editC, inventoryChecks, setGlobalError]);
 
   const startEdit = useCallback((check: InventoryCheck) => {
     setEditingId(check.id!);
@@ -295,6 +322,11 @@ export const InventoryCheckView = React.memo(() => {
   }, []);
 
   const handleDelete = useCallback(async (id: string) => {
+    const existing = inventoryChecks.find(check => check.id === id);
+    if (existing && effectiveInventoryCheckStatus(existing) === 'posted') {
+      setGlobalError('لا يمكن حذف جرد تم ترحيله.');
+      return;
+    }
     if (!window.confirm('هل أنت متأكد من حذف هذا الجرد؟')) return;
     try {
       await deleteDoc(doc(db, 'inventory_checks', id));
@@ -302,53 +334,85 @@ export const InventoryCheckView = React.memo(() => {
        console.error("Inventory check delete error:", error);
        alert("فشل حذف الجرد.");
     }
-  }, []);
+  }, [inventoryChecks, setGlobalError]);
 
   const createAdjustmentEntry = useCallback(async (check: InventoryCheck) => {
+    if (operationWritesLocked) {
+      setGlobalError('لا يمكن إنشاء تسوية مخزون أثناء تشغيل أو فشل إعادة احتساب التكلفة.');
+      return;
+    }
+    if (!check.id) {
+      setGlobalError('لا يمكن ترحيل جرد غير محفوظ.');
+      return;
+    }
+    if (effectiveInventoryCheckStatus(check) === 'posted') {
+      setGlobalError('تم ترحيل هذا الجرد من قبل.');
+      return;
+    }
     setAdjustLoading(check.id || null);
     try {
-      const weightDiff = check.actualWeight - check.systemWeight;
-      const countDiff = check.actualCount - check.systemCount;
-      if (Math.abs(weightDiff) < 0.001 && Math.abs(countDiff) < 0.001) return;
-
-      const isGold = getIsGold(check.accountId);
-      const isSilver = getIsSilver(check.accountId);
-      
-      let debitAcc, creditAcc;
-      if (weightDiff < 0) { // Shortage (عجز)
-        creditAcc = check.accountId;
-        debitAcc = isGold ? "عجز-الذهب" : isSilver ? "عجز-الفضة" : "م ا ع";
-      } else { // Surplus (زيادة)
-        debitAcc = check.accountId;
-        creditAcc = isGold ? "زيادة-الذهب" : isSilver ? "زيادة-الفضة" : "ايرادات اخري";
-      }
-
-      await addDoc(collection(db, 'entries'), {
-        seq: 0,
-        cash: 0,
-        arabicWeight: 0,
-        tx: 'تسوية',
-        date: check.date,
-        debit: debitAcc,
-        credit: creditAcc,
-        weight: Math.abs(weightDiff),
-        count: Math.abs(countDiff),
+      const draft = buildInventoryAdjustmentDraftEntry({
+        check,
+        accountsDb,
+        entries,
         userId: user!.uid,
-        createdAt: serverTimestamp(),
-        notes: `تسوية جرد آلي: ${check.notes || ''}`
       });
-
-      if (check.id) {
-        await updateDoc(doc(db, 'inventory_checks', check.id), {
-          isResolved: true
-        });
+      if (!draft.ok) {
+        setGlobalError(draft.message);
+        return;
       }
+      const prepared = prepareEntryForCentralSave({
+        entry: draft.entry,
+        entries,
+        accountsDb,
+        openingCostConfig,
+        canonicalAccounts,
+      });
+      if (!prepared.ok) {
+        setGlobalError(prepared.message);
+        return;
+      }
+
+      const checkRef = doc(db, 'inventory_checks', check.id);
+      const entryRef = doc(collection(db, 'entries'));
+      const auditRef = doc(collection(db, 'audit_logs'));
+      await runTransaction(db, async transaction => {
+        const currentCheck = await transaction.get(checkRef);
+        if (!currentCheck.exists()) throw new Error('جرد غير موجود.');
+        const current = { id: currentCheck.id, ...currentCheck.data() } as InventoryCheck;
+        if (effectiveInventoryCheckStatus(current) === 'posted' || current.postedEntryId) {
+          throw new Error('تم ترحيل هذا الجرد من قبل.');
+        }
+        transaction.set(entryRef, {
+          ...prepared.entry,
+          createdAt: serverTimestamp(),
+        });
+        transaction.update(checkRef, {
+          status: 'posted',
+          isResolved: true,
+          postedEntryId: entryRef.id,
+          postedAt: serverTimestamp(),
+          postedBy: user!.uid,
+          updatedAt: serverTimestamp(),
+        });
+        transaction.set(auditRef, {
+          action: 'inventory_check_posted',
+          collection: 'entries',
+          documentId: entryRef.id,
+          inventoryCheckId: check.id,
+          userId: user!.uid,
+          userEmail: user?.email || '',
+          timestamp: serverTimestamp(),
+        });
+      });
+      return;
+
     } catch (error) {
        handleFirestoreError(error, OperationType.CREATE, 'entries');
     } finally {
       setAdjustLoading(null);
     }
-  }, [user, getIsGold, getIsSilver]);
+  }, [user, operationWritesLocked, setGlobalError, accountsDb, entries, openingCostConfig, canonicalAccounts]);
 
   const exportHistory = () => {
     if (inventoryChecks.length === 0) return;
@@ -398,7 +462,7 @@ export const InventoryCheckView = React.memo(() => {
           val = getMetricValue(e, metric!, accountsDb);
         }
         
-        const countValue = parseFloat(e.count || '0') || 0;
+        const countValue = isAcc ? (parseWeight(e.weight) || parseFloat(e.count || '0') || 0) : (parseFloat(e.count || '0') || 0);
         
         if (e.debit === selectedAcc) {
           sysW += val;
@@ -434,11 +498,20 @@ export const InventoryCheckView = React.memo(() => {
     
     const data: InventoryCheck = {
       accountId: selectedAcc,
+      accountDbId: findAccountByCheck({ accountId: selectedAcc } as InventoryCheck, accountsDb)?.id,
       date: format(new Date(), 'yyyy-MM-dd'),
       systemWeight: systemState.weight,
       actualWeight: w,
       systemCount: systemState.count,
       actualCount: c,
+      weightDiff: w - systemState.weight,
+      countDiff: c - systemState.count,
+      status: statusForInventoryCheck({
+        systemWeight: systemState.weight,
+        actualWeight: w,
+        systemCount: systemState.count,
+        actualCount: c,
+      }),
       notes: notes.trim(),
       userId: user.uid,
     };
@@ -496,8 +569,11 @@ export const InventoryCheckView = React.memo(() => {
       
       const weightDiff = check.actualWeight - check.systemWeight;
       const countDiff = check.actualCount - check.systemCount;
+      const status = effectiveInventoryCheckStatus(check);
 
       const matchingEntry = entries.find(e => {
+        if (check.postedEntryId && e.id === check.postedEntryId) return true;
+        if (e.inventoryCheckId && e.inventoryCheckId === check.id) return true;
         if (e.debit !== check.accountId && e.credit !== check.accountId) return false;
         if (e.date < check.date) return false;
         if (check.notes && e.notes && e.notes.includes(check.notes)) return true;
@@ -517,6 +593,7 @@ export const InventoryCheckView = React.memo(() => {
         matchingEntry, 
         isGold, 
         isAcc, 
+        status,
         weightDiff, 
         countDiff 
       };

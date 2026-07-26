@@ -16,7 +16,7 @@ import {
 } from 'lucide-react';
 import { format } from 'date-fns';
 import { ar } from 'date-fns/locale';
-import { Entry, FirebaseUser } from '../../types';
+import { Entry } from '../../types';
 import { useAppStore } from '../../store';
 import { cn } from '../../lib/utils';
 
@@ -36,7 +36,6 @@ export const EntryRow = React.memo(({ e, setEditingEntry }: { e: Entry, setEditi
 
   const c = parseFloat(e.cash || '0');
   const w = parseFloat(e.weight || '0');
-  const aw = parseFloat(e.arabicWeight || '0') || (w * (e.multiplier || (e.karat === 18 ? 0.857142857 : e.karat === 24 ? 1.142857143 : 1)));
   // Removed targetWeight since we should calculate price per gram using raw weight
   const pricePerGram = w > 0 ? (c / w).toFixed(2) : '0.00';
 
@@ -135,7 +134,7 @@ export const EntryRow = React.memo(({ e, setEditingEntry }: { e: Entry, setEditi
 });
 
 export const DatabaseView = React.memo(() => {
-  const { setView, entries, user, setEditingEntry } = useAppStore();
+  const { entries, setEditingEntry } = useAppStore();
   const [search, setSearch] = useState('');
   const deferredSearch = useDeferredValue(search);
   const [dateRange, setDateRange] = useState({ 

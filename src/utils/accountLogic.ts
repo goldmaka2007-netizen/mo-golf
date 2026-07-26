@@ -1,4 +1,4 @@
-﻿import { Account, AccountNature, AccountCategories, Entry } from '../types';
+import { Account, AccountNature, AccountCategories, Entry } from '../types';
 import { parseWeight } from '../lib/accounting';
 import { canCalculateGoldEquivalent21, calculateGoldEquivalent21, inferGoldKaratFromMultiplier, isSupportedGoldKarat } from '../lib/goldEquivalent';
 
@@ -91,7 +91,7 @@ export const belongsToMetric = (accountName: string, metric: 'cash' | 'gold' | '
  */
 export const getMetricValue = (entry: Entry, metric: 'cash' | 'gold' | 'silver' | 'accs', accountsDb?: Account[], options?: { useActualWeight?: boolean }): number => {
     if (metric === 'cash') return parseFloat(entry.cash || '0') || 0;
-    if (metric === 'accs') return parseFloat(entry.count || '0') || 0;
+    if (metric === 'accs') return parseWeight(entry.weight) || parseFloat(entry.count || '0') || 0;
 
     const debitAcc = entry.debit || '';
     const creditAcc = entry.credit || '';

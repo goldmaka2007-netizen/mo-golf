@@ -24,7 +24,20 @@ export enum AccountNature {
 
 export interface Entry {
   id?: string;
-  seq: number;
+  /**
+   * Application sequence for newly-created entries.
+   * Legacy imported entries intentionally keep this null/absent and retain
+   * their original identifiers in the legacy migration fields below.
+   */
+  seq?: number | null;
+  legacyOperationId?: string;
+  legacyOperationNo?: string;
+  sourceRow?: number;
+  sourceFile?: string;
+  imported?: boolean;
+  importVersion?: string;
+  importedAt?: any;
+  legacySourceHash?: string;
   tx: string;
   operationKind?: AccountingOperationKind;
   subTx?: string;
@@ -32,6 +45,11 @@ export interface Entry {
   credit: string;
   debitAccountId?: string;
   creditAccountId?: string;
+  /** Immutable legacy labels retained after the ID migration. */
+  debitLegacySnapshot?: string;
+  creditLegacySnapshot?: string;
+  accountMigrationVersion?: number;
+  accountMigratedAt?: string;
   date: string;
   cash: string;
   weight: string;
@@ -41,6 +59,8 @@ export interface Entry {
   multiplier?: number;
   notes: string;
   invoiceNumber?: string;
+  operationNo?: string;
+  journalNo?: string;
   clientName?: string;
   clientPhone?: string;
   marketPrice?: number;
@@ -49,6 +69,7 @@ export interface Entry {
   userId: string;
   createdAt?: any;
   isSettled?: boolean;
+  inventoryCheckId?: string;
 }
 
 export type AccountingOperationKind =
@@ -123,6 +144,73 @@ export interface Account {
   isActive?: boolean;
 }
 
+export type AccountingDimension = 'cash' | 'gold' | 'silver';
+export type AccountTrackingDimension = AccountingDimension | 'quantity';
+export type CanonicalMainGroup = 'assets' | 'liabilities' | 'equity' | 'revenue' | 'expenses';
+export type CanonicalAccountType =
+  | 'cash' | 'gold_inventory' | 'silver_inventory' | 'accessory_inventory'
+  | 'merchant' | 'customer' | 'debtor' | 'creditor' | 'capital'
+  | 'retained_earnings' | 'withdrawals' | 'revenue' | 'expense'
+  | 'gold_surplus' | 'gold_shortage' | 'silver_surplus' | 'silver_shortage'
+  | 'fixed_asset' | 'adjustment' | 'historical' | 'other';
+export type ClassificationSource = 'legacy_code' | 'manual';
+export type ReviewStatus = 'discovered' | 'needs_review' | 'reviewed';
+export type ApprovalStatus = 'draft' | 'approved' | 'rejected';
+export type ReportParticipation = 'incomeStatement' | 'financialPosition' | 'equityStatement' | 'inventoryReports';
+
+export interface ClassificationEvidence {
+  source: 'account_document' | 'entry_id' | 'entry_name' | 'migration_data' | 'legacy_rule' | 'manual';
+  field?: string;
+  value?: string;
+  file?: string;
+  rule?: string;
+}
+
+/** Central account definition used only by the new shadow accounting path. */
+export interface CanonicalAccountDefinition {
+  id: string;
+  entityId: string;
+  sourceAccountId?: string;
+  userId?: string;
+  canonicalName: string;
+  displayName: string;
+  legacyNames: string[];
+  aliases: string[];
+  code?: string;
+  description?: string;
+  entityType: CanonicalAccountType;
+  mainGroup: CanonicalMainGroup;
+  allowedDimensions: AccountTrackingDimension[];
+  normalBalanceByDimension: Record<AccountTrackingDimension, 'debit' | 'credit' | null>;
+  metal: 'gold' | 'silver' | 'accessory' | null;
+  karat: 18 | 21 | 24 | null;
+  trackingMode: 'value' | 'weight' | 'quantity' | 'weight_and_quantity' | 'value_and_weight';
+  tracksCash: boolean;
+  tracksGold: boolean;
+  tracksSilver: boolean;
+  tracksQuantity: boolean;
+  tracksWeight: boolean;
+  tracksValue: boolean;
+  tracksCost: boolean;
+  isInventory: boolean;
+  isMerchant: boolean;
+  isHistoricalOnly: boolean;
+  isActive: boolean;
+  reportParticipation: ReportParticipation[];
+  allowedOperationKinds: AccountingOperationKind[];
+  classificationSource: ClassificationSource;
+  classificationConfidence: number;
+  classificationEvidence: ClassificationEvidence[];
+  classificationConflicts: string[];
+  reviewStatus: ReviewStatus;
+  approvalStatus: ApprovalStatus;
+  createdAt: string;
+  updatedAt: string;
+  approvedAt?: string;
+  version: number;
+  audit: { createdBy: string; updatedBy: string; lastReason?: string };
+}
+
 export interface TransactionRule {
   id?: string;
   tx: string;
@@ -139,21 +227,39 @@ export interface TransactionRule {
 export interface InventoryCheck {
   id?: string;
   accountId: string;
+  accountDbId?: string;
   date: string;
   systemWeight: number;
   actualWeight: number;
   systemCount: number;
   actualCount: number;
+  weightDiff?: number;
+  countDiff?: number;
+  status?: 'draft' | 'matched' | 'posted' | 'cancelled';
   notes: string;
   userId: string;
   createdAt?: any;
+  updatedAt?: any;
   isResolved?: boolean;
+  postedEntryId?: string;
+  postedAt?: any;
+  postedBy?: string;
 }
 
 export interface AnnualOpeningCostConfig {
   year: number;
+  /** Canonical persisted shape: user-facing EGP values. */
+  gold21PriceEgp?: number | string;
+  silverPriceEgp?: number | string;
+  accessoryOpeningCosts?: Record<string, number | string | undefined>;
+  /** Legacy persisted shape: integer minor units. Kept readable for older settings docs. */
   gold21PriceMinorPerGram?: number | string;
   silverPriceMinorPerGram?: number | string;
+  accessoryUnitCostMinorByAccountId?: Record<string, number | string | undefined>;
+  accessoryOpeningCostsByAccountId?: Record<string, number | string | undefined>;
+  accessoryCosts?: Record<string, number | string | undefined>;
+  openingCosts?: Record<string, number | string | undefined>;
+  unitCosts?: Record<string, number | string | undefined>;
 }
 
 export interface Category {

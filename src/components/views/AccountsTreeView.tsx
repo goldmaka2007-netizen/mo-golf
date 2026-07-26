@@ -1,6 +1,6 @@
 import React, { useState, useMemo } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Plus, Trash2, Edit2, CheckCircle2, X, ChevronRight, ChevronDown, Package, Wallet, Scale, TrendingUp, TrendingDown, Users, Coins } from 'lucide-react';
+import { Plus, Trash2, Edit2, ChevronRight, ChevronDown, Package, Wallet, Scale, TrendingUp, TrendingDown, Users, Coins } from 'lucide-react';
 import { useAppStore } from '../../store';
 import { Account, OperationType, AccountNature } from '../../types';
 import { doc, collection, addDoc, updateDoc, deleteDoc, serverTimestamp } from 'firebase/firestore';
@@ -19,7 +19,6 @@ export const AccountsTreeView = React.memo(() => {
   const groupedAccounts = useMemo(() => {
     if (groupMode === 'nature') {
         // Strict order: Gold, Silver, Cash
-        const order = ['ذهب', 'فضة', 'نقدية', 'أخرى'];
         const groups: Record<string, Record<string, Account[]>> = {
           'ذهب': {},
           'فضة': {},

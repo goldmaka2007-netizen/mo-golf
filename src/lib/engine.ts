@@ -218,7 +218,7 @@ export function processInventory(entries: Entry[], accountsDb: Account[]): Inven
   entries.forEach(entry => {
     if (!affectsInventory(entry)) return;
     const weight = parseWeight(entry.weight);
-    const count = parseFloat(String(entry.count ?? '0')) || 0;
+    const count = parseWeight(entry.weight) || (parseFloat(String(entry.count ?? '0')) || 0);
     if (weight === 0 && count === 0) return;
 
     const debitAcc = resolveAccount(entry, 'debit', index);

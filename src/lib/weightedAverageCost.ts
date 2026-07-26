@@ -49,6 +49,7 @@ export interface CostTimelineResult {
 export interface OpeningCostConfig {
   gold21PriceByYearMinor?: Record<string, number | string>;
   silverPriceByYearMinor?: Record<string, number | string>;
+  accessoryUnitCostByYearAndAccountMinor?: Record<string, Record<string, number | string | undefined>>;
 }
 
 const isInventoryAccount = (account?: Account | null): boolean => !!account?.is_inventory;
@@ -142,10 +143,6 @@ export const roundDivideBigInt = (numerator: bigint, denominator: bigint): bigin
   return (numerator + denominator / 2n) / denominator;
 };
 
-const roundDivide = (numerator: number, denominator: number): number => {
-  if (denominator <= 0) return 0;
-  return assertSafeSerializableInteger(roundDivideBigInt(BigInt(numerator), BigInt(denominator)), 'rounded division result');
-};
 
 const normalizeMoney = (value: string | number | undefined): string => normalizeNumerals(String(value ?? '0')).trim();
 
@@ -184,7 +181,7 @@ export const isQuantityAlignedToStep = (quantity: string | number | undefined, s
   return quantityUnits === 0 || quantityUnits % stepUnits === 0;
 };
 
-const parseCountUnits = parseAccessoryQuantityUnits;
+const parseAccessoryWeightUnits = parseAccessoryQuantityUnits;
 
 const getCreatedAtComparable = (entry: Entry): string => {
   const value: any = entry.createdAt;
@@ -237,7 +234,7 @@ const getUnitBasis = (account?: Account | null): CostUnitBasis | null => {
 
 const getQuantityUnits = (entry: Entry, account: Account): number => {
   const basis = getUnitBasis(account);
-  if (basis === 'accessory_count') return parseCountUnits(entry.count);
+  if (basis === 'accessory_count') return parseAccessoryWeightUnits(entry.weight) || parseAccessoryQuantityUnits(entry.count);
   if (basis === 'silver_centigram') {
     try {
       return gramsToCentigramUnits(entry.weight || '0', 'silverWeight');

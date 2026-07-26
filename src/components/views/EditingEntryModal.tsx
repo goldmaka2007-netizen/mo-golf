@@ -1,4 +1,4 @@
-﻿import React from 'react';
+import React from 'react';
 import { motion } from 'framer-motion';
 import { X, Trash2, Save, BarChart3, Printer } from 'lucide-react';
 import { Entry } from '../../types';
@@ -30,8 +30,6 @@ export const EditingEntryModal = ({
   isUpdating
 }: EditingEntryModalProps) => {
   const { accounts, accountsDb, goldPrice, silverPrice } = useAppStore();
-  const [debitSearch, setDebitSearch] = React.useState('');
-  const [creditSearch, setCreditSearch] = React.useState('');
 
   React.useEffect(() => {
     if (editingEntry && editingEntry.tx) {

@@ -1,7 +1,6 @@
 import React, { useMemo } from 'react';
 import { useAppStore } from '../../../store';
 import { Entry } from '../../../types';
-import { motion } from 'framer-motion';
 import { getMetricValue, getAccountTypeDetails, belongsToMetric } from '../../../utils/accountLogic';
 
 interface FinalReportViewProps {

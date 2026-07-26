@@ -3,7 +3,6 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { 
   Settings as SettingsIcon, 
   ChevronRight, 
-  Plus, 
   Trash2, 
   Upload, 
   Download, 
@@ -20,25 +19,30 @@ import {
 import { 
   collection, 
   addDoc, 
-  deleteDoc, 
   doc, 
   setDoc,
   writeBatch 
 } from 'firebase/firestore';
-import { User as FirebaseUser } from 'firebase/auth';
 import * as XLSX from 'xlsx';
-import { db, OperationType, handleFirestoreError } from '../../firebase';
-import { Entry, CustomRule, AnnualOpeningCostConfig } from '../../types';
+import { db } from '../../firebase';
+import { AnnualOpeningCostConfig } from '../../types';
 import { useAppStore } from '../../store';
 import { cn } from '../../lib/utils';
-import { ChartOfAccountsSettings } from './ChartOfAccountsSettings';
-import { formatMinorUnitsToEgpInput, parseEgpToMinorUnits } from '../../lib/openingCostConfig';
+import { formatMinorUnitsToEgpInput, getAccessoryOpeningCostsMinorByAccountId, getGoldOpeningPriceMinor, getSilverOpeningPriceMinor, mergeAnnualOpeningCostRows, parseEgpToMinorUnits } from '../../lib/openingCostConfig';
+import { normalizeNumerals } from '../../lib/accounting';
+import { areOperationWritesLocked } from '../../lib/costRecalculation';
 
 export const SettingsView = React.memo(() => {
-  const { setView, customRules, user, entries, setGlobalError, openingCostConfig, setOpeningCostConfig } = useAppStore();
-  const [newRule, setNewRule] = useState({ t: '', d: '', c: '', k: '', m: '1' });
-  const [openingPriceForm, setOpeningPriceForm] = useState({ year: String(new Date().getFullYear()), gold: '', silver: '' });
+  const { setView, user, entries, accountsDb, setGlobalError, openingCostConfig, setOpeningCostConfig, costCalculationRun } = useAppStore();
+  const operationWritesLocked = areOperationWritesLocked(costCalculationRun);
+  const [openingPriceForm, setOpeningPriceForm] = useState<{
+    year: string;
+    gold: string;
+    silver: string;
+    accessories: Record<string, string>;
+  }>({ year: String(new Date().getFullYear()), gold: '', silver: '', accessories: {} });
   const [openingPriceError, setOpeningPriceError] = useState('');
+  const [openingPriceSuccess, setOpeningPriceSuccess] = useState('');
   const [isSavingOpeningPrice, setIsSavingOpeningPrice] = useState(false);
   const [importText, setImportText] = useState('');
   const [isImporting, setIsImporting] = useState(false);
@@ -50,74 +54,160 @@ export const SettingsView = React.memo(() => {
     () => [...openingCostConfig].sort((a, b) => Number(a.year) - Number(b.year)),
     [openingCostConfig],
   );
+  const accessoryAccounts = useMemo(
+    () => accountsDb
+      .filter(account => account.is_inventory && account.type === 'accessory' && !!account.id)
+      .sort((left, right) => left.name.localeCompare(right.name, 'ar')),
+    [accountsDb],
+  );
+  const accessoryAccountIdByLookup = useMemo(() => {
+    const lookup = new Map<string, string>();
+    for (const account of accessoryAccounts) {
+      if (!account.id) continue;
+      lookup.set(account.id, account.id);
+      lookup.set(account.name, account.id);
+    }
+    return lookup;
+  }, [accessoryAccounts]);
 
-  const validateOpeningPriceForm = (): AnnualOpeningCostConfig => {
+  const toEgpNumber = (value: string): number => Number(normalizeNumerals(value).trim());
+
+  const getAccessoryOpeningQuantities = (year: number): Record<string, number> => {
+    const quantities: Record<string, number> = {};
+    for (const entry of entries) {
+      if (String(entry.date || '').slice(0, 4) !== String(year)) continue;
+      const isOpening = entry.operationKind === 'opening' || entry.tx === '\u0642\u064a\u062f \u0627\u0641\u062a\u062a\u0627\u062d\u064a' || entry.subTx?.startsWith('\u0631\u0635\u064a\u062f \u0627\u0641\u062a\u062a\u0627\u062d\u064a') === true;
+      if (!isOpening) continue;
+      const account = entry.debitAccountId
+        ? accessoryAccounts.find(item => item.id === entry.debitAccountId)
+        : accessoryAccounts.find(item => item.name === entry.debit);
+      if (!account?.id) continue;
+      const quantity = Number(normalizeNumerals(String(entry.weight ?? '0')));
+      const safeQuantity = Number.isFinite(quantity) ? quantity : 0;
+      if (safeQuantity > 0) quantities[account.id] = (quantities[account.id] || 0) + safeQuantity;
+    }
+    return quantities;
+  };
+
+  const accessoryCostSummary = (row: AnnualOpeningCostConfig): string => {
+    const costs = getAccessoryOpeningCostsMinorByAccountId(row);
+    const saved = accessoryAccounts.filter(account => account.id && costs[account.id] !== undefined && costs[account.id] !== '');
+    const lines = saved.map(account => `${account.name}: ${formatMinorUnitsToEgpInput(costs[account.id!])} \u062c\u0646\u064a\u0647`);
+    return [`\u0645\u0644\u062d\u0642\u0627\u062a \u0645\u062d\u0641\u0648\u0638\u0629: ${saved.length}`, ...lines].join('\n');
+  };
+
+  const validateOpeningPriceForm = (existingRow?: AnnualOpeningCostConfig): AnnualOpeningCostConfig => {
     const year = Number(openingPriceForm.year);
     if (!Number.isInteger(year) || year < 2000 || year > 2100) {
-      throw new Error('أدخل سنة صحيحة بين 2000 و 2100.');
+      throw new Error('\u0623\u062f\u062e\u0644 \u0633\u0646\u0629 \u0635\u062d\u064a\u062d\u0629 \u0628\u064a\u0646 2000 \u0648 2100.');
     }
 
-    const next: AnnualOpeningCostConfig = { year };
+    const draft: AnnualOpeningCostConfig = { year };
     const gold = openingPriceForm.gold.trim();
     const silver = openingPriceForm.silver.trim();
-    if (!gold && !silver) {
-      throw new Error('أدخل سعر افتتاح للذهب أو الفضة على الأقل.');
+    const accessoryValues: Record<string, string> = Object.fromEntries(
+      (Object.entries(openingPriceForm.accessories) as Array<[string, string]>)
+        .map(([accountKey, value]) => [accessoryAccountIdByLookup.get(accountKey) ?? accountKey, value.trim()])
+        .filter(([, value]) => !!value),
+    ) as Record<string, string>;
+    if (!gold && !silver && Object.keys(accessoryValues).length === 0 && !existingRow) {
+      throw new Error('\u0623\u062f\u062e\u0644 \u0642\u064a\u0645\u0629 Opening Cost \u0648\u0627\u062d\u062f\u0629 \u0639\u0644\u0649 \u0627\u0644\u0623\u0642\u0644.');
     }
     if (gold) {
       let goldMinor: number;
       try {
         goldMinor = parseEgpToMinorUnits(gold);
       } catch {
-        throw new Error('سعر افتتاح الذهب يجب أن يكون رقمًا صحيحًا أو عشريًا حتى قرشين.');
+        throw new Error('\u0633\u0639\u0631 \u0627\u0641\u062a\u062a\u0627\u062d \u0627\u0644\u0645\u0639\u062f\u0646 \u064a\u062c\u0628 \u0623\u0646 \u064a\u0643\u0648\u0646 \u0631\u0642\u0645\u064b\u0627 \u0635\u062d\u064a\u062d\u064b\u0627 \u0623\u0648 \u0639\u0634\u0631\u064a\u064b\u0627 \u062d\u062a\u0649 \u0642\u0631\u0634\u064a\u0646.');
       }
-      if (goldMinor <= 0) throw new Error('سعر افتتاح الذهب يجب أن يكون أكبر من صفر.');
-      next.gold21PriceMinorPerGram = goldMinor;
+      if (goldMinor <= 0) throw new Error('\u0633\u0639\u0631 \u0627\u0641\u062a\u062a\u0627\u062d \u0627\u0644\u0630\u0647\u0628 \u064a\u062c\u0628 \u0623\u0646 \u064a\u0643\u0648\u0646 \u0623\u0643\u0628\u0631 \u0645\u0646 \u0635\u0641\u0631.');
+      draft.gold21PriceEgp = toEgpNumber(gold);
     }
     if (silver) {
       let silverMinor: number;
       try {
         silverMinor = parseEgpToMinorUnits(silver);
       } catch {
-        throw new Error('سعر افتتاح الفضة يجب أن يكون رقمًا صحيحًا أو عشريًا حتى قرشين.');
+        throw new Error('\u0633\u0639\u0631 \u0627\u0641\u062a\u062a\u0627\u062d \u0627\u0644\u0645\u0639\u062f\u0646 \u064a\u062c\u0628 \u0623\u0646 \u064a\u0643\u0648\u0646 \u0631\u0642\u0645\u064b\u0627 \u0635\u062d\u064a\u062d\u064b\u0627 \u0623\u0648 \u0639\u0634\u0631\u064a\u064b\u0627 \u062d\u062a\u0649 \u0642\u0631\u0634\u064a\u0646.');
       }
-      if (silverMinor <= 0) throw new Error('سعر افتتاح الفضة يجب أن يكون أكبر من صفر.');
-      next.silverPriceMinorPerGram = silverMinor;
+      if (silverMinor <= 0) throw new Error('\u0633\u0639\u0631 \u0627\u0641\u062a\u062a\u0627\u062d \u0627\u0644\u0641\u0636\u0629 \u064a\u062c\u0628 \u0623\u0646 \u064a\u0643\u0648\u0646 \u0623\u0643\u0628\u0631 \u0645\u0646 \u0635\u0641\u0631.');
+      draft.silverPriceEgp = toEgpNumber(silver);
     }
-    return next;
+    if (Object.keys(accessoryValues).length > 0) {
+      draft.accessoryOpeningCosts = {};
+      for (const [accountId, value] of Object.entries(accessoryValues)) {
+        const account = accessoryAccounts.find(item => item.id === accountId);
+        if (!account) throw new Error(`Accessory opening cost must be saved by a real accountId. Unknown key: ${accountId}`);
+        let minor: number;
+        try {
+          minor = parseEgpToMinorUnits(value);
+        } catch {
+          throw new Error(`\u062a\u0643\u0644\u0641\u0629 \u0627\u0641\u062a\u062a\u0627\u062d \u0627\u0644\u0645\u0644\u062d\u0642 ${account.name} \u064a\u062c\u0628 \u0623\u0646 \u062a\u0643\u0648\u0646 \u0631\u0642\u0645\u064b\u0627 \u062d\u062a\u0649 \u0642\u0631\u0634\u064a\u0646.`);
+        }
+        if (minor <= 0) throw new Error(`\u062a\u0643\u0644\u0641\u0629 \u0627\u0641\u062a\u062a\u0627\u062d \u0627\u0644\u0645\u0644\u062d\u0642 ${account.name} \u064a\u062c\u0628 \u0623\u0646 \u062a\u0643\u0648\u0646 \u0623\u0643\u0628\u0631 \u0645\u0646 \u0635\u0641\u0631.`);
+        draft.accessoryOpeningCosts[accountId] = toEgpNumber(value);
+      }
+    }
+
+    const merged = mergeAnnualOpeningCostRows(existingRow, draft);
+    const openingQuantities = getAccessoryOpeningQuantities(year);
+    const mergedAccessoryCosts = getAccessoryOpeningCostsMinorByAccountId(merged);
+    const missing = accessoryAccounts.filter(account =>
+      account.id && (openingQuantities[account.id] || 0) > 0 && mergedAccessoryCosts[account.id] === undefined,
+    );
+    if (missing.length > 0) {
+      throw new Error(`\u0623\u062f\u062e\u0644 \u062a\u0643\u0644\u0641\u0629 \u0627\u0641\u062a\u062a\u0627\u062d \u0627\u0644\u0645\u0644\u062d\u0642\u0627\u062a \u0630\u0627\u062a \u0627\u0644\u0631\u0635\u064a\u062f \u0627\u0644\u0627\u0641\u062a\u062a\u0627\u062d\u064a: ${missing.map(account => account.name).join('\u060c ')}`);
+    }
+    return merged;
   };
 
   const persistOpeningCostConfig = async (nextConfig: AnnualOpeningCostConfig[]) => {
-    if (!user?.uid) throw new Error('لا يوجد مستخدم نشط لحفظ الإعدادات.');
+    if (!user?.uid) throw new Error('\u0644\u0627 \u064a\u0648\u062c\u062f \u0645\u0633\u062a\u062e\u062f\u0645 \u0646\u0634\u0637 \u0644\u062d\u0641\u0638 \u0627\u0644\u0625\u0639\u062f\u0627\u062f\u0627\u062a.');
     const sorted = [...nextConfig].sort((a, b) => Number(a.year) - Number(b.year));
-    await setDoc(doc(db, 'settings', user.uid), { openingCostConfig: sorted }, { merge: true });
+    const previous = openingCostConfig;
     setOpeningCostConfig(sorted);
+    try {
+      await setDoc(doc(db, 'settings', user.uid), { openingCostConfig: sorted }, { merge: true });
+    } catch (error) {
+      setOpeningCostConfig(previous);
+      throw error;
+    }
   };
 
   const handleSaveOpeningPrice = async (e: React.FormEvent) => {
     e.preventDefault();
     setOpeningPriceError('');
+    setOpeningPriceSuccess('');
     setIsSavingOpeningPrice(true);
     try {
-      const nextRow = validateOpeningPriceForm();
+      const year = Number(openingPriceForm.year);
+      const existingRow = sortedOpeningCostConfig.find(row => Number(row.year) === year);
+      const nextRow = validateOpeningPriceForm(existingRow);
       const nextConfig = sortedOpeningCostConfig.filter(row => Number(row.year) !== nextRow.year);
       await persistOpeningCostConfig([...nextConfig, nextRow]);
-      setOpeningPriceForm({ year: String(nextRow.year + 1), gold: '', silver: '' });
+      setOpeningPriceSuccess(accessoryCostSummary(nextRow));
+      setOpeningPriceForm({ year: String(nextRow.year + 1), gold: '', silver: '', accessories: {} });
     } catch (error) {
-      setOpeningPriceError(error instanceof Error ? error.message : 'تعذر حفظ سعر الافتتاح. راجع القيم المدخلة.');
+      setOpeningPriceError(error instanceof Error ? error.message : '\u062a\u0639\u0630\u0631 \u062d\u0641\u0638 \u0633\u0639\u0631 \u0627\u0644\u0627\u0641\u062a\u062a\u0627\u062d. \u0631\u0627\u062c\u0639 \u0627\u0644\u0642\u064a\u0645 \u0627\u0644\u0645\u062f\u062e\u0644\u0629.');
     } finally {
       setIsSavingOpeningPrice(false);
     }
   };
 
   const handleEditOpeningPrice = (row: AnnualOpeningCostConfig) => {
+    const accessoryCosts = getAccessoryOpeningCostsMinorByAccountId(row);
     setOpeningPriceError('');
+    setOpeningPriceSuccess('');
     setOpeningPriceForm({
       year: String(row.year),
-      gold: formatMinorUnitsToEgpInput(row.gold21PriceMinorPerGram),
-      silver: formatMinorUnitsToEgpInput(row.silverPriceMinorPerGram),
+      gold: formatMinorUnitsToEgpInput(getGoldOpeningPriceMinor(row)),
+      silver: formatMinorUnitsToEgpInput(getSilverOpeningPriceMinor(row)),
+      accessories: Object.fromEntries(
+        Object.entries(accessoryCosts)
+          .map(([accountId, value]) => [accountId, formatMinorUnitsToEgpInput(value)]),
+      ),
     });
   };
-
   const handleDeleteOpeningPrice = async (year: number) => {
     if (!window.confirm(`حذف أسعار افتتاح سنة ${year}؟`)) return;
     setOpeningPriceError('');
@@ -132,6 +222,10 @@ export const SettingsView = React.memo(() => {
   };
 
   const handleDeleteAllData = async () => {
+    if (operationWritesLocked) {
+      setGlobalError('لا يمكن حذف العمليات أثناء تشغيل أو فشل إعادة احتساب التكلفة.');
+      return;
+    }
     setIsDeletingAll(true);
     try {
       const entriesToDelete = [...entries];
@@ -153,38 +247,13 @@ export const SettingsView = React.memo(() => {
     }
   };
 
-  const handleAddRule = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!newRule.t || !newRule.d || !newRule.c) return;
-    try {
-      await addDoc(collection(db, 'customRules'), {
-        ...newRule,
-        k: newRule.k ? parseInt(newRule.k) : null,
-        m: parseFloat(newRule.m),
-        userId: user.uid
-      });
-      setNewRule({ t: '', d: '', c: '', k: '', m: '1' });
-    } catch (error) {
-      console.error("Add Rule Error:", error);
-      setGlobalError("فشل إضافة القاعدة. يرجى مراجعة الاتصال.");
-    }
-  };
-
-  const [deleteRuleConfirmId, setDeleteRuleConfirmId] = useState<string | null>(null);
-
-  const handleDeleteRule = async (id: string) => {
-    try {
-      await deleteDoc(doc(db, 'customRules', id));
-      setDeleteRuleConfirmId(null);
-    } catch (error) {
-      console.error("Delete Rule Error:", error);
-      setGlobalError("فشل حذف القاعدة.");
-    }
-  };
-
   const [importProgress, setImportProgress] = useState<{ current: number, total: number, success: number, failed: number } | null>(null);
 
   const handleRetroactiveInvoiceNumbers = async () => {
+    if (operationWritesLocked) {
+      setGlobalError('لا يمكن تعديل العمليات أثناء تشغيل أو فشل إعادة احتساب التكلفة.');
+      return;
+    }
     setIsImporting(true);
     
     // 1. Sort all entries to assign sequentially in chronological order
@@ -383,6 +452,10 @@ export const SettingsView = React.memo(() => {
 
   const handleImport = async () => {
     if (!importText.trim()) return;
+    if (operationWritesLocked) {
+      setGlobalError('لا يمكن استيراد عمليات أثناء تشغيل أو فشل إعادة احتساب التكلفة.');
+      return;
+    }
     setIsImporting(true);
     setImportProgress(null);
     
@@ -513,11 +586,12 @@ export const SettingsView = React.memo(() => {
               <div className="space-y-1">
                 <h3 className="text-sm font-bold text-[#ddd8cc]">أسعار الافتتاح السنوية للتكلفة</h3>
                 <p className="text-[11px] text-[#8a8172] leading-6">
-                  تُستخدم هذه الأسعار فقط لتحديد تكلفة المخزون الافتتاحي وحساب متوسط التكلفة. لا تُستخدم كتقييم سوقي حالي.
+                  تفستخدم هذه الأسعار فقط لتحديد تكلفة المخزون الافتتاحي وحساب متوسط التكلفة. لا تفستخدم كتقييم سوقي حالي.
                 </p>
               </div>
 
-              <form onSubmit={handleSaveOpeningPrice} className="grid grid-cols-1 md:grid-cols-[120px_1fr_1fr_auto] gap-3 items-end">
+              <form onSubmit={handleSaveOpeningPrice} className="grid grid-cols-1 gap-3">
+                <div className="grid grid-cols-1 md:grid-cols-[120px_1fr_1fr] gap-3 items-end">
                 <label className="space-y-1">
                   <span className="text-[10px] font-bold text-[#c9a84c]">السنة</span>
                   <input value={openingPriceForm.year} onChange={(e) => setOpeningPriceForm(prev => ({ ...prev, year: e.target.value }))} inputMode="numeric" className="w-full bg-[#080a0f] border border-[#1a1e2a] rounded-xl p-3 text-sm text-[#ddd8cc] outline-none focus:border-[#c9a84c55]" placeholder="2026" />
@@ -530,6 +604,32 @@ export const SettingsView = React.memo(() => {
                   <span className="text-[10px] font-bold text-[#c9a84c]">سعر افتتاح جرام الفضة بالجنيه</span>
                   <input value={openingPriceForm.silver} onChange={(e) => setOpeningPriceForm(prev => ({ ...prev, silver: e.target.value }))} inputMode="decimal" className="w-full bg-[#080a0f] border border-[#1a1e2a] rounded-xl p-3 text-sm text-[#ddd8cc] outline-none focus:border-[#c9a84c55]" placeholder="60" />
                 </label>
+                </div>
+                <div className="rounded-2xl border border-[#1a1e2a] bg-[#080a0f] p-3">
+                  <div className="mb-3 text-[11px] font-black text-[#ddd8cc]">
+                    تكلفة الافتتاح للوحدة — ليست سعر بيع
+                  </div>
+                  <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+                    {accessoryAccounts.map(account => (
+                      <label key={account.id} className="space-y-1">
+                        <span className="text-[10px] font-bold text-[#c9a84c]">{account.name}</span>
+                        <input
+                          value={openingPriceForm.accessories[account.id!] || ''}
+                          onChange={(event) => setOpeningPriceForm(previous => ({
+                            ...previous,
+                            accessories: {
+                              ...previous.accessories,
+                              [account.id!]: event.target.value,
+                            },
+                          }))}
+                          inputMode="decimal"
+                          className="w-full rounded-xl border border-[#1a1e2a] bg-[#0e1018] p-3 text-sm text-[#ddd8cc] outline-none focus:border-[#c9a84c55]"
+                          placeholder="غير محدد"
+                        />
+                      </label>
+                    ))}
+                  </div>
+                </div>
                 <button type="submit" disabled={isSavingOpeningPrice} className="px-5 py-3 bg-[#c9a84c] text-[#080a0f] rounded-xl text-xs font-bold flex items-center justify-center gap-2 disabled:opacity-60">
                   {isSavingOpeningPrice ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
                   حفظ
@@ -541,27 +641,53 @@ export const SettingsView = React.memo(() => {
                   {openingPriceError}
                 </div>
               )}
+              {openingPriceSuccess && (
+                <div className="whitespace-pre-line rounded-2xl border border-green-500/30 bg-green-500/10 p-3 text-xs font-bold text-green-300">
+                  {openingPriceSuccess}
+                </div>
+              )}
 
               <div className="overflow-x-auto border border-[#1a1e2a] rounded-2xl">
-                <table className="w-full text-right text-xs min-w-[620px]">
+                <table className="w-full text-right text-xs min-w-[760px]">
                   <thead>
                     <tr className="border-b border-[#1a1e2a] [&>th]:p-3 [&>th]:text-[#8a8172]">
                       <th>السنة</th>
                       <th>ذهب 21 بالجنيه</th>
                       <th>فضة بالجنيه</th>
+                      <th>{'\u0645\u0644\u062d\u0642\u0627\u062a'}</th>
                       <th>إجراءات</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-[#1a1e2a] [&>tr>td]:p-3">
                     {sortedOpeningCostConfig.length === 0 ? (
                       <tr>
-                        <td colSpan={4} className="text-center text-[#8a8172]">لا توجد أسعار افتتاح محفوظة بعد.</td>
+                        <td colSpan={5} className="text-center text-[#8a8172]">لا توجد أسعار افتتاح محفوظة بعد.</td>
                       </tr>
                     ) : sortedOpeningCostConfig.map(row => (
                       <tr key={row.year}>
                         <td className="font-mono font-bold text-[#ddd8cc]">{row.year}</td>
-                        <td className="font-mono text-[#ddd8cc]">{formatMinorUnitsToEgpInput(row.gold21PriceMinorPerGram) || "-"}</td>
-                        <td className="font-mono text-[#ddd8cc]">{formatMinorUnitsToEgpInput(row.silverPriceMinorPerGram) || "-"}</td>
+                        <td className="font-mono text-[#ddd8cc]">{formatMinorUnitsToEgpInput(getGoldOpeningPriceMinor(row)) || "-"}</td>
+                        <td className="font-mono text-[#ddd8cc]">{formatMinorUnitsToEgpInput(getSilverOpeningPriceMinor(row)) || "-"}</td>
+                        <td className="text-[#ddd8cc]">
+                          {(() => {
+                            const accessoryCosts = getAccessoryOpeningCostsMinorByAccountId(row);
+                            const savedAccessories = accessoryAccounts.filter(account => account.id && accessoryCosts[account.id] !== undefined && accessoryCosts[account.id] !== '');
+                            if (savedAccessories.length === 0) return <span className="text-[#8a8172]">0</span>;
+                            return (
+                              <details>
+                                <summary className="cursor-pointer font-bold text-[#c9a84c]">{savedAccessories.length} {'\u0645\u062d\u0641\u0648\u0638'}</summary>
+                                <div className="mt-2 space-y-1">
+                                  {savedAccessories.map(account => (
+                                    <div key={account.id} className="flex justify-between gap-3 font-mono text-[10px]">
+                                      <span className="font-sans text-[#8a8172]">{account.name}</span>
+                                      <span>{formatMinorUnitsToEgpInput(accessoryCosts[account.id!])} {'\u062c.\u0645'}</span>
+                                    </div>
+                                  ))}
+                                </div>
+                              </details>
+                            );
+                          })()}
+                        </td>
                         <td>
                           <div className="flex gap-2">
                             <button type="button" onClick={() => handleEditOpeningPrice(row)} className="px-3 py-2 bg-[#1a1e2a] text-[#c9a84c] rounded-lg text-[10px] font-bold">تعديل</button>
@@ -633,7 +759,7 @@ export const SettingsView = React.memo(() => {
                     <span>للعلم: يمكنك دائماً تحميل الكود من واجهة AI Studio</span>
                   </div>
                   <p className="text-[9px] text-[#5a5548] leading-relaxed pr-5">
-                    اضغط على أيقونة الإعدادات (الترس ⚙️) في أعلى يمين شاشة AI Studio، ثم اختر "Download as ZIP" للحصول على النسخة الأصلية دائماً.
+                    اضغط على أيقونة الإعدادات (الترس ⚙ف) في أعلى يمين شاشة AI Studio، ثم اختر "Download as ZIP" للحصول على النسخة الأصلية دائماً.
                   </p>
                 </div>
               </div>

@@ -1,4 +1,4 @@
-﻿import { Account, Entry, AccountingOperationKind } from '../types';
+import { Account, Entry, AccountingOperationKind } from '../types';
 import {
   ACCESSORY_QUANTITY_SCALE,
   compareEntriesForCost,
@@ -184,7 +184,7 @@ const getQuantity = (entry: Entry, account: Account, tab: InventoryCycleTab): nu
   return getEntryArabicWeight(entry, account);
 };
 
-const getPhysicalQuantity = (entry: Entry, account: Account, tab: InventoryCycleTab): number => {
+const getPhysicalQuantity = (entry: Entry, _account: Account, tab: InventoryCycleTab): number => {
   if (tab === 'accessory') return formatAccessoryQuantityUnits(parseAccessoryQuantityUnits(entry.count));
   return parseWeight(entry.weight);
 };

@@ -3,12 +3,11 @@ import { motion } from 'framer-motion';
 import { 
   CheckCircle2,
 } from 'lucide-react';
-import { format, isValid } from 'date-fns';
-import { ar } from 'date-fns/locale';
-import { collection, addDoc, serverTimestamp, query, orderBy, limit, getDocs, where } from 'firebase/firestore';
-import { db, handleFirestoreError } from '../../firebase';
-import { Entry, FirebaseUser, OperationType, AccountCategories } from '../../types';
-import { CATS, ACCOUNTS, GOLD_ORDER, RAW_DATA, VALUATION_PRICES, OPERATION_RULES } from '../../constants';
+import { format } from 'date-fns';
+import { collection, addDoc, serverTimestamp } from 'firebase/firestore';
+import { db } from '../../firebase';
+import { Entry } from '../../types';
+import { CATS, RAW_DATA } from '../../constants';
 import { useAppStore } from '../../store';
 import { cn } from '../../lib/utils';
 import { 
@@ -18,12 +17,22 @@ import {
 } from '../../lib/accounting';
 import { FormInput } from '../ui/FormInput';
 import { buildGoldEquivalent21Audit, canCalculateGoldEquivalent21, inferGoldKaratFromMultiplier } from '../../lib/goldEquivalent';
-import { getOperationId, rebuildCostTimeline, isQuantityAlignedToStep } from '../../lib/weightedAverageCost';
+import { isQuantityAlignedToStep } from '../../lib/weightedAverageCost';
 import { buildOpeningCostConfig } from '../../lib/openingCostConfig';
+import { rebuildInventoryCostTimeline } from '../../lib/inventoryCostEngine';
+import { approvedHistoricalInventoryOverlaysForAccounts } from '../../lib/historicalInventoryOverlay';
+import { areOperationWritesLocked } from '../../lib/costRecalculation';
 import { isGoldEquivalentEntry } from '../../utils/accountLogic';
 import { AccountSearchSelect } from '../ui/AccountSearchSelect';
 import { resolveEntryIdentity } from '../../lib/entryIdentity';
+import { validateEntryNumberingPolicy } from '../../lib/entryValidation';
 import { OperationSelector } from '../ui/OperationSelector';
+import { buildAccountRegistry } from '../../lib/accountRegistry';
+import { buildCanonicalPosting } from '../../lib/postingMatrix';
+
+export const normalizeAccessoryEntryPayload = <T extends { weight?: string; count?: string }>(entry: T, isAccessory: boolean): T => (
+  isAccessory ? { ...entry, weight: entry.weight || '0', count: '0' } : entry
+);
 
 export const EntryForm = React.memo(() => {
   const { 
@@ -38,15 +47,15 @@ export const EntryForm = React.memo(() => {
     entries, 
     goldPrice, 
     silverPrice,
-    openingCostConfig
+    openingCostConfig,
+    costCalculationRun
+    ,canonicalAccounts
   } = useAppStore();
   
   const normalize = normalizeNumerals;
 
   const [step, setStep] = useState(1);
   const [isSaving, setIsSaving] = useState(false);
-  const [debitSearch, setDebitSearch] = useState('');
-  const [creditSearch, setCreditSearch] = useState('');
 
   const [usageStats, setUsageStats] = useState<Record<string, number>>({});
 
@@ -144,7 +153,7 @@ export const EntryForm = React.memo(() => {
       setFormData(prev => ({
         ...prev,
         ...editingEntry,
-        date: format(new Date(), 'yyyy-MM-dd'), // Always use today for shortcuts
+        date: editingEntry.date || format(new Date(), 'yyyy-MM-dd'),
         invoiceNumber: generateInvoiceNumber(editingEntry.tx || '')
       }));
       
@@ -318,6 +327,10 @@ export const EntryForm = React.memo(() => {
 
   const handleSave = async () => {
     if (isSaving) return;
+    if (areOperationWritesLocked(costCalculationRun)) {
+      setGlobalError('العمليات مقفلة حتى يكتمل احتساب التكلفة بنجاح.');
+      return;
+    }
 
     // Check inventory balance for weight-based credit transactions
     if (formData.tx?.includes('بيع') || formData.credit?.startsWith('12') || formData.credit?.startsWith('13')) {
@@ -366,6 +379,22 @@ export const EntryForm = React.memo(() => {
     }
     Object.assign(entry, identity.value);
 
+    const numberingValidation = validateEntryNumberingPolicy(entry);
+    if (!numberingValidation.valid) {
+      setGlobalError(`رفض سياسة ترقيم القيد: ${numberingValidation.issues.map(issue => issue.message).join(' — ')}`);
+      return;
+    }
+
+    // The legacy engine remains authoritative, while the central matrix acts
+    // as a save-time guard once the shadow registry has been initialized.
+    if (canonicalAccounts.length > 0) {
+      const shadowPosting = buildCanonicalPosting(entry as Entry, buildAccountRegistry(accountsDb, entries, canonicalAccounts));
+      if (!shadowPosting.valid) {
+        setGlobalError(`رفض Posting Matrix: ${shadowPosting.issues.map(issue => issue.message).join(' — ')}`);
+        return;
+      }
+    }
+
     setIsSaving(true);
     if (formData.karat) entry.karat = formData.karat;
     if (formData.marketPrice !== undefined) entry.marketPrice = formData.marketPrice;
@@ -392,18 +421,12 @@ export const EntryForm = React.memo(() => {
 
       const pendingEntry = { ...entry, id: '__pending_cost_validation__' } as Entry;
       const openingConfig = buildOpeningCostConfig(openingCostConfig);
-      const costValidation = rebuildCostTimeline([...entries, pendingEntry], accountsDb, openingConfig).resultsByOperationId[getOperationId(pendingEntry)];
-      const isOpeningEntry = pendingEntry.operationKind === 'opening' || OPERATION_RULES[pendingEntry.tx || '']?.isOpening || OPERATION_RULES[pendingEntry.subTx ? `رصيد افتتاحي ${pendingEntry.subTx}` : '']?.isOpening;
-      const canSaveIncompleteOpening = isOpeningEntry && costValidation?.status === 'missing_cost_basis';
-      if (costValidation && costValidation.status !== 'valid' && !canSaveIncompleteOpening) {
-        const messages = {
-          missing_cost_basis: 'Missing Cost Basis: لا توجد تكلفة مخزون موثوقة لهذه العملية.',
-          insufficient_inventory: 'Insufficient Inventory: العملية ستؤدي إلى مخزون سالب.',
-          invalid_operation: 'Invalid Operation: الكمية أو نوع العملية غير صالح لمحرك التكلفة.',
-          quantity_mismatch: 'Quantity Mismatch: كمية المصدر لا تساوي كمية الوجهة.',
-          valid: '',
-        } as const;
-        setGlobalError(messages[costValidation.status] || 'تعذر اعتماد تكلفة العملية.');
+      const costValidation = rebuildInventoryCostTimeline([...entries, pendingEntry], accountsDb, openingConfig, {
+        historicalInventoryOverlayDirectives: approvedHistoricalInventoryOverlaysForAccounts(accountsDb),
+      });
+      if (!costValidation.valid) {
+        const diagnostic = costValidation.diagnostics[0];
+        setGlobalError(`رفض محرك التكلفة: ${diagnostic?.code || 'unknown'} — ${diagnostic?.message || 'تعذر اعتماد تكلفة العملية.'}`);
         return;
       }
       await addDoc(collection(db, 'entries'), entry);

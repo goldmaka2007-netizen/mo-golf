@@ -1,4 +1,3 @@
-import fs from 'fs';
 import { RAW_DATA as raw } from './src/constants.js';
 
 const OPENING_COSTS = {
@@ -29,7 +28,7 @@ const applyEntryToInventory = (e, inPeriod) => {
 
     let kString = e.karat ? String(e.karat) : null;
     if (!kString) {
-        if (combinedText.includes('18') || combinedText.includes('افرنجي')) kString = '18';
+        if (combinedText.includes('18') || combinedText.includes('ا�?رنجي')) kString = '18';
         else if (combinedText.includes('21') || combinedText.includes('عربي')) kString = '21';
         else if (combinedText.includes('24') || combinedText.includes('سبيكة')) kString = '24';
     }
@@ -39,14 +38,14 @@ const applyEntryToInventory = (e, inPeriod) => {
     const inv = inventory[kString];
     
     // Explicit Capital (Opening) Entry detection
-    const isCapital = creditText.startsWith('31') || creditText.includes('راس المال') || txText.includes('افتتاحي');
+    const isCapital = creditText.startsWith('31') || creditText.includes('راس المال') || txText.includes('ا�?تتاحي');
     
     // Determine direction of inventory flow
-    const isInward = isCapital || txText.includes('شراء') || txText.includes('توريد') || txText.includes('اضافة') || 
+    const isInward = isCapital || txText.includes('شراء') || txText.includes('توريد') || txText.includes('اضا�?ة') || 
                      debitText.startsWith('12') || debitText.includes('مخزون') || txText.includes('مرتجع مبيعات');
                      
     // Outward means leaving inventory
-    const isOutward = txText.includes('بيع') || txText.includes('صرف') || txText.includes('مسحوبات') || 
+    const isOutward = txText.includes('بيع') || txText.includes('صر�?') || txText.includes('مسحوبات') || 
                       creditText.startsWith('12') || creditText.includes('مخزون') || creditText.startsWith('41') || creditText.includes('مبيعات') || txText.includes('مرتجع مشتريات');
 
     let actualArWeight = parseFloat(e.arabicWeight || '0');

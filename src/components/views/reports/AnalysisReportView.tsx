@@ -1,19 +1,14 @@
 import React, { useMemo } from 'react';
-import { motion } from 'framer-motion';
 import { 
-  TrendingUp, 
-  TrendingDown, 
   Layers, 
   Calendar, 
   BarChart2, 
-  DollarSign, 
   AlertTriangle, 
-  CheckCircle,
   Lightbulb,
   ArrowRightLeft,
   Crown
 } from 'lucide-react';
-import { format, parseISO, getDay, startOfMonth } from 'date-fns';
+import { format, parseISO, getDay } from 'date-fns';
 import { ar } from 'date-fns/locale';
 import { Entry } from '../../../types';
 import { cn } from '../../../lib/utils';
@@ -23,7 +18,6 @@ export const AnalysisReportView = React.memo(({ entries }: { entries: Entry[] })
   const getUnitCash = (e: Entry) => parseFloat(e.cash || '0');
   const getUnitWeight = (e: Entry) => parseFloat(e.weight || '0');
   const getUnitArabicWeight = (e: Entry) => parseFloat(e.arabicWeight || '0');
-  const getUnitCount = (e: Entry) => parseInt(e.count || '0', 10);
 
   const analysis = useMemo(() => {
     if (entries.length === 0) return null;
@@ -153,7 +147,7 @@ export const AnalysisReportView = React.memo(({ entries }: { entries: Entry[] })
 
   if (!analysis) return null;
 
-  const { exec, monthly, karat, week, tefit, expenses, totalExpenses, topDeals, lastMonth } = analysis;
+  const { exec, monthly, karat, week, tefit, expenses, totalExpenses, topDeals } = analysis;
 
   const renderCard = (title: string, icon: any, children: React.ReactNode) => (
     <div className="bg-[#0e1018] border border-[#1a1e2a] rounded-2xl p-6 space-y-4 shadow-xl overflow-hidden">
@@ -165,13 +159,6 @@ export const AnalysisReportView = React.memo(({ entries }: { entries: Entry[] })
             {children}
         </div>
     </div>
-  );
-
-  const formatUnit = (val: number, unit: string) => (
-    <span className="font-mono text-[#ddd8cc]">
-        {val.toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 2 })}
-        <span className="text-[10px] text-[#5a5548] mr-1">{unit}</span>
-    </span>
   );
 
   const days = ['الأحد', 'الاثنين', 'الثلاثاء', 'الأربعاء', 'الخميس', 'الجمعة', 'السبت'];
@@ -459,7 +446,7 @@ export const AnalysisReportView = React.memo(({ entries }: { entries: Entry[] })
                 <div className="space-y-4">
                     <div className="p-4 bg-[#0e1018] rounded-xl space-y-2 border-r-4 border-green-500">
                         <div className="font-bold text-[#ddd8cc]">1. تعزيز نقاط القوة</div>
-                        <p className="text-[#5a5548]">تظهر البيانات استقراراً في مبيعات عيار 18، مما يشير إلى وجود قاعدة عملاء للمشغولات. يُنصح بزيادة تنوع التشكيلة في هذا العيار تحديداً لزيادة هوامش المصنعية.</p>
+                        <p className="text-[#5a5548]">تظهر البيانات استقراراً في مبيعات عيار 18، مما يشير إلى وجود قاعدة عملاء للمشغولات. يفنصح بزيادة تنوع التشكيلة في هذا العيار تحديداً لزيادة هوامش المصنعية.</p>
                     </div>
                     <div className="p-4 bg-[#0e1018] rounded-xl space-y-2 border-r-4 border-red-400">
                         <div className="font-bold text-[#ddd8cc]">2. معالجة المصاريف</div>

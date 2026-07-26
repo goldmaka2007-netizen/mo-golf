@@ -1,18 +1,16 @@
 import React, { useMemo } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { 
-  Zap, 
-  ClipboardPaste, 
-  PlusCircle, 
-  Wallet, 
-  Scale, 
-  Database, 
-  X, 
-  PieChart, 
-  Settings, 
-  BookOpen, 
-  Calendar, 
-  ChevronLeft,
+import {
+  Zap,
+  ClipboardPaste,
+  PlusCircle,
+  Wallet,
+  Scale,
+  Database,
+  X,
+  PieChart,
+  Settings,
+  Calendar,
   TrendingUp,
   BarChart3,
   Book,
@@ -21,12 +19,12 @@ import {
 import { format } from 'date-fns';
 import { ar } from 'date-fns/locale';
 import { Entry } from '../../types';
-import { CATS, ACCOUNT_CATEGORIES } from '../../constants';
 import { cn } from '../../lib/utils';
 import { db, auth } from '../../firebase';
 import { doc, setDoc } from 'firebase/firestore';
 import { useAppStore } from '../../store';
 import { calculateGoldOwnershipPosition, type GoldOwnershipPosition } from '../../lib/engine';
+import { buildOperationalProjection } from '../../lib/operationalProjection';
 
 interface KPICardProps {
   icon: React.ReactNode;
@@ -90,23 +88,6 @@ const GoldSummaryCard = React.memo(({ position, onClick }: GoldSummaryCardProps)
   );
 });
 
-interface StatsCardProps {
-  value: number | string;
-  label: string;
-  color: string;
-  icon?: React.ReactNode;
-}
-
-const StatsCard = React.memo(({ value, label, color, icon }: StatsCardProps) => (
-  <div className="bg-[#0e1018] border border-[#c9a84c22] rounded-2xl p-6 text-center shadow-xl relative overflow-hidden group hover:border-[#c9a84c55] transition-all">
-    <div className="absolute -right-4 -top-4 opacity-5 group-hover:opacity-10 transition-opacity">
-      {icon}
-    </div>
-    <div className={cn("text-4xl md:text-5xl font-bold mb-2 font-mono", color)}>{value}</div>
-    <div className="text-sm text-[#5a5548] font-bold uppercase tracking-widest">{label}</div>
-  </div>
-));
-
 interface PriceCardProps {
   title: string;
   price: number;
@@ -119,11 +100,11 @@ interface PriceCardProps {
   onSpreadChange?: (val: number) => void;
 }
 
-const PriceCard = React.memo(({ 
-  title, 
-  price, 
-  onPriceChange, 
-  colorClass, 
+const PriceCard = React.memo(({
+  title,
+  price,
+  onPriceChange,
+  colorClass,
   onPasteClick,
   variant,
   isBuyPrice,
@@ -135,20 +116,20 @@ const PriceCard = React.memo(({
     variant === 'gold' ? "border-[#c9a84c33] shadow-[0_0_20px_rgba(201,168,76,0.05)]" : "border-[#ddd8cc11] shadow-[0_0_20px_rgba(221,216,204,0.03)]"
   )}>
     <div className={cn("absolute top-0 right-0 w-1.5 h-full", colorClass.replace('text-', 'bg-'))} />
-    
+
     <div className="flex-1">
       <div className="flex items-center gap-2 mb-3">
-        <div className={cn("w-10 h-10 rounded-xl flex items-center justify-center border bg-opacity-10 shadow-inner", 
+        <div className={cn("w-10 h-10 rounded-xl flex items-center justify-center border bg-opacity-10 shadow-inner",
           variant === 'gold' ? "bg-[#c9a84c] border-[#c9a84c33]" : "bg-[#ddd8cc] border-[#ddd8cc33]"
         )}>
           <Zap className={cn("w-5 h-5", variant === 'gold' ? "text-[#c9a84c]" : "text-[#ddd8cc]")} />
         </div>
         <div className="text-xs text-[#5a5548] font-black uppercase tracking-widest">{title}</div>
       </div>
-      
+
       <div className="space-y-4">
         <div className="flex items-center gap-2">
-          <button 
+          <button
             onClick={() => onPriceChange(Math.max(0, price - 5))}
             className="w-12 h-12 flex items-center justify-center bg-[#080a0f] border border-[#1a1e2a] rounded-xl text-[#5a5548] hover:text-red-400 hover:border-red-400/30 transition-all active:scale-90"
           >
@@ -156,8 +137,8 @@ const PriceCard = React.memo(({
           </button>
 
           <div className="flex-1 relative group">
-            <input 
-              type="number" 
+            <input
+              type="number"
               inputMode="decimal"
               value={price}
               onChange={(e) => onPriceChange(parseInt(e.target.value) || 0)}
@@ -169,7 +150,7 @@ const PriceCard = React.memo(({
             <span className="absolute left-3 top-1/2 -translate-y-1/2 text-[9px] text-[#5a5548] font-black opacity-30">ج.م</span>
           </div>
 
-          <button 
+          <button
             onClick={() => onPriceChange(price + 5)}
             className="w-12 h-12 flex items-center justify-center bg-[#080a0f] border border-[#1a1e2a] rounded-xl text-[#5a5548] hover:text-[#c9a84c] hover:border-[#c9a84c/30] transition-all active:scale-90"
           >
@@ -178,7 +159,7 @@ const PriceCard = React.memo(({
         </div>
 
         <div className="px-1">
-           <input 
+           <input
              type="range"
              min={price > 200 ? price - 100 : 0}
              max={price + 100}
@@ -201,7 +182,7 @@ const PriceCard = React.memo(({
              <span>فرق الشراء (البرييزة)</span>
              <span className={cn("font-mono", variant === 'gold' ? "text-[#c9a84c]" : "text-[#ddd8cc]")}>{spread} ج.م</span>
            </div>
-           <input 
+           <input
              type="range"
              min="0"
              max={variant === 'gold' ? 100 : 50}
@@ -217,7 +198,7 @@ const PriceCard = React.memo(({
       )}
 
       {onPasteClick && (
-        <button 
+        <button
           onClick={onPasteClick}
           className="w-full py-2.5 bg-[#1a1e2a] text-[#c9a84c] rounded-xl hover:bg-[#c9a84c22] transition-all shadow-sm border border-[#c9a84c11] flex items-center justify-center gap-2 text-[10px] font-bold"
         >
@@ -239,7 +220,7 @@ const RecentEntryRow = React.memo(({ e, accountCategories, setEditingEntry }: Re
   const isSilver = (e.tx || '').includes('فضة') || (e.debit || '').includes('فضة') || (e.credit || '').includes('فضة');
   const isAcc = (e.tx || '').includes('ملحقات') || (e.debit || '').includes('ملحقات') || (e.credit || '').includes('ملحقات');
   const unit = isSilver ? "جرام فضة" : isAcc ? "قطعة" : "جرام";
-  
+
   const cashAccounts = accountCategories?.assets?.["النقدية"] || [];
   let displaySide = `${e.debit} ← ${e.credit}`;
   if (cashAccounts.includes(e.debit)) displaySide = e.credit;
@@ -251,11 +232,10 @@ const RecentEntryRow = React.memo(({ e, accountCategories, setEditingEntry }: Re
 
   const c = parseFloat(e.cash || '0');
   const w = parseFloat(e.weight || '0');
-  const aw = parseFloat(e.arabicWeight || '0') || (w * (e.multiplier || (e.karat === 18 ? 0.857142857 : e.karat === 24 ? 1.142857143 : 1)));
   const pricePerGram = w > 0 ? (c / w).toFixed(2) : '0.00';
 
   return (
-    <div 
+    <div
       onClick={() => setEditingEntry(e)}
       className="bg-[#0e1018] border border-[#c9a84c11] rounded-2xl p-5 flex justify-between items-center hover:border-[#c9a84c44] transition-all shadow-md cursor-pointer"
     >
@@ -294,24 +274,23 @@ const RecentEntryRow = React.memo(({ e, accountCategories, setEditingEntry }: Re
   );
 });
 
-export const HomeView = React.memo(({ 
+export const HomeView = React.memo(({
   refreshData
-}: { 
+}: {
   refreshData: () => void
 }) => {
-  const { 
-    setView, 
-    entries, 
-    goldPrice, setGoldPrice, 
+  const {
+    setView,
+    entries,
+    goldPrice, setGoldPrice,
     goldBuyPrice, setGoldBuyPrice,
     goldSpread, setGoldSpread,
-    silverPrice, setSilverPrice, 
+    silverPrice, setSilverPrice,
     silverBuyPrice, setSilverBuyPrice,
     silverSpread, setSilverSpread,
     isUpdatingPrice,
     accountsDb,
     accountCategories,
-    setGlobalError,
     setEditingEntry,
     setReportsTab
   } = useAppStore();
@@ -326,7 +305,7 @@ export const HomeView = React.memo(({
     updatePricesInFirestoreRef.current = setTimeout(async () => {
       const user = auth.currentUser;
       if (!user) return;
-      
+
       const cleanGPrice = Number(gPrice) || goldPrice;
       const cleanGBuy = Number(gBuy) || goldBuyPrice;
       const cleanSPrice = Number(sPrice) || silverPrice;
@@ -335,7 +314,7 @@ export const HomeView = React.memo(({
       const cleanSSpread = Number(sSpread) ?? silverSpread;
 
       try {
-        await setDoc(doc(db, 'settings', user.uid), { 
+        await setDoc(doc(db, 'settings', user.uid), {
           goldPrice: cleanGPrice,
           goldBuyPrice: cleanGBuy,
           goldSpread: cleanGSpread,
@@ -370,45 +349,18 @@ export const HomeView = React.memo(({
   const todayCount = entries.filter(e => e.date === todayISO).length;
 
   const goldPosition = useMemo(() => calculateGoldOwnershipPosition(entries, accountsDb), [entries, accountsDb]);
+  const operationalProjection = useMemo(() => buildOperationalProjection(entries, accountsDb), [entries, accountsDb]);
 
   const totals = useMemo(() => {
     let cash = 0;
-    let silver = 0;
-
-    const cashAccNames = accountsDb.filter(a => 
-      a.mainType === 'اصول' && (a.subType === 'النقدية بالخزنة' || a.name === 'الخزنة')
-    ).map(a => a.name);
-    if (cashAccNames.length === 0) cashAccNames.push('الخزنة');
-
-    const silverAccNames = accountsDb.filter(a => 
-      a.mainType === 'اصول' && (a.subType === 'مخزون فضة' || a.balanceNature === 'جرام فضة') && !a.subType.includes('ذمم')
-    ).map(a => a.name);
-    if (silverAccNames.length === 0) {
-      silverAccNames.push(...((accountCategories?.assets?.["مخزون فضة"]) || ACCOUNT_CATEGORIES.assets["مخزون فضة"] || []));
-    }
-
-    entries.forEach(e => {
-      const c = parseFloat(e.cash || '0');
-      const w = parseFloat(e.weight || '0');
-
-      if (cashAccNames.includes(e.debit)) cash += c;
-      if (cashAccNames.includes(e.credit)) cash -= c;
-
-      let silverFactorDebit = 1;
-      let silverFactorCredit = -1;
-
-      if (e.tx?.startsWith("حساب تاجر")) {
-        silverFactorDebit = -1;
-        silverFactorCredit = 1;
-      }
-
-      if (silverAccNames.includes(e.debit)) silver += w * silverFactorDebit;
-      if (silverAccNames.includes(e.credit)) silver += w * silverFactorCredit;
+    const cashAccNames = accountsDb.filter(account => account.type === 'cash').map(account => account.name);
+    entries.forEach(entry => {
+      const amount = parseFloat(entry.cash || '0');
+      if (cashAccNames.includes(entry.debit)) cash += amount;
+      if (cashAccNames.includes(entry.credit)) cash -= amount;
     });
-
-    return { cash, silver };
-  }, [entries, accountsDb, accountCategories]);
-
+    return { cash, silver: operationalProjection.physicalSilverInventoryMovement };
+  }, [entries, accountsDb, operationalProjection.physicalSilverInventoryMovement]);
 
   const reportShortcuts = [
     { id: 'profit-analysis', label: 'تحليل الربحية والمخزون', icon: <BarChart3 className="w-5 h-5 text-[#c9a84c]" />, desc: 'الأرباح الحقيقية بالمتوسط المتحرك' },
@@ -418,7 +370,7 @@ export const HomeView = React.memo(({
   ];
 
   return (
-    <motion.div 
+    <motion.div
       initial={{ opacity: 0, y: 20 }}
       animate={{ opacity: 1, y: 0 }}
       exit={{ opacity: 0, y: -20 }}
@@ -460,7 +412,7 @@ export const HomeView = React.memo(({
           />
           <KPICard
             icon={<Database className="w-5 h-5" />}
-            title="رصيد الفضة"
+            title="المخزون الفعلي — فضة"
             value={`${totals.silver.toFixed(2)} جم`}
             color="text-[#6a8a9e]"
           />
@@ -516,18 +468,30 @@ export const HomeView = React.memo(({
 
       {/* KPI cards and gold karat toggle */}
       <div className="space-y-3">
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-          <KPICard 
-            icon={<Wallet className="w-4 h-4" />} 
-            title="رصيد الخزنة" 
-            value={`${Math.round(totals.cash).toLocaleString()} ج`} 
-            color="text-[#6a9e6a]" 
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-3">
+          <KPICard
+            icon={<Wallet className="w-4 h-4" />}
+            title="رصيد الخزنة"
+            value={`${Math.round(totals.cash).toLocaleString()} ج`}
+            color="text-[#6a9e6a]"
           />
-          <KPICard 
-            icon={<Database className="w-4 h-4" />} 
-            title="مخزون الفضة" 
-            value={`${totals.silver.toFixed(2)} جم`} 
-            color="text-[#6a8a9e]" 
+          <KPICard
+            icon={<Database className="w-4 h-4" />}
+            title="المخزون الفعلي — فضة"
+            value={`${totals.silver.toFixed(2)} جم`}
+            color="text-[#6a8a9e]"
+          />
+          <KPICard
+            icon={<Scale className="w-4 h-4" />}
+            title="التزامات التجار — فضة"
+            value={`${operationalProjection.merchantWeightLiabilityMovement.silver.toFixed(2)} جم`}
+            color="text-[#9e6a6a]"
+          />
+          <KPICard
+            icon={<Database className="w-4 h-4" />}
+            title="صافي ملكية المحل — فضة"
+            value={`${(totals.silver - operationalProjection.merchantWeightLiabilityMovement.silver).toFixed(2)} جم`}
+            color="text-[#c9a84c]"
           />
         </div>
       </div>
@@ -541,11 +505,11 @@ export const HomeView = React.memo(({
           </div>
           <div className="space-y-3">
             {entries.slice(0, 3).map((e) => (
-              <RecentEntryRow 
-                key={e.id} 
-                e={e} 
-                accountCategories={accountCategories} 
-                setEditingEntry={setEditingEntry} 
+              <RecentEntryRow
+                key={e.id}
+                e={e}
+                accountCategories={accountCategories}
+                setEditingEntry={setEditingEntry}
               />
             ))}
           </div>
@@ -554,7 +518,7 @@ export const HomeView = React.memo(({
 
       {/* Daily price cards */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-        <PriceCard 
+        <PriceCard
           title="ذهب 21 (بيع)"
           price={goldPrice}
           onPriceChange={(val) => {
@@ -575,7 +539,7 @@ export const HomeView = React.memo(({
           }}
         />
 
-        <PriceCard 
+        <PriceCard
           title="فضة (بيع)"
           price={silverPrice}
           onPriceChange={(val) => {
@@ -598,7 +562,7 @@ export const HomeView = React.memo(({
 
       {/* Secondary quick actions */}
       <div className="grid grid-cols-3 gap-3">
-        <button 
+        <button
           onClick={() => setView('journal')}
           className="bg-[#0e1018] border border-[#1a1e2a] rounded-2xl p-4 flex flex-col items-center gap-2 hover:border-[#c9a84c33] transition-all group"
         >
@@ -607,18 +571,18 @@ export const HomeView = React.memo(({
           </div>
           <span className="text-xs font-bold text-[#ddd8cc]">دفتر اليومية</span>
         </button>
-        
-        <button 
-          onClick={() => setView('journal')}
+
+        <button
+          onClick={() => setView('database')}
           className="bg-[#0e1018] border border-[#1a1e2a] rounded-2xl p-4 flex flex-col items-center gap-2 hover:border-[#6a9e6a33] transition-all group"
         >
           <div className="w-12 h-12 rounded-xl flex items-center justify-center border border-[#1a1e2a] bg-[#6a9e6a11] group-hover:bg-[#6a9e6a22] transition-all">
             <Database className="w-6 h-6 text-[#6a9e6a]" />
           </div>
-          <span className="text-xs font-bold text-[#ddd8cc]">قاعدة البيانات</span>
+          <span className="text-xs font-bold text-[#ddd8cc]">المخزون</span>
         </button>
 
-        <button 
+        <button
           onClick={() => setView('settings')}
           className="bg-[#0e1018] border border-[#1a1e2a] rounded-2xl p-4 flex flex-col items-center gap-2 hover:border-[#9e6a6a33] transition-all group"
         >
@@ -637,7 +601,7 @@ export const HomeView = React.memo(({
         </div>
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
           {reportShortcuts.map((rep) => (
-            <button 
+            <button
               key={rep.id}
               onClick={() => {
                 if (rep.id === 'profit-analysis') {
@@ -665,7 +629,7 @@ export const HomeView = React.memo(({
       <AnimatePresence>
         {showPasteModal && (
           <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm">
-            <motion.div 
+            <motion.div
               initial={{ scale: 0.9, opacity: 0 }}
               animate={{ scale: 1, opacity: 1 }}
               exit={{ scale: 0.9, opacity: 0 }}
@@ -676,13 +640,13 @@ export const HomeView = React.memo(({
                 <button onClick={() => setShowPasteModal(false)} className="text-[#5a5548]"><X className="w-5 h-5" /></button>
               </div>
               <p className="text-xs text-[#5a5548]">انسخ رسالة السعر من واتساب أو تليجرام والصقها هنا، وسيقوم النظام باستخراج السعر تلقائيا.</p>
-              <textarea 
+              <textarea
                 value={pasteText}
                 onChange={(e) => setPasteText(e.target.value)}
                 placeholder="الصق الرسالة هنا..."
                 className="w-full h-32 bg-[#080a0f] border border-[#1a1e2a] rounded-2xl p-4 text-base outline-none focus:border-[#c9a84c55] resize-none"
               />
-              <button 
+              <button
                 onClick={() => parseGoldPrice(pasteText)}
                 className="w-full py-4 bg-[#c9a84c] text-[#080a0f] font-bold rounded-2xl"
               >

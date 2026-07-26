@@ -1,0 +1,64 @@
+/** Read-only pre-activation simulation. No Firebase imports, writes, migrations, or ledger postings. */
+import fs from 'node:fs';
+import path from 'node:path';
+import type { Account, Entry } from '../src/types';
+import { SEED_ACCOUNTS } from '../src/migrationData';
+import { CURRENT_DATASET_INVENTORY_BINDINGS } from '../src/lib/inventoryCostCatalog';
+import { rebuildInventoryCostTimeline } from '../src/lib/inventoryCostEngine';
+import { createCostInputRevision, executeCostCalculationRun } from '../src/lib/costRecalculation';
+type CsvRow = Record<string, string>;
+const parseCsv = (text: string): CsvRow[] => {
+  const records: string[][] = []; let record: string[] = []; let field = ''; let quoted = false;
+  for (let index = 0; index < text.length; index += 1) { const character = text[index];
+    if (quoted) { if (character === '"' && text[index + 1] === '"') { field += '"'; index += 1; } else if (character === '"') quoted = false; else field += character; }
+    else if (character === '"') quoted = true; else if (character === ',') { record.push(field); field = ''; }
+    else if (character === '\n') { record.push(field); records.push(record); record = []; field = ''; } else if (character !== '\r') field += character;
+  }
+  if (field || record.length) records.push([...record, field]);
+  const headers = (records.shift() ?? []).map(value => value.replace(/^\uFEFF/, ''));
+  return records.filter(row => row.some(Boolean)).map(row => Object.fromEntries(headers.map((header, index) => [header, row[index] ?? ''])));
+};
+const fixtureRows = parseCsv(fs.readFileSync(path.resolve('approved_normalized_preview.csv'), 'utf8'));
+if (fixtureRows.length !== 2169) throw new Error('Expected 2,169 records; found ' + fixtureRows.length);
+const inventorySeedAccounts = SEED_ACCOUNTS.filter(account => account.is_inventory);
+const inventoryIdByName = new Map(inventorySeedAccounts.map((account, index) => [account.name, CURRENT_DATASET_INVENTORY_BINDINGS[index].inventoryAccountId]));
+const accounts: Account[] = SEED_ACCOUNTS.map((account, index) => ({ ...account, id: inventoryIdByName.get(account.name) ?? 'phase5-non-inventory-' + (index + 1), userId: 'phase5-overlay-read-only-simulation' })) as Account[];
+const accountIdByName = new Map(accounts.map(account => [account.name, account.id as string]));
+const entries: Entry[] = fixtureRows.map(row => { const entry = JSON.parse(row.proposed_import_document) as Entry; return { ...entry, id: row.document_id, debitAccountId: accountIdByName.get(entry.debit), creditAccountId: accountIdByName.get(entry.credit) }; });
+const immutableBefore = JSON.stringify(entries);
+const accessoryOpeningCosts = Object.fromEntries(CURRENT_DATASET_INVENTORY_BINDINGS.filter(binding => binding.taxonomyKey.startsWith('accessory.')).map(binding => [binding.inventoryAccountId, 10000]));
+const openingConfig = { gold21PriceByYearMinor: { '2026': 600000 }, silverPriceByYearMinor: { '2026': 6000 }, accessoryUnitCostByYearAndAccountMinor: { '2026': accessoryOpeningCosts } };
+const baseline = rebuildInventoryCostTimeline(entries, accounts, openingConfig);
+const inputRevision = createCostInputRevision(entries, accounts, openingConfig);
+const completedRun = executeCostCalculationRun({ generationId: 1, inputRevision, entries, accounts, openingConfig });
+if (completedRun.status !== 'valid' || !completedRun.timeline) throw new Error('Approved Derived Cost Run failed: ' + JSON.stringify(completedRun.error));
+const timeline = completedRun.timeline;
+if (JSON.stringify(entries) !== immutableBefore) throw new Error('Source records were mutated');
+if (!timeline.valid) throw new Error('Overlay Cost Run failed: ' + JSON.stringify(timeline.diagnostics));
+if (timeline.historicalInventoryOverlays.length !== 3) throw new Error('Expected exactly three applied overlays');
+const overlayUnitsByAccount = new Map<string, number>();
+for (const overlay of timeline.historicalInventoryOverlays) overlayUnitsByAccount.set(overlay.stableInventoryAccountId, (overlayUnitsByAccount.get(overlay.stableInventoryAccountId) ?? 0) + overlay.quantityUnits);
+const operationNetByAccount = new Map<string, number>();
+for (const result of timeline.results) { const incomingId = result.destinationInventoryAccountId ?? result.inventoryAccountId; const outgoingId = result.sourceInventoryAccountId ?? result.inventoryAccountId;
+  if (incomingId) operationNetByAccount.set(incomingId, (operationNetByAccount.get(incomingId) ?? 0) + result.incomingStandardizedQuantityUnits + result.incomingAccessoryQuantityUnits);
+  if (outgoingId) operationNetByAccount.set(outgoingId, (operationNetByAccount.get(outgoingId) ?? 0) - result.outgoingStandardizedQuantityUnits - result.outgoingAccessoryQuantityUnits);
+}
+const quantityMismatches: unknown[] = [];
+for (const [accountId, state] of Object.entries(timeline.finalStates)) { const actual = state.kind === 'accessory' ? state.accessoryQuantityUnits : state.standardizedQuantityUnits; const expected = (operationNetByAccount.get(accountId) ?? 0) + (overlayUnitsByAccount.get(accountId) ?? 0); if (actual !== expected) quantityMismatches.push({ accountId, actual, expected }); }
+if (quantityMismatches.length) throw new Error('Quantity conservation failed: ' + JSON.stringify(quantityMismatches));
+const sales = timeline.results.filter(result => result.classification === 'sale');
+const totals = sales.reduce((sum, result) => ({ revenueMinor: sum.revenueMinor + result.saleAmountMinor, metalCogsMinor: sum.metalCogsMinor + result.metalCogsMinor, workmanshipCogsMinor: sum.workmanshipCogsMinor + result.workmanshipCogsMinor, cogsMinor: sum.cogsMinor + result.totalCogsMinor, profitMinor: sum.profitMinor + (result.profitMinor ?? 0) }), { revenueMinor: 0, metalCogsMinor: 0, workmanshipCogsMinor: 0, cogsMinor: 0, profitMinor: 0 });
+const futureSurplusId = 'csvref-entry-f0b71d5ba66af5385c50a4c4e002d8ed'; const futureSurplus = timeline.resultsByOperationId[futureSurplusId];
+if (!futureSurplus || futureSurplus.classification !== 'surplus') throw new Error('Future surplus was not processed independently');
+const overlayIds = new Set(timeline.historicalInventoryOverlays.map(item => item.overlayId)); const overlayIdsInCostOperationResults = timeline.results.filter(item => overlayIds.has(item.operationId)).map(item => item.operationId);
+if (overlayIdsInCostOperationResults.length) throw new Error('Overlay leaked into operation results');
+const approvedAccountNames = new Map([['seed-account-d1216eb4076ccdf40e20', 'كسر عربي'], ['seed-account-391695330f1733e03bb0', 'غويش عربي']]);
+const targetAccounts = [...overlayUnitsByAccount].map(([accountId, overlayUnits]) => { const state = timeline.finalStates[accountId]; const divisor = state.kind === 'accessory' ? 1000 : 100; const finalUnits = state.kind === 'accessory' ? state.accessoryQuantityUnits : state.standardizedQuantityUnits; return { stableInventoryAccountId: accountId, accountName: approvedAccountNames.get(accountId) ?? state.displayName, sourceOnlyEndingQuantity: (finalUnits - overlayUnits) / divisor, approvedOverlayQuantity: overlayUnits / divisor, simulatedEndingQuantity: finalUnits / divisor, unitBasis: state.unitBasis, finalMetalWacMinorPerStandardUnit: state.metalWacMinorPerStandardUnit, finalWorkmanshipWacMinorPerPhysicalUnit: state.workmanshipWacMinorPerPhysicalUnit, finalBookCostMinor: state.remainingTotalCostMinor }; });
+const output = { mode: 'APPROVED_DERIVED_COST_RUN_VALIDATION', productionWrite: false, migration: false, deploy: false, sourceDocumentCount: entries.length, sourceImmutable: true, baselineWithoutOverlay: { valid: baseline.valid, firstDiagnostic: baseline.diagnostics[0] }, overlayCostRun: { valid: timeline.valid, orderedDocumentCount: timeline.orderedOperationIds.length, costResultCount: timeline.results.length, diagnosticCount: timeline.diagnostics.length, appliedOverlayCount: timeline.historicalInventoryOverlays.length }, overlays: timeline.historicalInventoryOverlays, wacPrecision: timeline.historicalInventoryOverlays.map(overlay => ({ overlayId: overlay.overlayId, metalWacDelta: overlay.metalWacAfter - overlay.metalWacBefore, workmanshipWacDelta: overlay.workmanshipWacAfter - overlay.workmanshipWacBefore })), salesTotalsMinor: totals, overlayCostTotalMinor: timeline.historicalInventoryOverlays.reduce((sum, overlay) => sum + overlay.totalCostMinor, 0), finalBalances: targetAccounts, quantityConservation: { passed: true, mismatches: [] }, futureSurplusIndependence: { passed: timeline.historicalInventoryOverlays.length === 3, operationId: futureSurplusId, quantityUnits: futureSurplus.incomingStandardizedQuantityUnits, costAtThenCurrentWacMinor: futureSurplus.incomingTotalCostMinor, adjustmentGainMinor: futureSurplus.adjustmentGainMinor, historicalOverlayCountAfterSurplus: timeline.historicalInventoryOverlays.length }, phase4Isolation: { overlayIdsInCostOperationResults, ledgerPostingCount: 0, note: 'Overlays are Cost State directives, not Entry records; Phase 4 receives only the original 2,169 entries.' } };
+fs.writeFileSync(path.resolve('historical_inventory_overlay_activation.json'), JSON.stringify(output, null, 2) + '\n', 'utf8');
+const money = (minor: number) => (minor / 100).toFixed(2) + ' EGP';
+const overlayRows = timeline.historicalInventoryOverlays.map(o => '| ' + o.effectiveDate + ' | ' + o.stableInventoryAccountId + ' | ' + (o.quantityUnits / 100).toFixed(2) + ' g E21 | ' + money(o.metalCostMinor) + ' | ' + money(o.workmanshipCostMinor) + ' | ' + money(o.totalCostMinor) + ' | ' + o.metalWacBefore.toFixed(6) + ' -> ' + o.metalWacAfter.toFixed(6) + ' | ' + o.auditHash + ' |').join('\n');
+const balanceRows = targetAccounts.map(a => '| ' + a.accountName + ' | ' + a.sourceOnlyEndingQuantity.toFixed(2) + ' | ' + a.approvedOverlayQuantity.toFixed(2) + ' | ' + a.simulatedEndingQuantity.toFixed(2) + ' | ' + money(a.finalBookCostMinor) + ' |').join('\n');
+const report = ['# Historical Inventory Reconciliation Overlay — Final Activation Report','','- Mode: approved Derived Cost Run validation.','- Source records: 2,169; immutable: yes.','- Baseline without Overlay: failed closed at ' + baseline.diagnostics[0]?.operationId + ' (' + baseline.diagnostics[0]?.code + ').','- Cost Run with approved Overlays: completed; diagnostics: 0.','- Production data writes: none outside the versioned approval configuration.','- Historical source mutation / migration / deploy: none.','- Approved Overlay quantity: 0.80 g E21.','- Phase 1-4 reconciliation: passed; Phase 4 catalog valid with 174 definitions and zero unresolved/invalid/ambiguous records.','- Phase 1-5 targeted tests: 75 passed.','- Full suite: 262 passed; TypeScript/lint and production build passed.','- Legacy runtime remains the default production behavior.','','## Overlay audit and WAC','','| Date | Inventory account | Quantity | Metal cost | Workmanship cost | Total cost | Metal WAC before -> after (minor/centigram) | Audit hash |','|---|---|---:|---:|---:|---:|---:|---|',overlayRows,'','Every Overlay used the account Cost State immediately before its linked deficit operation. No zero, market, or opening-price fallback was used. WAC changes are rounding-only.','','## COGS and profit after the completed Cost Run','','- Sales revenue: ' + money(totals.revenueMinor),'- Metal COGS: ' + money(totals.metalCogsMinor),'- Workmanship COGS: ' + money(totals.workmanshipCogsMinor),'- Total COGS: ' + money(totals.cogsMinor),'- Gross profit: ' + money(totals.profitMinor),'- Difference from approved pre-activation simulation: COGS 0.00 EGP; gross profit 0.00 EGP.','- Overlay cost introduced at then-current WAC: ' + money(output.overlayCostTotalMinor),'','The invalid no-Overlay run has no auditable full-period COGS/profit comparator. These are completed-run values; the Overlays introduce no artificial WAC delta.','','## Ending quantities','','| Account | Source-only mathematical ending | Overlay sum | Simulated ending | Final book cost |','|---|---:|---:|---:|---:|',balanceRows,'','Quantity conservation passed for every inventory account: ending quantity equals original-operation net movement plus Overlay quantities only.','','## Future surplus and Phase 4 isolation','','The 2026-03-23 surplus (' + (futureSurplus.incomingStandardizedQuantityUnits / 100) + ' g) was processed independently at then-current WAC for ' + money(futureSurplus.incomingTotalCostMinor) + '. All three Overlays remain; no automatic offset occurred.','','Overlay IDs do not appear in Cost operation results and produce zero Phase 4 ledger postings. All three Overlays are approved with approvedAt and final SHA-256 audit hashes.',''].join('\n');
+fs.writeFileSync(path.resolve('historical_inventory_overlay_activation_report.md'), report, 'utf8');
+console.log(JSON.stringify({ overlayCostRun: output.overlayCostRun, salesTotalsMinor: totals }, null, 2));

@@ -1,8 +1,8 @@
 ﻿import React, { useState, useEffect } from 'react';
-import { deleteDoc, doc, updateDoc, serverTimestamp, addDoc, collection, getDocsFromServer, query, where, getDocFromServer } from 'firebase/firestore';
+import { deleteDoc, doc, updateDoc, serverTimestamp, addDoc, collection, getDocsFromServer, query, where } from 'firebase/firestore';
 import { AnimatePresence, motion } from 'framer-motion';
 import { useAppStore } from './store';
-import { db, logOut } from './firebase';
+import { db, firebaseProjectId, firestoreDatabaseId, logOut } from './firebase';
 import { Entry } from './types';
 import { buildGoldEquivalent21Audit, canCalculateGoldEquivalent21, inferGoldKaratFromMultiplier } from './lib/goldEquivalent';
 import { isGoldEquivalentEntry } from './utils/accountLogic';
@@ -20,6 +20,8 @@ import { ReportsView } from './components/views/ReportsView';
 import { StoryBuilderView } from './components/views/StoryBuilderView';
 import { InvoicePrintModal } from './components/views/InvoicePrintModal';
 import { MoreView } from './components/views/MoreView';
+import { CanonicalAccountsView } from './components/views/CanonicalAccountsView';
+import { InventoryCheckView } from './components/views/InventoryCheckView';
 
 import { ErrorBoundary } from './components/ErrorBoundary';
 import { NavButton } from './components/ui/NavButton';
@@ -30,17 +32,20 @@ import { GlobalErrorView } from './components/views/GlobalErrorView';
 
 import { useAuthInit } from './hooks/useAuthInit';
 import { useDataSync } from './hooks/useDataSync';
+import { useCostRecalculation } from './hooks/useCostRecalculation';
+import { areOperationWritesLocked } from './lib/costRecalculation';
 
 type AppView = ReturnType<typeof useAppStore.getState>['view'];
 
 const reportViews: AppView[] = ['reports', 'inventory', 'profit-analysis', 'advanced-analytics'];
-const moreViews: AppView[] = ['more', 'story', 'guide', 'settings'];
+const moreViews: AppView[] = ['more', 'story', 'guide', 'settings', 'chart-of-accounts'];
 
 export default function App() {
   const {
     user, isAuthReady, setEntries, view, setView, setReportsTab,
     globalError, setGlobalError, setIsUpdatingPrice,
-    editingEntry, setEditingEntry, accountsDb
+    editingEntry, setEditingEntry, accountsDb,
+    costCalculationRun, requestCostRetry
   } = useAppStore();
 
   const {
@@ -48,10 +53,14 @@ export default function App() {
   } = useAuthInit();
 
   useDataSync(user, isAuthReady);
+  useCostRecalculation();
 
   const [isUpdatingEntry, setIsUpdatingEntry] = useState(false);
   const [deleteConfirmId, setDeleteConfirmId] = useState<string | null>(null);
   const [isFullscreen, setIsFullscreen] = useState(false);
+  // Local UI-only preview for responsive navigation checks. Vite removes this
+  // branch from production because import.meta.env.DEV is false in builds.
+  const isUiNavigationPreview = import.meta.env.DEV && typeof window !== 'undefined' && new URLSearchParams(window.location.search).get('ui-preview') === '1';
 
   const isIOS = typeof window !== 'undefined' && /iPhone|iPad|iPod/.test(navigator.userAgent);
 
@@ -129,6 +138,10 @@ export default function App() {
   }, [view, setReportsTab]);
 
   const handleDelete = async (id: string) => {
+    if (areOperationWritesLocked(costCalculationRun)) {
+      setGlobalError('لا يمكن حذف العمليات أثناء توقف أو إعادة احتساب التكلفة. أصلح الخطأ من الإعدادات ثم أعد المحاولة.');
+      return;
+    }
     try {
       await deleteDoc(doc(db, 'entries', id));
       if (user) {
@@ -147,6 +160,10 @@ export default function App() {
 
   const handleUpdate = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (areOperationWritesLocked(costCalculationRun)) {
+      setGlobalError('لا يمكن تعديل العمليات أثناء توقف أو إعادة احتساب التكلفة. أصلح الخطأ من الإعدادات ثم أعد المحاولة.');
+      return;
+    }
     if (!editingEntry?.id || isUpdatingEntry) return;
 
     const entryToUpdate = { ...editingEntry };
@@ -191,17 +208,11 @@ export default function App() {
     }
   };
 
-  useEffect(() => {
-    if (isAuthReady && user) {
-      getDocFromServer(doc(db, 'test', 'connection')).catch(() => {});
-    }
-  }, [isAuthReady, user]);
-
   const handleHardReset = () => {
     try {
       localStorage.clear();
       sessionStorage.clear();
-      ['firebaseLocalStorageDb', 'firestore/[DEFAULT]/gen-lang-client-0332689520/main'].forEach(n => {
+      ['firebaseLocalStorageDb', `firestore/[DEFAULT]/${firebaseProjectId}/${firestoreDatabaseId}`].forEach(n => {
         try { indexedDB.deleteDatabase(n); } catch(e) {}
       });
     } catch (e) {
@@ -212,19 +223,34 @@ export default function App() {
 
   const navItems = [
     { id: 'home' as AppView, label: 'الرئيسية', icon: <Home className="h-5 w-5" />, active: view === 'home', onClick: () => setView('home') },
-    { id: 'journal' as AppView, label: 'اليومية', icon: <BookOpenCheck className="h-5 w-5" />, active: view === 'journal' || view === 'database', onClick: () => setView('journal') },
-    { id: 'entry' as AppView, label: 'عملية', icon: <PlusCircle className="h-8 w-8" />, active: view === 'entry', onClick: () => setView('entry'), variant: 'primary' as const },
+    { id: 'journal' as AppView, label: 'اليومية', icon: <BookOpenCheck className="h-5 w-5" />, active: view === 'journal', onClick: () => setView('journal') },
+    {
+      id: 'entry' as AppView,
+      label: 'عملية',
+      icon: <PlusCircle className="h-8 w-8" />,
+      active: view === 'entry',
+      onClick: () => {
+        if (areOperationWritesLocked(costCalculationRun)) {
+          setGlobalError('العمليات مقفلة حتى يكتمل احتساب التكلفة بنجاح.');
+          return;
+        }
+        setView('entry');
+      },
+      variant: 'primary' as const,
+    },
     { id: 'reports' as AppView, label: 'التقارير', icon: <BarChart3 className="h-5 w-5" />, active: reportViews.includes(view), onClick: () => setView('reports') },
     { id: 'more' as AppView, label: 'المزيد', icon: <Menu className="h-5 w-5" />, active: moreViews.includes(view), onClick: () => setView('more') },
   ];
 
   const pageTitle = (() => {
     if (view === 'entry') return 'العمليات';
-    if (view === 'journal' || view === 'database') return 'اليومية';
+    if (view === 'journal') return 'اليومية';
+    if (view === 'database') return 'المخزون';
     if (reportViews.includes(view)) return 'التقارير';
     if (view === 'story') return 'حالة واتساب';
     if (view === 'guide') return 'الدليل المحاسبي';
     if (view === 'settings') return 'الإعدادات';
+    if (view === 'chart-of-accounts') return 'دليل الحسابات';
     if (view === 'more') return 'المزيد';
     return 'الرئيسية';
   })();
@@ -233,11 +259,11 @@ export default function App() {
     return <GlobalErrorView globalError={globalError} setGlobalError={setGlobalError} />;
   }
 
-  if (loading) {
+  if (loading && !isUiNavigationPreview) {
     return <LoadingView authHangError={false} authStage="فحص الحساب..." handleHardReset={handleHardReset} />;
   }
 
-  if (!user) {
+  if (!user && !isUiNavigationPreview) {
     return (
       <LoginView
         authError={authError}
@@ -285,6 +311,29 @@ export default function App() {
             </div>
           </header>
 
+          {(costCalculationRun.status === 'running' || costCalculationRun.status === 'failed') && (
+            <div className={`mb-4 rounded-2xl border p-4 text-sm ${costCalculationRun.status === 'failed' ? 'border-red-500/40 bg-red-500/10 text-red-100' : 'border-yellow-500/40 bg-yellow-500/10 text-yellow-100'}`}>
+              <div className="font-black">
+                {costCalculationRun.status === 'running'
+                  ? 'جارٍ إعادة احتساب التكلفة، برجاء الانتظار'
+                  : 'فشل إعادة احتساب التكلفة — العمليات وتقارير التكلفة متوقفة'}
+              </div>
+              {costCalculationRun.error && (
+                <div className="mt-2 break-words text-xs">
+                  {costCalculationRun.error.code}: {costCalculationRun.error.message}
+                </div>
+              )}
+              <div className="mt-3 flex gap-2">
+                <button type="button" onClick={requestCostRetry} className="rounded-xl bg-[#c9a84c] px-4 py-2 text-xs font-black text-[#080a0f]">
+                  إعادة المحاولة
+                </button>
+                <button type="button" onClick={() => setView('settings')} className="rounded-xl border border-current px-4 py-2 text-xs font-black">
+                  فتح الإعدادات
+                </button>
+              </div>
+            </div>
+          )}
+
           <AnimatePresence mode="wait">
             <motion.div
               key={view}
@@ -294,13 +343,19 @@ export default function App() {
               transition={{ duration: 0.18 }}
             >
               {view === 'home' && <MainDashboard refreshData={refreshData} />}
-              {view === 'entry' && <EntryForm />}
-              {(view === 'journal' || view === 'database') && <DailyJournalView />}
+              {view === 'entry' && (
+                areOperationWritesLocked(costCalculationRun)
+                  ? <div className="rounded-2xl border border-red-500/30 bg-red-500/10 p-6 text-center text-sm text-red-100">العمليات متوقفة حتى يكتمل احتساب التكلفة بنجاح.</div>
+                  : <EntryForm />
+              )}
+              {view === 'journal' && <DailyJournalView />}
+              {view === 'database' && <InventoryCheckView />}
               {reportViews.includes(view) && <ReportsView />}
               {view === 'more' && <MoreView isFullscreen={isFullscreen} onToggleFullscreen={toggleFullscreen} onLogOut={logOut} />}
               {view === 'story' && <StoryBuilderView />}
               {view === 'guide' && <AccountingGuideView />}
               {view === 'settings' && <SettingsView />}
+              {view === 'chart-of-accounts' && <CanonicalAccountsView />}
             </motion.div>
           </AnimatePresence>
         </main>

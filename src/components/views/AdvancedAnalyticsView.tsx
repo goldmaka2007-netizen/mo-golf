@@ -44,7 +44,7 @@ export const AdvancedAnalyticsView = () => {
   const endDate = selectedMonth === "all" ? "2099-12-31" : `${selectedMonth}-31`;
 
   const { accData, costBasis, affectedSalesCount, missingOpeningCostBasisCount } = useMemo(
-    () => analyzeProfitability(entries, accountsDb, goldPrice, silverPrice, startDate, endDate, buildOpeningCostConfig(openingCostConfig)),
+    () => analyzeProfitability(entries, accountsDb, goldPrice, silverPrice, startDate, endDate, buildOpeningCostConfig(openingCostConfig, accountsDb)),
     [entries, accountsDb, goldPrice, silverPrice, startDate, endDate, openingCostConfig],
   );
 

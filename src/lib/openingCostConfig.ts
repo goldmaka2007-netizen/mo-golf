@@ -1,6 +1,7 @@
-import type { AnnualOpeningCostConfig } from '../types';
+import type { Account, AnnualOpeningCostConfig } from '../types';
 import type { OpeningCostConfig } from './weightedAverageCost';
 import { normalizeNumerals } from './accounting';
+import { buildRuntimeStableInventoryIdAliases } from './runtimeCostAccountResolver';
 
 export const parseEgpToMinorUnits = (value: string): number => {
   const normalized = normalizeNumerals(value).trim();
@@ -25,6 +26,68 @@ export const formatMinorUnitsToEgpInput = (value: number | string | undefined): 
   return fraction === 0n ? String(whole) : `${whole}.${String(fraction).padStart(2, '0')}`;
 };
 
+const parseConfigEgpToMinorUnits = (value: number | string | undefined): number | string | undefined => {
+  if (value === undefined || value === '') return undefined;
+  return parseEgpToMinorUnits(String(value));
+};
+
+const normalizeAccessoryCostMap = (
+  value: unknown,
+): Record<string, number | string | undefined> => {
+  if (!value) return {};
+  if (Array.isArray(value)) {
+    return Object.fromEntries(
+      value
+        .filter(item => item.accountId && (item.unitCostEgp ?? item.unitCost ?? item.value) !== undefined)
+        .map(item => [item.accountId as string, parseConfigEgpToMinorUnits(item.unitCostEgp ?? item.unitCost ?? item.value)]),
+    );
+  }
+  if (typeof value !== 'object') return {};
+  return Object.fromEntries(
+    Object.entries(value as Record<string, number | string | undefined>)
+      .filter(([, item]) => item !== undefined && item !== '')
+      .map(([accountId, item]) => [accountId, parseConfigEgpToMinorUnits(item)]),
+  );
+};
+
+export const getGoldOpeningPriceMinor = (config: AnnualOpeningCostConfig): number | string | undefined =>
+  config.gold21PriceMinorPerGram ?? parseConfigEgpToMinorUnits(config.gold21PriceEgp);
+
+export const getSilverOpeningPriceMinor = (config: AnnualOpeningCostConfig): number | string | undefined =>
+  config.silverPriceMinorPerGram ?? parseConfigEgpToMinorUnits(config.silverPriceEgp);
+
+export const getAccessoryOpeningCostsMinorByAccountId = (
+  config: AnnualOpeningCostConfig,
+): Record<string, number | string | undefined> => {
+  return {
+    ...(config.accessoryUnitCostMinorByAccountId || {}),
+    ...normalizeAccessoryCostMap(config.openingCosts),
+    ...normalizeAccessoryCostMap(config.accessoryCosts),
+    ...normalizeAccessoryCostMap(config.unitCosts),
+    ...normalizeAccessoryCostMap(config.accessoryOpeningCostsByAccountId),
+    ...normalizeAccessoryCostMap(config.accessoryOpeningCosts),
+  };
+};
+
+export const mergeAnnualOpeningCostRows = (
+  previous: AnnualOpeningCostConfig | undefined,
+  next: AnnualOpeningCostConfig,
+): AnnualOpeningCostConfig => {
+  const previousAccessoryCosts = previous?.accessoryOpeningCosts
+    ?? Object.fromEntries(
+      Object.entries(previous?.accessoryUnitCostMinorByAccountId || {})
+        .map(([accountId, value]) => [accountId, formatMinorUnitsToEgpInput(value)]),
+    );
+  return {
+    year: next.year,
+    gold21PriceEgp: next.gold21PriceEgp ?? previous?.gold21PriceEgp ?? formatMinorUnitsToEgpInput(previous?.gold21PriceMinorPerGram),
+    silverPriceEgp: next.silverPriceEgp ?? previous?.silverPriceEgp ?? formatMinorUnitsToEgpInput(previous?.silverPriceMinorPerGram),
+    accessoryOpeningCosts: {
+      ...previousAccessoryCosts,
+      ...(next.accessoryOpeningCosts || {}),
+    },
+  };
+};
 export const normalizeOpeningCostConfigRows = (annualConfig: AnnualOpeningCostConfig[] = []): AnnualOpeningCostConfig[] => {
   const seen = new Set<number>();
   return annualConfig
@@ -38,19 +101,37 @@ export const normalizeOpeningCostConfigRows = (annualConfig: AnnualOpeningCostCo
     });
 };
 
-export const buildOpeningCostConfig = (annualConfig: AnnualOpeningCostConfig[] = []): OpeningCostConfig => {
+export const buildOpeningCostConfig = (
+  annualConfig: AnnualOpeningCostConfig[] = [],
+  accounts: readonly Account[] = [],
+): OpeningCostConfig => {
   const gold21PriceByYearMinor: OpeningCostConfig['gold21PriceByYearMinor'] = {};
   const silverPriceByYearMinor: OpeningCostConfig['silverPriceByYearMinor'] = {};
+  const accessoryUnitCostByYearAndAccountMinor: NonNullable<OpeningCostConfig['accessoryUnitCostByYearAndAccountMinor']> = {};
+  const stableIdByRuntimeId = buildRuntimeStableInventoryIdAliases(accounts);
 
   normalizeOpeningCostConfigRows(annualConfig).forEach(config => {
     const year = String(config.year);
-    if (/^\d{4}$/.test(year) && config.gold21PriceMinorPerGram !== undefined) {
-      gold21PriceByYearMinor[year] = config.gold21PriceMinorPerGram;
+    const goldMinor = getGoldOpeningPriceMinor(config);
+    const silverMinor = getSilverOpeningPriceMinor(config);
+    const accessoryCosts = Object.fromEntries(
+      Object.entries(getAccessoryOpeningCostsMinorByAccountId(config))
+        .map(([accountId, value]) => [stableIdByRuntimeId.get(accountId) ?? accountId, value]),
+    );
+    if (/^\d{4}$/.test(year) && goldMinor !== undefined) {
+      gold21PriceByYearMinor[year] = goldMinor;
     }
-    if (/^\d{4}$/.test(year) && config.silverPriceMinorPerGram !== undefined) {
-      silverPriceByYearMinor[year] = config.silverPriceMinorPerGram;
+    if (/^\d{4}$/.test(year) && silverMinor !== undefined) {
+      silverPriceByYearMinor[year] = silverMinor;
+    }
+    if (/^\d{4}$/.test(year) && Object.keys(accessoryCosts).length > 0) {
+      accessoryUnitCostByYearAndAccountMinor[year] = accessoryCosts;
     }
   });
 
-  return { gold21PriceByYearMinor, silverPriceByYearMinor };
+  return {
+    gold21PriceByYearMinor,
+    silverPriceByYearMinor,
+    accessoryUnitCostByYearAndAccountMinor,
+  };
 };

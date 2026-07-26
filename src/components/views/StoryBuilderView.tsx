@@ -3,7 +3,6 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { Share2, Image as ImageIcon, Settings2, Coins, Package, X } from 'lucide-react';
 import { useAppStore } from '../../store';
 import { cn } from '../../lib/utils';
-import html2canvas from 'html2canvas';
 
 // --- Configuration & Constants ---
 

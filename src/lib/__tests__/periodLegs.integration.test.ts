@@ -42,7 +42,6 @@ describe('period leg split', () => {
 
   it.each([['cash', accounts[0]], ['gold', accounts[2]], ['silver', accounts[4]]] as const)('reconciles Daily Journal, Ledger, and Trial Balance for %s', (dimension, account) => {
     const journal = buildDailyJournalReport(entries, accounts, start).dimensions[dimension];
-    const oneDayTrial = buildTrialBalanceReport(entries, accounts, dimension, start, start);
     const wholePeriodTrial = buildTrialBalanceReport(entries, accounts, dimension, start, end);
     const ledger = buildLedgerReport(entries, accounts, account, dimension, start, end);
     const trialRow = wholePeriodTrial.groups.flatMap(group => group.rows).find(row => row.entityId.endsWith(`:${account.id}`));

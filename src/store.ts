@@ -1,7 +1,10 @@
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
-import { Entry, FirebaseUser, AccountCategories, Account, TransactionRule, CustomRule, InventoryCheck, AnnualOpeningCostConfig } from './types';
+import { Entry, FirebaseUser, AccountCategories, Account, TransactionRule, CustomRule, InventoryCheck, AnnualOpeningCostConfig, CanonicalAccountDefinition } from './types';
 import { ACCOUNT_CATEGORIES } from './constants';
+import type { CostCalculationRun } from './lib/inventoryCostTypes';
+import { PHASE5_COST_CATALOG_VERSION } from './lib/inventoryCostEngine';
+import { commitCostCalculationRun } from './lib/costRecalculation';
 
 interface AppState {
   user: FirebaseUser | null;
@@ -21,6 +24,9 @@ interface AppState {
 
   accountsDb: Account[];
   setAccountsDb: (accounts: Account[]) => void;
+
+  canonicalAccounts: CanonicalAccountDefinition[];
+  setCanonicalAccounts: (accounts: CanonicalAccountDefinition[]) => void;
 
   transactionRules: TransactionRule[];
   setTransactionRules: (rules: TransactionRule[]) => void;
@@ -46,11 +52,21 @@ interface AppState {
   openingCostConfig: AnnualOpeningCostConfig[];
   setOpeningCostConfig: (config: AnnualOpeningCostConfig[]) => void;
 
+  costCalculationRun: CostCalculationRun;
+  costRetryToken: number;
+  beginCostCalculation: (args: {
+    inputRevision: string;
+    settingsHash: string;
+    earliestAffectedOperationId?: string;
+  }) => number;
+  commitCostCalculation: (run: CostCalculationRun) => boolean;
+  requestCostRetry: () => void;
+
   goldKarat: 18 | 21;
   setGoldKarat: (karat: 18 | 21) => void;
 
-  view: 'home' | 'entry' | 'database' | 'reports' | 'settings' | 'journal' | 'guide' | 'inventory' | 'story' | 'profit-analysis' | 'advanced-analytics' | 'more';
-  setView: (view: 'home' | 'entry' | 'database' | 'reports' | 'settings' | 'journal' | 'guide' | 'inventory' | 'story' | 'profit-analysis' | 'advanced-analytics' | 'more') => void;
+  view: 'home' | 'entry' | 'database' | 'reports' | 'settings' | 'chart-of-accounts' | 'journal' | 'guide' | 'inventory' | 'story' | 'profit-analysis' | 'advanced-analytics' | 'more';
+  setView: (view: 'home' | 'entry' | 'database' | 'reports' | 'settings' | 'chart-of-accounts' | 'journal' | 'guide' | 'inventory' | 'story' | 'profit-analysis' | 'advanced-analytics' | 'more') => void;
 
   printEntry: Entry | null;
   setPrintEntry: (entry: Entry | null) => void;
@@ -104,6 +120,8 @@ export const useAppStore = create<AppState>()(
   setCustomRules: (customRules) => set({ customRules }),
 
   accountsDb: [],
+  canonicalAccounts: [],
+  setCanonicalAccounts: (canonicalAccounts) => set({ canonicalAccounts }),
   setAccountsDb: (accountsDb) => {
     // Derive accountCategories from accounts database
     const categories: AccountCategories = {
@@ -166,6 +184,43 @@ export const useAppStore = create<AppState>()(
 
   openingCostConfig: [],
   setOpeningCostConfig: (openingCostConfig) => set({ openingCostConfig }),
+
+  costCalculationRun: {
+    generationId: 0,
+    inputRevision: '',
+    catalogVersion: PHASE5_COST_CATALOG_VERSION,
+    status: 'idle',
+  },
+  costRetryToken: 0,
+  beginCostCalculation: ({ inputRevision, settingsHash, earliestAffectedOperationId }) => {
+    let generationId = 0;
+    set((state) => {
+      generationId = state.costCalculationRun.generationId + 1;
+      return {
+        costCalculationRun: {
+          generationId,
+          inputRevision,
+          catalogVersion: PHASE5_COST_CATALOG_VERSION,
+          startedAt: new Date().toISOString(),
+          status: 'running',
+          earliestAffectedOperationId,
+          settingsHash,
+        },
+      };
+    });
+    return generationId;
+  },
+  commitCostCalculation: (run) => {
+    let accepted = false;
+    set((state) => {
+      const result = commitCostCalculationRun(state.costCalculationRun.generationId, run);
+      if (!result.accepted) return {};
+      accepted = true;
+      return { costCalculationRun: result.run };
+    });
+    return accepted;
+  },
+  requestCostRetry: () => set((state) => ({ costRetryToken: state.costRetryToken + 1 })),
 
   goldKarat: 21,
   setGoldKarat: (goldKarat) => set({ goldKarat }),

@@ -9,106 +9,30 @@ import {
   TrendingUp,
   Package
 } from 'lucide-react';
-import { Entry, AccountNature, AccountCategories } from '../../../types';
+import { Entry } from '../../../types';
 import { useAppStore } from '../../../store';
 import { cn } from '../../../lib/utils';
-import { getDynamicAccountNature, getAccountTypeDetails, belongsToMetric, getMetricValue } from '../../../utils/accountLogic';
+import { buildIncomeStatementReport } from '../../../lib/incomeStatementReport';
+import { buildEquityStatementReport } from '../../../lib/equityStatementReport';
 
 export const EquityStatementView = React.memo(({ entries }: { entries: Entry[] }) => {
-  const { accountCategories, accountsDb } = useAppStore();
+  const { accountsDb } = useAppStore();
   const [activeTab, setActiveTab] = useState<'cash' | 'gold' | 'silver' | 'accs'>('cash');
 
   const financials = useMemo(() => {
-    const calculateEquityLedger = (metric: 'cash' | 'gold' | 'silver' | 'accs') => {
-      let capitalAdditions = 0;
-      const capitalAccounts: Record<string, number> = {};
-      
-      let drawings = 0;
-      const drawingsAccounts: Record<string, number> = {};
-
-      let totalRevenue = 0;
-      let totalExpenses = 0;
-
-      // 1. Process entries for Equity movements and Profit/Loss
-      entries.forEach(entry => {
-        const val = getMetricValue(entry, metric, accountsDb);
-        if (val === 0) return;
-
-        const debitDetails = getAccountTypeDetails(entry.debit, accountsDb);
-        const creditDetails = getAccountTypeDetails(entry.credit, accountsDb);
-
-        // -- Equity Movements (Capital / Drawings) --
-        if (creditDetails.main === 'equity' && belongsToMetric(entry.credit, metric, accountsDb)) {
-          capitalAdditions += val;
-          capitalAccounts[entry.credit] = (capitalAccounts[entry.credit] || 0) + val;
-        }
-        if (debitDetails.main === 'equity' && belongsToMetric(entry.debit, metric, accountsDb)) {
-          drawings += val;
-          drawingsAccounts[entry.debit] = (drawingsAccounts[entry.debit] || 0) + val;
-        }
-
-        // -- Operational P&L (Consistent with Income Statement) --
-        // Credit is Revenue
-        if (belongsToMetric(entry.credit, metric, accountsDb) && creditDetails.main === 'revenue') {
-          totalRevenue += val;
-        }
-        // Debit is Expense
-        if (belongsToMetric(entry.debit, metric, accountsDb) && debitDetails.main === 'expenses') {
-          totalExpenses += val;
-        }
-
-        // Trade Overlays for Profit Calculation
-        if (metric === 'cash') {
-          const isGold = (acc: string) => belongsToMetric(acc, 'gold', accountsDb);
-          const isSilver = (acc: string) => belongsToMetric(acc, 'silver', accountsDb);
-          const isAccs = (acc: string) => belongsToMetric(acc, 'accs', accountsDb);
-          const isProduct = (acc: string) => isGold(acc) || isSilver(acc) || isAccs(acc);
-
-          if (belongsToMetric(entry.debit, 'cash', accountsDb) && isProduct(entry.credit) && creditDetails.main === 'assets') {
-            totalRevenue += val; // Cash inflow from sales
-          }
-          if (belongsToMetric(entry.credit, 'cash', accountsDb) && isProduct(entry.debit) && debitDetails.main === 'assets') {
-            totalExpenses += val; // Cash outflow for purchases
-          }
-        } else if (metric === 'gold' || metric === 'silver') {
-          // Weight inflows/outflows
-          if (belongsToMetric(entry.debit, metric, accountsDb) && debitDetails.main === 'assets' && !belongsToMetric(entry.credit, metric, accountsDb)) {
-            totalRevenue += val; // Weight inflow from purchases
-          }
-          if (belongsToMetric(entry.credit, metric, accountsDb) && creditDetails.main === 'assets' && !belongsToMetric(entry.debit, metric, accountsDb)) {
-            totalExpenses += val; // Weight outflow from sales
-          }
-        }
-      });
-
-      const netProfit = totalRevenue - totalExpenses;
-
-      return {
-        additions: { total: capitalAdditions, accounts: capitalAccounts },
-        deductions: { total: drawings, accounts: drawingsAccounts },
-        netProfit,
-        totalChange: (capitalAdditions - drawings) + netProfit
-      };
-    };
-
-    return {
-      cash: calculateEquityLedger('cash'),
-      gold: calculateEquityLedger('gold'),
-      silver: calculateEquityLedger('silver'),
-      accs: calculateEquityLedger('accs')
-    };
+    const incomeStatement = buildIncomeStatementReport(entries, accountsDb);
+    return buildEquityStatementReport(entries, accountsDb, incomeStatement);
   }, [entries, accountsDb]);
 
   const renderStatement = () => {
     const data = (financials as any)[activeTab];
     let unit = 'ج.م';
     let accent = 'text-[#c9a84c]';
-    let title = '';
 
-    if (activeTab === 'cash') { unit = 'ج.م'; accent = 'text-[#6a9e6a]'; title = 'نقدية (الأموال)'; }
-    if (activeTab === 'gold') { unit = 'جم عربي'; accent = 'text-[#c9a84c]'; title = 'ذهب (المشغولات المستحقة)'; }
-    if (activeTab === 'silver') { unit = 'جرام'; accent = 'text-[#6a8a9e]'; title = 'فضة'; }
-    if (activeTab === 'accs') { unit = 'قطعة'; accent = 'text-[#9e8a6a]'; title = 'ملحقات (عدد القطع)'; }
+    if (activeTab === 'cash') { unit = 'ج.م'; accent = 'text-[#6a9e6a]'; }
+    if (activeTab === 'gold') { unit = 'جم عربي'; accent = 'text-[#c9a84c]'; }
+    if (activeTab === 'silver') { unit = 'جرام'; accent = 'text-[#6a8a9e]'; }
+    if (activeTab === 'accs') { unit = 'قطعة'; accent = 'text-[#9e8a6a]'; }
 
     return (
       <motion.div 
