@@ -21,6 +21,7 @@ import { StoryBuilderView } from './components/views/StoryBuilderView';
 import { InvoicePrintModal } from './components/views/InvoicePrintModal';
 import { MoreView } from './components/views/MoreView';
 import { CanonicalAccountsView } from './components/views/CanonicalAccountsView';
+import { InventoryCheckView } from './components/views/InventoryCheckView';
 
 import { ErrorBoundary } from './components/ErrorBoundary';
 import { NavButton } from './components/ui/NavButton';
@@ -222,7 +223,7 @@ export default function App() {
 
   const navItems = [
     { id: 'home' as AppView, label: 'الرئيسية', icon: <Home className="h-5 w-5" />, active: view === 'home', onClick: () => setView('home') },
-    { id: 'journal' as AppView, label: 'اليومية', icon: <BookOpenCheck className="h-5 w-5" />, active: view === 'journal' || view === 'database', onClick: () => setView('journal') },
+    { id: 'journal' as AppView, label: 'اليومية', icon: <BookOpenCheck className="h-5 w-5" />, active: view === 'journal', onClick: () => setView('journal') },
     {
       id: 'entry' as AppView,
       label: 'عملية',
@@ -243,7 +244,8 @@ export default function App() {
 
   const pageTitle = (() => {
     if (view === 'entry') return 'العمليات';
-    if (view === 'journal' || view === 'database') return 'اليومية';
+    if (view === 'journal') return 'اليومية';
+    if (view === 'database') return 'المخزون';
     if (reportViews.includes(view)) return 'التقارير';
     if (view === 'story') return 'حالة واتساب';
     if (view === 'guide') return 'الدليل المحاسبي';
@@ -346,7 +348,8 @@ export default function App() {
                   ? <div className="rounded-2xl border border-red-500/30 bg-red-500/10 p-6 text-center text-sm text-red-100">العمليات متوقفة حتى يكتمل احتساب التكلفة بنجاح.</div>
                   : <EntryForm />
               )}
-              {(view === 'journal' || view === 'database') && <DailyJournalView />}
+              {view === 'journal' && <DailyJournalView />}
+              {view === 'database' && <InventoryCheckView />}
               {reportViews.includes(view) && <ReportsView />}
               {view === 'more' && <MoreView isFullscreen={isFullscreen} onToggleFullscreen={toggleFullscreen} onLogOut={logOut} />}
               {view === 'story' && <StoryBuilderView />}

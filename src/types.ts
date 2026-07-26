@@ -59,6 +59,8 @@ export interface Entry {
   multiplier?: number;
   notes: string;
   invoiceNumber?: string;
+  operationNo?: string;
+  journalNo?: string;
   clientName?: string;
   clientPhone?: string;
   marketPrice?: number;
@@ -67,6 +69,7 @@ export interface Entry {
   userId: string;
   createdAt?: any;
   isSettled?: boolean;
+  inventoryCheckId?: string;
 }
 
 export type AccountingOperationKind =
@@ -224,22 +227,39 @@ export interface TransactionRule {
 export interface InventoryCheck {
   id?: string;
   accountId: string;
+  accountDbId?: string;
   date: string;
   systemWeight: number;
   actualWeight: number;
   systemCount: number;
   actualCount: number;
+  weightDiff?: number;
+  countDiff?: number;
+  status?: 'draft' | 'matched' | 'posted' | 'cancelled';
   notes: string;
   userId: string;
   createdAt?: any;
+  updatedAt?: any;
   isResolved?: boolean;
+  postedEntryId?: string;
+  postedAt?: any;
+  postedBy?: string;
 }
 
 export interface AnnualOpeningCostConfig {
   year: number;
+  /** Canonical persisted shape: user-facing EGP values. */
+  gold21PriceEgp?: number | string;
+  silverPriceEgp?: number | string;
+  accessoryOpeningCosts?: Record<string, number | string | undefined>;
+  /** Legacy persisted shape: integer minor units. Kept readable for older settings docs. */
   gold21PriceMinorPerGram?: number | string;
   silverPriceMinorPerGram?: number | string;
   accessoryUnitCostMinorByAccountId?: Record<string, number | string | undefined>;
+  accessoryOpeningCostsByAccountId?: Record<string, number | string | undefined>;
+  accessoryCosts?: Record<string, number | string | undefined>;
+  openingCosts?: Record<string, number | string | undefined>;
+  unitCosts?: Record<string, number | string | undefined>;
 }
 
 export interface Category {

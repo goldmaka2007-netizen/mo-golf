@@ -407,48 +407,12 @@ export const InventoryCheckView = React.memo(() => {
       });
       return;
 
-      const weightDiff = check.actualWeight - check.systemWeight;
-      const countDiff = check.actualCount - check.systemCount;
-      if (Math.abs(weightDiff) < 0.001 && Math.abs(countDiff) < 0.001) return;
-
-      const isGold = getIsGold(check.accountId);
-      const isSilver = getIsSilver(check.accountId);
-      
-      let debitAcc, creditAcc;
-      if (weightDiff < 0) { // Shortage (عجز)
-        creditAcc = check.accountId;
-        debitAcc = isGold ? "عجز-الذهب" : isSilver ? "عجز-الفضة" : "م ا ع";
-      } else { // Surplus (زيادة)
-        debitAcc = check.accountId;
-        creditAcc = isGold ? "زيادة-الذهب" : isSilver ? "زيادة-الفضة" : "ايرادات اخري";
-      }
-
-      await addDoc(collection(db, 'entries'), {
-        seq: 0,
-        cash: 0,
-        arabicWeight: 0,
-        tx: 'تسوية',
-        date: check.date,
-        debit: debitAcc,
-        credit: creditAcc,
-        weight: Math.abs(weightDiff),
-        count: Math.abs(countDiff),
-        userId: user!.uid,
-        createdAt: serverTimestamp(),
-        notes: `تسوية جرد آلي: ${check.notes || ''}`
-      });
-
-      if (check.id) {
-        await updateDoc(doc(db, 'inventory_checks', check.id), {
-          isResolved: true
-        });
-      }
     } catch (error) {
        handleFirestoreError(error, OperationType.CREATE, 'entries');
     } finally {
       setAdjustLoading(null);
     }
-  }, [user, getIsGold, getIsSilver, operationWritesLocked, setGlobalError, accountsDb, entries, openingCostConfig, canonicalAccounts]);
+  }, [user, operationWritesLocked, setGlobalError, accountsDb, entries, openingCostConfig, canonicalAccounts]);
 
   const exportHistory = () => {
     if (inventoryChecks.length === 0) return;
