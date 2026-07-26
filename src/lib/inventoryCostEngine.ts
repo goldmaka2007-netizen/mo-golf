@@ -299,10 +299,9 @@ interface MovementQuantity {
 
 const movementQuantity = (entry: Entry, account: ResolvedInventoryAccount): MovementQuantity => {
   if (account.kind === 'accessory') {
-    let quantity = parseScaledDecimal(entry.count, ACCESSORY_SCALE, 3, 'accessory quantity', entry, true);
-    if (quantity === 0 && isLegacyEntry(entry)) {
-      quantity = parseScaledDecimal(entry.weight, ACCESSORY_SCALE, 3, 'legacy accessory quantity', entry, true, true);
-    }
+    let quantity = isLegacyEntry(entry) ? parseScaledDecimal(entry.count, ACCESSORY_SCALE, 3, 'legacy accessory quantity', entry, true) : 0;
+    if (quantity === 0) quantity = parseScaledDecimal(entry.weight, ACCESSORY_SCALE, 3, 'accessory quantity', entry, true, true);
+    if (quantity === 0 && !isLegacyEntry(entry)) quantity = parseScaledDecimal(entry.count, ACCESSORY_SCALE, 3, 'legacy accessory quantity', entry, true);
     return { standardizedUnits: 0, physicalUnits: 0, accessoryUnits: quantity };
   }
 
@@ -851,9 +850,23 @@ const openingCosts = (
       accessory: 0,
     };
   }
+  if (quantity.accessoryUnits <= 0) {
+    return { metal: 0, workmanship: 0, accessory: 0 };
+  }
+  const accessoryOpeningCosts = config.accessoryUnitCostByYearAndAccountMinor?.[year];
+  const resolvedValue = accessoryOpeningCosts?.[account.inventoryAccountId];
+  if (resolvedValue === undefined || resolvedValue === '') {
+    console.log({
+      recalculationYear: year,
+      openingCostDocument: config,
+      accessoryOpeningCosts,
+      requestedAccountId: account.inventoryAccountId,
+      resolvedValue,
+    });
+  }
   const unitCost = parseConfigMinor(
-    config.accessoryUnitCostByYearAndAccountMinor?.[year]?.[account.inventoryAccountId],
-    `accessory opening unit cost for ${account.inventoryAccountId}`,
+    resolvedValue,
+    `accessory opening unit cost for ${account.displayName} (${account.inventoryAccountId})`,
     entry,
   );
   return {
@@ -1056,6 +1069,15 @@ export const rebuildInventoryCostTimeline = (
         if (!debitInventory) fail('missing_inventory_account_id', 'Incoming inventory accountId is missing', entry);
         const state = states[debitInventory.inventoryAccountId];
         const quantity = movementQuantity(entry, debitInventory);
+        if (classification === 'opening' && debitInventory.kind === 'accessory' && quantity.accessoryUnits === 0) {
+          const result = blankResult(entry, classification);
+          Object.assign(result, {
+            inventoryAccountId: debitInventory.inventoryAccountId,
+            destinationInventoryAccountId: debitInventory.inventoryAccountId,
+          });
+          results.push(result);
+          continue;
+        }
         let metalCost = 0;
         let workmanshipCost = 0;
         let accessoryCost = 0;

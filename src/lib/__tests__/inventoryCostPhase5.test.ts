@@ -182,6 +182,36 @@ describe('Phase 5 component WAC engine', () => {
     expect(timeline.resultsByOperationId.shortage.adjustmentLossMinor).toBe(2500);
   });
 
+  it('uses accessory opening unit cost saved by the actual accountId', () => {
+    const timeline = rebuild([
+      entry({ id: 'accessory-id-opening', seq: 1, tx: 'قيد افتتاحي', operationKind: 'opening', debit: 'ملحق أ', debitAccountId: 'accessory-a', credit: 'رأس المال', creditAccountId: 'equity', count: '2' }),
+    ], {
+      accessoryUnitCostByYearAndAccountMinor: { '2026': { 'accessory-a': 1234 } },
+    });
+
+    expect(timeline.valid).toBe(true);
+    expect(timeline.finalStates['accessory-a']).toMatchObject({
+      accessoryQuantityUnits: 2000,
+      remainingAccessoryCostMinor: 2468,
+    });
+  });
+
+  it('does not require accessory opening unit cost when opening quantity is zero', () => {
+    const timeline = rebuild([
+      entry({ id: 'zero-accessory-opening', seq: 1, tx: 'قيد افتتاحي', operationKind: 'opening', debit: 'ملحق أ', debitAccountId: 'accessory-a', credit: 'رأس المال', creditAccountId: 'equity', count: '0', weight: '0' }),
+    ], {});
+
+    expect(timeline.valid).toBe(true);
+    expect(timeline.resultsByOperationId['zero-accessory-opening']).toMatchObject({
+      incomingAccessoryQuantityUnits: 0,
+      incomingTotalCostMinor: 0,
+    });
+    expect(timeline.finalStates['accessory-a']).toMatchObject({
+      accessoryQuantityUnits: 0,
+      remainingAccessoryCostMinor: 0,
+      hasReliableCostBasis: false,
+    });
+  });
   it('reads historical accessory quantity from weight without changing the entry', () => {
     const opening = entry({
       id: 'legacy-accessory',

@@ -1,4 +1,4 @@
-const DEVELOPMENT_CACHE_EPOCH = '2026-07-24-runtime-cost-v1';
+const DEVELOPMENT_CACHE_EPOCH = '2026-07-25-opening-cost-schema-v2';
 
 // The LAN development build must never be held behind an old PWA shell.
 // This deliberately avoids IndexedDB: Firestore/Auth persistence is not

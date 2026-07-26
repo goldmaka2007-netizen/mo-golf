@@ -97,6 +97,44 @@ describe('Phase 5 recalculation coordinator', () => {
     expect(isCostReportAvailable(failed, inputRevision)).toBe(false);
   });
 
+  it('uses migrated seed accessory accountId for opening unit cost lookup', () => {
+    const openingConfig = {
+      accessoryUnitCostByYearAndAccountMinor: { '2026': { [accessoryId]: 500 } },
+    };
+    const entries = [
+      entry({ id: 'seed-accessory-opening', debit: 'حلق طبي', debitAccountId: accessoryId, weight: '0', count: '3', karat: undefined, arabicWeight: '0' }),
+    ];
+    const inputRevision = createCostInputRevision(entries, accounts, openingConfig);
+    const valid = executeCostCalculationRun({
+      generationId: 3,
+      inputRevision,
+      entries,
+      accounts,
+      openingConfig,
+    });
+
+    expect(valid.status).toBe('valid');
+    expect(valid.timeline?.finalStates[accessoryId].remainingAccessoryCostMinor).toBe(1500);
+  });
+
+  it('shows accessory account name and id when opening unit cost is missing for positive quantity', () => {
+    const entries = [
+      entry({ id: 'seed-accessory-opening', debit: 'حلق طبي', debitAccountId: accessoryId, weight: '0', count: '3', karat: undefined, arabicWeight: '0' }),
+    ];
+    const inputRevision = createCostInputRevision(entries, accounts, {});
+    const failed = executeCostCalculationRun({
+      generationId: 4,
+      inputRevision,
+      entries,
+      accounts,
+      openingConfig: {},
+    });
+
+    expect(failed.status).toBe('failed');
+    expect(failed.error?.code).toBe('missing_opening_cost');
+    expect(failed.error?.message).toContain(accounts[1].name);
+    expect(failed.error?.message).toContain(accessoryId);
+  });
   it('exposes reports only for the exact current valid input revision', () => {
     const openingConfig = {
       gold21PriceByYearMinor: { '2026': 600000 },

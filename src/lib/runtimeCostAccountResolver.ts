@@ -82,6 +82,26 @@ const inventoryMetadataMatches = (
     && normalizedKarat(actual.karat) === definition.karat;
 };
 
+export const buildRuntimeStableInventoryIdAliases = (
+  accounts: readonly Account[],
+): Map<string, string> => {
+  const aliases = new Map<string, string>();
+  for (const account of accounts) {
+    if (!account.is_inventory || !account.id) continue;
+    const stableBinding = CURRENT_DATASET_INVENTORY_BINDINGS.find(binding =>
+      binding.inventoryAccountId === account.id);
+    if (stableBinding) {
+      aliases.set(account.id, stableBinding.inventoryAccountId);
+      continue;
+    }
+    const expected = expectedInventoryByName.get(account.name);
+    if (expected && inventoryMetadataMatches(account, expected)) {
+      aliases.set(account.id, expected.stableAccountId);
+    }
+  }
+  return aliases;
+};
+
 export interface RuntimeCostAccountResolutionAudit {
   legacyAccountId: string;
   resolvedStableAccountId: string;

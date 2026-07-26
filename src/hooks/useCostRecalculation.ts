@@ -19,8 +19,8 @@ export const useCostRecalculation = () => {
     commitCostCalculation,
   } = useAppStore();
   const openingConfig = useMemo(
-    () => buildOpeningCostConfig(openingCostConfig),
-    [openingCostConfig],
+    () => buildOpeningCostConfig(openingCostConfig, accountsDb),
+    [openingCostConfig, accountsDb],
   );
   const inputRevision = useMemo(
     () => createCostInputRevision(entries, accountsDb, openingConfig),

@@ -112,7 +112,7 @@ export const InventoryLifecycleView: React.FC<Props> = ({ entries }) => {
   const [showAccessoryCharts, setShowAccessoryCharts] = useState(false);
   const [warningState, setWarningState] = useState<InventoryWarningState>(() => loadInventoryWarningState(user?.uid || 'local'));
   const filters = filtersByTab[tab];
-  const openingConfig = useMemo(() => buildOpeningCostConfig(openingCostConfig), [openingCostConfig]);
+  const openingConfig = useMemo(() => buildOpeningCostConfig(openingCostConfig, accountsDb), [openingCostConfig, accountsDb]);
 
   useEffect(() => {
     localStorage.setItem(storageKey(tab), JSON.stringify(filters));
