@@ -1,7 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import type { Account, Entry } from '../../types';
 import { belongsToMetric, getAccountTypeDetails, getMetricValue } from '../../utils/accountLogic';
-import { buildIncomeStatementReport, type IncomeStatementMetric } from '../incomeStatementReport';
+import { buildIncomeStatementExcelSheets } from '../incomeStatementExcel';
+import { buildIncomeStatementReport, type IncomeStatementDimension, type IncomeStatementMetric } from '../incomeStatementReport';
 
 const accounts: Account[] = [
   { id: 'cash', name: 'الخزنة', mainType: 'asset', subType: 'نقدية', balanceNature: 'cash', type: 'cash', userId: 'u' },
@@ -83,27 +84,111 @@ const legacyDimensionFromParent = (entries: Entry[], metric: IncomeStatementMetr
   return { revenue: { categories: revenueCats, total: totalRev }, expenses: { categories: expenseCats, total: totalExp }, net: totalRev - totalExp };
 };
 
-describe('income statement parent-regression', () => {
-  it('matches the parent UI algorithm for every shop dimension, total, net result, and period', () => {
+const legacyShape = (dimension: IncomeStatementDimension) => ({
+  revenue: {
+    categories: Object.fromEntries(Object.entries(dimension.revenue.categories).map(([name, category]) => [name, {
+      total: category.total,
+      totalWeight: category.totalWeight,
+      details: category.details.map(detail => ({ name: detail.name, val: detail.val, weight: detail.weight })),
+    }])),
+    total: dimension.revenue.total,
+  },
+  expenses: {
+    categories: Object.fromEntries(Object.entries(dimension.expenses.categories).map(([name, category]) => [name, {
+      total: category.total,
+      totalWeight: category.totalWeight,
+      details: category.details.map(detail => ({ name: detail.name, val: detail.val, weight: detail.weight })),
+    }])),
+    total: dimension.expenses.total,
+  },
+  net: dimension.net,
+});
+
+describe('income statement aggregation', () => {
+  it('preserves the non-cash ledgers and requested period boundaries', () => {
     const periodEntries = dataset.filter(item => item.date >= '2026-01-01' && item.date <= '2026-01-31');
-    const oldResult = {
-      startDate: '2026-01-01', endDate: '2026-01-31',
-      cash: legacyDimensionFromParent(periodEntries, 'cash'),
-      gold: legacyDimensionFromParent(periodEntries, 'gold'),
-      silver: legacyDimensionFromParent(periodEntries, 'silver'),
-      accs: legacyDimensionFromParent(periodEntries, 'accs'),
-    };
-    const centralResult = buildIncomeStatementReport(dataset, accounts, '2026-01-01', '2026-01-31');
-    expect(centralResult).toEqual(oldResult);
+    const report = buildIncomeStatementReport(dataset, accounts, '2026-01-01', '2026-01-31');
+
+    expect(report.startDate).toBe('2026-01-01');
+    expect(report.endDate).toBe('2026-01-31');
+    expect(legacyShape(report.gold)).toEqual(legacyDimensionFromParent(periodEntries, 'gold'));
+    expect(legacyShape(report.silver)).toEqual(legacyDimensionFromParent(periodEntries, 'silver'));
+    expect(legacyShape(report.accs)).toEqual(legacyDimensionFromParent(periodEntries, 'accs'));
   });
 
-  it('keeps the parent all-period boundaries while excluding no entries', () => {
+  it('keeps the all-period boundaries while excluding no entries', () => {
     const report = buildIncomeStatementReport(dataset, accounts);
     expect(report.startDate).toBe('2026-01-10');
     expect(report.endDate).toBe('2026-02-01');
-    expect(report.cash).toEqual(legacyDimensionFromParent(dataset, 'cash'));
-    expect(report.gold).toEqual(legacyDimensionFromParent(dataset, 'gold'));
-    expect(report.silver).toEqual(legacyDimensionFromParent(dataset, 'silver'));
-    expect(report.accs).toEqual(legacyDimensionFromParent(dataset, 'accs'));
+    expect(report.cash.net).toBe(legacyDimensionFromParent(dataset, 'cash').net);
+  });
+
+  it('calculates separate gold and silver averages and keeps accessories and other income out of weights', () => {
+    const report = buildIncomeStatementReport(dataset, accounts, '2026-01-01', '2026-01-31');
+    const sales = report.cash.revenue.categories['إيراد مبيعات تجارة'];
+    const otherIncome = report.cash.revenue.categories['إيرادات أخرى'];
+
+    expect(sales).toMatchObject({
+      total: 2130,
+      goldAmount: 1500,
+      goldWeight: 4,
+      goldAverage: 375,
+      silverAmount: 450,
+      silverWeight: 12,
+      silverAverage: 37.5,
+      accessoryCount: 2,
+    });
+    expect(report.cash.revenue).toMatchObject({
+      total: 2205,
+      goldAmount: 1500,
+      goldWeight: 4,
+      goldAverage: 375,
+      silverAmount: 450,
+      silverWeight: 12,
+      silverAverage: 37.5,
+      accessoryCount: 2,
+    });
+    expect(sales).not.toHaveProperty('average');
+    expect(sales.goldAverage).not.toBeCloseTo((sales.goldAmount + sales.silverAmount) / (sales.goldWeight + sales.silverWeight));
+    expect(otherIncome).toMatchObject({ goldWeight: 0, silverWeight: 0, accessoryCount: 0 });
+    expect(otherIncome.goldAverage).toBeNull();
+    expect(otherIncome.silverAverage).toBeNull();
+  });
+
+  it('uses operation cash for gold purchase and sale rows and calculates totals from total cash divided by total weight', () => {
+    const report = buildIncomeStatementReport([
+      entry({ id: 'gold-buy-1', debit: 'ذهب 21', credit: 'الخزنة', cash: '1000', weight: '10', arabicWeight: '10', karat: 21 }),
+      entry({ id: 'gold-buy-2', debit: 'ذهب 21', credit: 'الخزنة', cash: '1200', weight: '5', arabicWeight: '5', karat: 21 }),
+      entry({ id: 'gold-sale-1', debit: 'الخزنة', credit: 'ذهب 21', cash: '1500', weight: '4', arabicWeight: '4', karat: 21 }),
+    ], accounts);
+
+    const purchases = report.gold.revenue.categories['وزن ذهب وارد (مشتريات)'];
+    const sales = report.gold.expenses.categories['وزن ذهب صادر (مبيعات)'];
+
+    expect(purchases.details[0]).toMatchObject({ val: 15, goldAmount: 2200, goldWeight: 15 });
+    expect(purchases.details[0].goldAverage).toBeCloseTo(2200 / 15);
+    expect(purchases).toMatchObject({ total: 15, goldAmount: 2200, goldWeight: 15 });
+    expect(purchases.goldAverage).toBeCloseTo(2200 / 15);
+    expect(report.gold.revenue).toMatchObject({ total: 15, goldAmount: 2200, goldWeight: 15 });
+    expect(report.gold.revenue.goldAverage).toBeCloseTo(2200 / 15);
+
+    expect(sales.details[0]).toMatchObject({ val: 4, goldAmount: 1500, goldWeight: 4, goldAverage: 375 });
+    expect(report.gold.expenses).toMatchObject({ total: 4, goldAmount: 1500, goldWeight: 4, goldAverage: 375 });
+  });
+
+  it('exports separate cash columns for both metals and accessory count', () => {
+    const report = buildIncomeStatementReport(dataset, accounts, '2026-01-01', '2026-01-31');
+    const cashSheet = buildIncomeStatementExcelSheets(report)[0];
+    const salesTotal = cashSheet.data.find(row => row['التصنيف الرئيسي'] === 'إجمالي إيراد مبيعات تجارة');
+
+    expect(salesTotal).toMatchObject({
+      'المبلغ (ج.م)': 2130,
+      'وزن الذهب (جم عيار 21)': 4,
+      'متوسط الذهب (ج.م/جم)': 375,
+      'وزن الفضة (جم)': 12,
+      'متوسط الفضة (ج.م/جم)': 37.5,
+      'عدد الملحقات': 2,
+    });
+    expect(salesTotal).not.toHaveProperty('متوسط السعر');
   });
 });

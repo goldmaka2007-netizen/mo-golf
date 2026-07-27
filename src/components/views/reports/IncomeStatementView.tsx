@@ -15,7 +15,8 @@ import {
 import { Entry } from '../../../types';
 import { useAppStore } from '../../../store';
 import { cn } from '../../../lib/utils';
-import { buildIncomeStatementReport } from '../../../lib/incomeStatementReport';
+import { buildIncomeStatementReport, type IncomeStatementCashBreakdown, type IncomeStatementSection } from '../../../lib/incomeStatementReport';
+import { buildIncomeStatementExcelSheets } from '../../../lib/incomeStatementExcel';
 import { exportToExcel } from '../../../utils/exportUtils';
 
 export const IncomeStatementView = React.memo(({ entries }: { entries: Entry[] }) => {
@@ -45,94 +46,10 @@ export const IncomeStatementView = React.memo(({ entries }: { entries: Entry[] }
   );
 
   const handleExport = () => {
-    const unitMap = { cash: 'ج.م', gold: 'جم عربي', silver: 'جرام', accs: 'قطعة' };
-    const tabNames = { cash: 'نقدي', gold: 'ذهب', silver: 'فضة', accs: 'ملحقات' };
-    const sheets: { name: string, data: any[] }[] = [];
-
-    (['cash', 'gold', 'silver', 'accs'] as const).forEach((tab) => {
-      const data = financials[tab];
-      const rows: any[] = [];
-      const unit = unitMap[tab];
-
-      const processSection = (sectionName: string, groupData: any) => {
-        Object.entries(groupData.categories).forEach(([sub, cat]: [string, any]) => {
-          cat.details.forEach((d: any) => {
-            if (tab === 'cash') {
-              rows.push({
-                "التصنيف الرئيسي": sectionName,
-                "التصنيف الفرعي": sub,
-                "الحساب": d.name,
-                "الوزن (جم/قطعة)": d.weight || 0,
-                "متوسط السعر": d.weight > 0 ? (d.val / d.weight).toFixed(2) : "-",
-                [`القيمة (${unit})`]: d.val,
-              });
-            } else {
-              rows.push({
-                "التصنيف الرئيسي": sectionName,
-                "التصنيف الفرعي": sub,
-                "الحساب": d.name,
-                [`القيمة (${unit})`]: d.val,
-              });
-            }
-          });
-          
-          if (tab === 'cash') {
-            rows.push({
-              "التصنيف الرئيسي": `إجمالي ${sub}`,
-              "التصنيف الفرعي": "",
-              "الحساب": "",
-              "الوزن (جم/قطعة)": cat.totalWeight || 0,
-              "متوسط السعر": cat.totalWeight > 0 ? (cat.total / cat.totalWeight).toFixed(2) : "-",
-              [`القيمة (${unit})`]: cat.total,
-            });
-          } else {
-            rows.push({
-              "التصنيف الرئيسي": `إجمالي ${sub}`,
-              "التصنيف الفرعي": "",
-              "الحساب": "",
-              [`القيمة (${unit})`]: cat.total,
-            });
-          }
-          rows.push({ "التصنيف الرئيسي": "" }); // Empty row spacer
-        });
-        
-        let sectionTotalRow: any = {
-          "التصنيف الرئيسي": `إجمالي ${sectionName}`,
-          "التصنيف الفرعي": "",
-          "الحساب": "",
-        };
-        
-        if (tab === 'cash') {
-          sectionTotalRow["الوزن (جم/قطعة)"] = "";
-          sectionTotalRow["متوسط السعر"] = "";
-        }
-        sectionTotalRow[`القيمة (${unit})`] = groupData.total;
-
-        rows.push(sectionTotalRow);
-        rows.push({ "التصنيف الرئيسي": "" }); // Empty row spacer
-      };
-
-      processSection('الإيرادات', data.revenue);
-      processSection('المصروفات', data.expenses);
-      
-      let netRow: any = {
-        "التصنيف الرئيسي": "صافي الربح / الخسارة",
-        "التصنيف الفرعي": "",
-        "الحساب": "",
-      };
-      
-      if (tab === 'cash') {
-        netRow["الوزن (جم/قطعة)"] = "";
-        netRow["متوسط السعر"] = "";
-      }
-      netRow[`القيمة (${unit})`] = data.net;
-
-      rows.push(netRow);
-
-      sheets.push({ name: `قائمة الدخل - ${tabNames[tab]}`, data: rows });
-    });
-
-    exportToExcel(sheets, `قائمة_الدخل_${selectedMonth === 'all' ? 'الكل' : selectedMonth}`);
+    exportToExcel(
+      buildIncomeStatementExcelSheets(financials),
+      `قائمة_الدخل_${selectedMonth === 'all' ? 'الكل' : selectedMonth}`,
+    );
   };
 
   const renderLedger = () => {
@@ -141,117 +58,155 @@ export const IncomeStatementView = React.memo(({ entries }: { entries: Entry[] }
     const unit = unitMap[activeTab];
     const colorClassMap = { cash: 'text-[#c9a84c]', gold: 'text-[#c9a84c]', silver: 'text-[#6a8a9e]', accs: 'text-[#9e8a6a]' };
     const colorClass = colorClassMap[activeTab];
-    const bgGradientMap = { 
-      cash: 'from-[#1a1e2a] to-[#080a0f] border-[#c9a84c55]', 
-      gold: 'from-[#1a1e2a] to-[#080a0f] border-[#c9a84c55]', 
+    const bgGradientMap = {
+      cash: 'from-[#1a1e2a] to-[#080a0f] border-[#c9a84c55]',
+      gold: 'from-[#1a1e2a] to-[#080a0f] border-[#c9a84c55]',
       silver: 'from-[#1a1e2a] to-[#080a0f] border-[#6a8a9e55]',
       accs: 'from-[#1a1e2a] to-[#080a0f] border-[#9e8a6a55]'
     };
     const bgGradient = bgGradientMap[activeTab];
+    const formatWeight = (value: number) => Number.isFinite(value) && value > 0 ? value.toFixed(2) : '—';
+    const formatAverage = (value: number | null) => value !== null && Number.isFinite(value) ? value.toLocaleString(undefined, { maximumFractionDigits: 2 }) : '—';
+    const formatCount = (value: number) => Number.isFinite(value) && value > 0 ? value.toLocaleString(undefined, { maximumFractionDigits: 3 }) : '—';
+    const formatCash = (value: number) => Number.isFinite(value) ? value.toLocaleString(undefined, { maximumFractionDigits: 2 }) : '—';
 
-    const renderSection = (title: string, groupData: any, icon: any, colClass: string) => (
+    const cashCells = (metrics: IncomeStatementCashBreakdown, amount: number, strong = false) => (
+      <>
+        <span className={cn('text-left font-mono text-[#ddd8cc]', strong && 'font-bold')}>{amount.toLocaleString(undefined, { maximumFractionDigits: 2 })}</span>
+        <span className="text-center font-mono">{formatWeight(metrics.goldWeight)}</span>
+        <span className="text-center font-mono">{formatAverage(metrics.goldAverage)}</span>
+        <span className="text-center font-mono">{formatWeight(metrics.silverWeight)}</span>
+        <span className="text-center font-mono">{formatAverage(metrics.silverAverage)}</span>
+        <span className="text-center font-mono">{formatCount(metrics.accessoryCount)}</span>
+      </>
+    );
+
+    const renderSection = (title: string, groupData: IncomeStatementSection, icon: React.ReactNode, colClass: string) => (
       <div className="space-y-4">
-        <div className={cn("flex items-center gap-2 border-b border-[#1a1e2a] pb-2", colClass)}>
+        <div className={cn('flex items-center gap-2 border-b border-[#1a1e2a] pb-2', colClass)}>
           {icon}
           <h4 className="text-lg font-bold">{title}</h4>
         </div>
-        
-        {activeTab === 'cash' && (
-          <div className="flex text-[10px] sm:text-xs font-bold text-[#5a5548] px-2 mb-2 uppercase tracking-widest pl-4">
-            <div className="flex-1">البيان</div>
-            <div className="w-16 sm:w-20 text-center">الوزن</div>
-            <div className="w-16 sm:w-20 text-center">المتوسط</div>
-            <div className="w-20 sm:w-28 text-left">المبلغ</div>
+
+        {activeTab === 'cash' ? (
+          <div className="overflow-x-auto">
+            <div className="min-w-[920px] space-y-4">
+              <div className="grid grid-cols-[minmax(220px,1fr)_120px_100px_110px_100px_110px_100px] gap-2 px-2 text-[11px] font-bold text-[#5a5548]">
+                <span>البيان</span>
+                <span className="text-left">المبلغ</span>
+                <span className="text-center">وزن الذهب</span>
+                <span className="text-center">متوسط الذهب</span>
+                <span className="text-center">وزن الفضة</span>
+                <span className="text-center">متوسط الفضة</span>
+                <span className="text-center">عدد الملحقات</span>
+              </div>
+              {Object.entries(groupData.categories).map(([catName, catData]) => (
+                <div key={catName} className="space-y-2">
+                  <div className={cn('grid grid-cols-[minmax(220px,1fr)_120px_100px_110px_100px_110px_100px] items-center gap-2 rounded-xl bg-[#1a1e2a]/30 p-2 text-sm font-bold', colClass)}>
+                    <span className="text-[#ddd8cc]">{catName}</span>
+                    {cashCells(catData, catData.total, true)}
+                  </div>
+                  <div className="space-y-1 border-r border-[#1a1e2a] pr-4">
+                    {catData.details.map((item, idx) => (
+                      <div key={idx} className="grid grid-cols-[minmax(204px,1fr)_120px_100px_110px_100px_110px_100px] items-center gap-2 rounded-lg p-1.5 text-xs text-[#5a5548] transition-colors hover:bg-[#1a1e2a]/50">
+                        <span className="font-bold">{item.name}</span>
+                        {cashCells(item, item.val)}
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              ))}
+              {Object.keys(groupData.categories).length === 0 && <div className="py-4 text-center text-sm text-[#5a5548]">لا توجد حركات في هذا القسم</div>}
+              <div className={cn('grid grid-cols-[minmax(220px,1fr)_120px_100px_110px_100px_110px_100px] items-center gap-2 border-t border-[#c9a84c33] px-2 pt-3 text-sm font-bold', colClass)}>
+                <span>إجمالي {title.split(' ')[0]}</span>
+                {cashCells(groupData, groupData.total, true)}
+              </div>
+              <p className="px-2 text-[10px] text-[#5a5548]">أوزان الذهب محسوبة كجرام مكافئ عيار 21، والفضة بالجرام الفعلي. الإيرادات الأخرى تظهر في المبلغ فقط.</p>
+            </div>
+          </div>
+        ) : activeTab === 'gold' ? (
+          <div className="space-y-4">
+            <div className="grid grid-cols-[minmax(0,1.35fr)_minmax(0,.8fr)_minmax(0,1fr)_minmax(0,1fr)] gap-1 px-1 text-[10px] font-bold text-[#5a5548] sm:gap-2 sm:px-2 sm:text-xs">
+              <span>العملية</span>
+              <span className="text-center">الوزن</span>
+              <span className="text-center">النقدية</span>
+              <span className="text-center">سعر الجرام</span>
+            </div>
+            {Object.entries(groupData.categories).map(([catName, catData]) => (
+              <div key={catName} className="space-y-2">
+                <div className={cn('grid grid-cols-[minmax(0,1.35fr)_minmax(0,.8fr)_minmax(0,1fr)_minmax(0,1fr)] items-center gap-1 rounded-xl bg-[#1a1e2a]/30 p-2 text-[11px] font-bold sm:gap-2 sm:text-sm', colClass)}>
+                  <span className="min-w-0 break-words text-[#ddd8cc]">{catName}</span>
+                  <span className="text-center font-mono">{formatWeight(catData.total)} <span className="text-[9px] sm:text-[10px]">جم عربي</span></span>
+                  <span className="text-center font-mono">{formatCash(catData.goldAmount)} <span className="text-[9px] sm:text-[10px]">ج.م</span></span>
+                  <span className="text-center font-mono">{formatAverage(catData.goldAverage)} <span className="text-[9px] sm:text-[10px]">ج.م/جم</span></span>
+                </div>
+                <div className="space-y-1 border-r border-[#1a1e2a] pr-2 sm:pr-4">
+                  {catData.details.map((item, idx) => (
+                    <div key={idx} className="grid grid-cols-[minmax(0,1.35fr)_minmax(0,.8fr)_minmax(0,1fr)_minmax(0,1fr)] items-center gap-1 rounded-lg p-1.5 text-[10px] text-[#5a5548] transition-colors hover:bg-[#1a1e2a]/50 sm:gap-2 sm:text-xs">
+                      <span className="min-w-0 break-words font-bold">{item.name}</span>
+                      <span className="text-center font-mono">{formatWeight(item.val)} <span className="text-[8px] sm:text-[10px]">جم عربي</span></span>
+                      <span className="text-center font-mono">{formatCash(item.goldAmount)} <span className="text-[8px] sm:text-[10px]">ج.م</span></span>
+                      <span className="text-center font-mono">{formatAverage(item.goldAverage)} <span className="text-[8px] sm:text-[10px]">ج.م/جم</span></span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            ))}
+            {Object.keys(groupData.categories).length === 0 && <div className="py-4 text-center text-sm text-[#5a5548]">لا توجد حركات في هذا القسم</div>}
+            <div className={cn('grid grid-cols-[minmax(0,1.35fr)_minmax(0,.8fr)_minmax(0,1fr)_minmax(0,1fr)] items-center gap-1 border-t border-[#c9a84c33] px-1 pt-3 text-[11px] font-bold sm:gap-2 sm:px-2 sm:text-sm', colClass)}>
+              <span className="min-w-0 break-words">إجمالي {title.split(' ')[0]}</span>
+              <span className="text-center font-mono">{formatWeight(groupData.total)} <span className="text-[9px] sm:text-[10px]">جم عربي</span></span>
+              <span className="text-center font-mono">{formatCash(groupData.goldAmount)} <span className="text-[9px] sm:text-[10px]">ج.م</span></span>
+              <span className="text-center font-mono">{formatAverage(groupData.goldAverage)} <span className="text-[9px] sm:text-[10px]">ج.م/جم</span></span>
+            </div>
+          </div>
+        ) : (
+          <div className="space-y-4">
+            {Object.entries(groupData.categories).map(([catName, catData]) => (
+              <div key={catName} className="space-y-2">
+                <div className={cn('flex items-center rounded-xl bg-[#1a1e2a]/30 p-2 text-sm font-bold', colClass)}>
+                  <span className="flex-1 text-[#ddd8cc]">{catName}</span>
+                  <span>{catData.total.toLocaleString(undefined, { minimumFractionDigits: 2 })} {unit}</span>
+                </div>
+                <div className="space-y-1 border-r border-[#1a1e2a] pr-4">
+                  {catData.details.map((item, idx) => (
+                    <div key={idx} className="flex items-center rounded-lg p-1.5 text-xs text-[#5a5548] transition-colors hover:bg-[#1a1e2a]/50">
+                      <span className="flex-1 font-bold">{item.name}</span>
+                      <span className="font-mono">{item.val.toLocaleString(undefined, { minimumFractionDigits: 2 })} {unit}</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            ))}
+            {Object.keys(groupData.categories).length === 0 && <div className="py-4 text-center text-sm text-[#5a5548]">لا توجد حركات في هذا القسم</div>}
+            <div className={cn('flex items-center border-t border-[#c9a84c33] pt-3 text-sm font-bold', colClass)}>
+              <span className="flex-1">إجمالي {title.split(' ')[0]}</span>
+              <span className="font-mono">{groupData.total.toLocaleString(undefined, { minimumFractionDigits: 2 })} {unit}</span>
+            </div>
           </div>
         )}
-
-        <div className="space-y-4">
-          {Object.entries(groupData.categories).map(([catName, catData]: any) => (
-            <div key={catName} className="space-y-2">
-              <div className={cn("flex items-center text-sm sm:text-base font-bold bg-[#1a1e2a]/30 p-2 rounded-xl", colClass)}>
-                <span className="flex-1 text-[#ddd8cc]">{catName}</span>
-                {activeTab === 'cash' ? (
-                  <>
-                    <span className="w-16 sm:w-20 text-center text-xs font-mono text-[#8a8578]">{catData.totalWeight > 0 ? catData.totalWeight.toFixed(2) : '-'}</span>
-                    <span className="w-16 sm:w-20 text-center text-xs font-mono text-[#8a8578]">{catData.totalWeight > 0 ? (catData.total / catData.totalWeight).toFixed(0) : '-'}</span>
-                    <span className="w-20 sm:w-28 text-left">{catData.total.toLocaleString(undefined, {minimumFractionDigits: 0})} {unit}</span>
-                  </>
-                ) : (
-                  <span>{catData.total.toLocaleString(undefined, {minimumFractionDigits: 2})} {unit}</span>
-                )}
-              </div>
-              <div className="pr-4 border-r border-[#1a1e2a] space-y-1">
-                {catData.details.map((item: any, idx: number) => (
-                  <div key={idx} className="flex items-center text-xs sm:text-sm text-[#5a5548] hover:bg-[#1a1e2a]/50 p-1.5 rounded-lg transition-colors">
-                    <span className="flex-1 font-bold">{item.name}</span>
-                    {activeTab === 'cash' ? (
-                      <>
-                        <span className="w-16 sm:w-20 text-center font-mono opacity-80">{item.weight > 0 ? item.weight.toFixed(2) : '-'}</span>
-                        <span className="w-16 sm:w-20 text-center font-mono opacity-80">{item.weight > 0 ? (item.val / item.weight).toFixed(0) : '-'}</span>
-                        <span className="w-20 sm:w-28 text-left font-mono font-bold text-[#ddd8cc]">
-                          {item.val.toLocaleString(undefined, {minimumFractionDigits: 0})}
-                        </span>
-                      </>
-                    ) : (
-                      <span className="font-mono">{item.val.toLocaleString(undefined, {minimumFractionDigits: 2})} {unit}</span>
-                    )}
-                  </div>
-                ))}
-              </div>
-            </div>
-          ))}
-          {Object.keys(groupData.categories).length === 0 && (
-            <div className="text-center py-4 text-[#5a5548] text-sm">لا توجد حركات في هذا القسم مخصصة لل{activeTab === 'cash' ? 'نقدية' : (activeTab === 'gold' ? 'ذهب' : 'فضة')}</div>
-          )}
-          <div className={cn("pt-3 mt-2 border-t border-[#c9a84c33] flex items-center text-sm sm:text-lg font-bold", colClass)}>
-            <span className="flex-1">إجمالي {title.split(' ')[0]}</span>
-            {activeTab === 'cash' ? (
-              (() => {
-                const totalCatsWeight = Object.values(groupData.categories).reduce((sum: number, cat: any) => sum + (cat.totalWeight || 0), 0) as number;
-                return (
-                  <>
-                    <span className="w-16 sm:w-20 text-center text-xs sm:text-sm font-mono opacity-80">
-                      {totalCatsWeight > 0 ? totalCatsWeight.toFixed(2) : '-'}
-                    </span>
-                    <span className="w-16 sm:w-20 text-center text-xs sm:text-sm font-mono opacity-80">
-                      {totalCatsWeight > 0 ? (groupData.total / totalCatsWeight).toFixed(0) : '-'}
-                    </span>
-                    <span className="w-20 sm:w-28 text-left font-mono">{groupData.total.toLocaleString(undefined, {minimumFractionDigits: 0})} {unit}</span>
-                  </>
-                );
-              })()
-            ) : (
-              <span className="font-mono">{groupData.total.toLocaleString(undefined, {minimumFractionDigits: 2})} {unit}</span>
-            )}
-          </div>
-        </div>
       </div>
     );
 
     return (
-      <motion.div 
+      <motion.div
         key={activeTab}
         initial={{ opacity: 0, y: 10 }}
         animate={{ opacity: 1, y: 0 }}
         exit={{ opacity: 0, y: -10 }}
         transition={{ duration: 0.2 }}
-        className="bg-[#0e1018] border border-[#1a1e2a] rounded-2xl p-6 space-y-8 shadow-xl"
+        className="space-y-8 rounded-2xl border border-[#1a1e2a] bg-[#0e1018] p-4 shadow-xl sm:p-6"
       >
-        {renderSection("الإيرادات (الداخل الزائد)", data.revenue, <ArrowUpRight className="w-5 h-5" />, "text-[#6a9e6a]")}
-        {renderSection("المصروفات (الخارج المنصرف)", data.expenses, <ArrowDownLeft className="w-5 h-5" />, "text-[#9e6a6a]")}
+        {renderSection('الإيرادات (الداخل الزائد)', data.revenue, <ArrowUpRight className="h-5 w-5" />, 'text-[#6a9e6a]')}
+        {renderSection('المصروفات (الخارج المنصرف)', data.expenses, <ArrowDownLeft className="h-5 w-5" />, 'text-[#9e6a6a]')}
 
-        <div className={cn("bg-gradient-to-br border p-5 rounded-2xl flex justify-between items-center shadow-xl", bgGradient)}>
+        <div className={cn('flex items-center justify-between rounded-2xl border bg-gradient-to-br p-5 shadow-xl', bgGradient)}>
           <div className="flex flex-col">
-            <span className={cn("text-base md:text-lg font-bold uppercase tracking-wider", colorClass)}>صافي رصيد الدخل ({activeTab === 'cash' ? 'نقدي' : 'أوزان'})</span>
+            <span className={cn('text-base font-bold uppercase tracking-wider md:text-lg', colorClass)}>صافي رصيد الدخل ({activeTab === 'cash' ? 'نقدي' : 'أوزان'})</span>
             <span className="text-sm text-[#5a5548]">للفترة المحددة بناءً على الحركات</span>
-            {activeTab === 'cash' && (
-              <span className="text-[10px] text-blue-400 mt-1 max-w-sm">
-                ملاحظة: هذا الصافي يمثل صافي التدفقات النقدية التشغيلية (الأساس النقدي). تكلفة البضاعة المباعة (COGS) الفعلية تتطلب حساب متوسط تكلفة المخزون.
-              </span>
-            )}
           </div>
-          <span className={cn("text-4xl md:text-5xl font-bold font-mono", data.net >= 0 ? colorClass : "text-[#9e6a6a]")}>
-            {data.net.toLocaleString(undefined, {minimumFractionDigits: activeTab === 'cash' ? 0 : 2, maximumFractionDigits: 2})} {unit}
+          <span className={cn('font-mono text-3xl font-bold md:text-5xl', data.net >= 0 ? colorClass : 'text-[#9e6a6a]')}>
+            {data.net.toLocaleString(undefined, { minimumFractionDigits: activeTab === 'cash' ? 0 : 2, maximumFractionDigits: 2 })} {unit}
           </span>
         </div>
       </motion.div>
