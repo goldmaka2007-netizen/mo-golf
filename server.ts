@@ -1,8 +1,6 @@
 import express from "express";
 import { createServer as createViteServer } from "vite";
 import path from "path";
-import AdmZip from "adm-zip";
-import fs from "fs";
 
 async function startServer() {
   const app = express();
@@ -21,46 +19,6 @@ async function startServer() {
       next();
     });
   }
-
-  // API endpoint to export code. Disabled by default because it exposes source files.
-  app.get("/api/export-code", (req, res) => {
-    const exportEnabled = process.env.ENABLE_CODE_EXPORT === "true";
-    const exportToken = process.env.EXPORT_CODE_TOKEN;
-    const providedToken = req.get("x-export-code-token");
-
-    if (!exportEnabled || !exportToken || providedToken !== exportToken) {
-      return res.status(403).json({ error: "Code export is disabled or unauthorized" });
-    }
-
-    try {
-      const zip = new AdmZip();
-      const rootDir = process.cwd();
-      
-      // Add files and folders excluding node_modules and dist
-      const entries = fs.readdirSync(rootDir);
-      entries.forEach(entry => {
-        if (entry === 'node_modules' || entry === 'dist' || entry === '.git' || entry.startsWith('.')) {
-          return;
-        }
-        
-        const fullPath = path.join(rootDir, entry);
-        if (fs.lstatSync(fullPath).isDirectory()) {
-          zip.addLocalFolder(fullPath, entry);
-        } else {
-          zip.addLocalFile(fullPath);
-        }
-      });
-
-      const zipBuffer = zip.toBuffer();
-      
-      res.set('Content-Type', 'application/zip');
-      res.set('Content-Disposition', 'attachment; filename=gold-app-source.zip');
-      res.send(zipBuffer);
-    } catch (error) {
-      console.error("Export error:", error);
-      res.status(500).json({ error: "Failed to export code" });
-    }
-  });
 
   if (process.env.NODE_ENV !== "production") {
     const vite = await createViteServer({

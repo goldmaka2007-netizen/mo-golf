@@ -9,12 +9,10 @@ import {
   AlertTriangle,
   Loader2,
   CheckCircle2,
-  Info,
   BookOpen,
   LayoutGrid,
   Save,
   FilePlus,
-  Code
 } from 'lucide-react';
 import { 
   collection, 
@@ -338,31 +336,6 @@ export const SettingsView = React.memo(() => {
       setGlobalError("فشل في ترقيم القيود القديمة.");
     } finally {
       setIsImporting(false);
-    }
-  };
-
-  const [isExportingCode, setIsExportingCode] = useState(false);
-
-  const handleExportCode = async () => {
-    setIsExportingCode(true);
-    try {
-      const response = await fetch('/api/export-code');
-      if (!response.ok) throw new Error('Export failed');
-      
-      const blob = await response.blob();
-      const url = window.URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = url;
-      a.download = `gold-app-source-${new Date().toISOString().split('T')[0]}.zip`;
-      document.body.appendChild(a);
-      a.click();
-      window.URL.revokeObjectURL(url);
-      document.body.removeChild(a);
-    } catch (error) {
-      console.error("Export Code Error:", error);
-      alert("فشل تصدير الكود. تأكد من اتصالك بالإنترنت.");
-    } finally {
-      setIsExportingCode(false);
     }
   };
 
@@ -734,34 +707,6 @@ export const SettingsView = React.memo(() => {
                   </button>
                 </div>
                 <div className="text-[9px] text-[#5a5548] italic">* عند استبدال الملف في iCloud، اختر "Keep Both" لملف جديد، أو "Replace" لتحديث الملف الحالي.</div>
-              </div>
-
-              <div className="pb-6 border-b border-[#1a1e2a] space-y-4">
-                <div>
-                  <div className="text-sm font-bold text-[#ddd8cc]">تصدير الكود البرمجي (ZIP)</div>
-                  <div className="text-[10px] text-[#5a5548]">تحميل نسخة كاملة من كود الأبليكشن بصيغة ZIP</div>
-                </div>
-                <button 
-                  onClick={handleExportCode}
-                  disabled={isExportingCode}
-                  className="w-full py-4 bg-[#1a1e2a] text-[#ddd8cc] rounded-2xl hover:bg-[#1a1e2a]/80 transition-all text-sm font-bold border border-[#1a1e2a] flex items-center justify-center gap-3 active:scale-95"
-                >
-                  {isExportingCode ? (
-                    <Loader2 className="w-5 h-5 animate-spin" />
-                  ) : (
-                    <Code className="w-5 h-5 text-[#c9a84c]" />
-                  )}
-                  {isExportingCode ? 'جاري تجهيز الملف...' : 'تحميل كود الأبليكشن كاملاً'}
-                </button>
-                <div className="p-3 bg-blue-500/05 border border-blue-500/20 rounded-xl space-y-2">
-                  <div className="flex items-center gap-2 text-[#6a8a9e] text-[10px] font-bold">
-                    <Info className="w-3 h-3" />
-                    <span>للعلم: يمكنك دائماً تحميل الكود من واجهة AI Studio</span>
-                  </div>
-                  <p className="text-[9px] text-[#5a5548] leading-relaxed pr-5">
-                    اضغط على أيقونة الإعدادات (الترس ⚙ف) في أعلى يمين شاشة AI Studio، ثم اختر "Download as ZIP" للحصول على النسخة الأصلية دائماً.
-                  </p>
-                </div>
               </div>
 
               <div className="flex items-center justify-between pt-4">
