@@ -12,8 +12,9 @@ import { FinalReportView } from './reports/FinalReportView';
 import { ScrapAnalysisView } from './reports/ScrapAnalysisView';
 import { MonthlyReportView } from './reports/MonthlyReportView';
 import { Phase5CostReportView } from './reports/Phase5CostReportView';
+import { FinancialStatementsView } from './reports/FinancialStatementsView';
 
-type ReportId = 'ledger' | 'trial' | 'income' | 'equity' | 'balance' | 'inventory' | 'lifecycle' | 'profit-analysis' | 'advanced-analytics' | 'final' | 'monthly' | 'scrap';
+type ReportId = 'ledger' | 'trial' | 'income' | 'equity' | 'balance' | 'inventory' | 'lifecycle' | 'profit-analysis' | 'advanced-analytics' | 'final' | 'monthly' | 'scrap' | 'financial-statements';
 const reports: { id: ReportId; label: string; icon: React.ReactNode }[] = [
   { id: 'ledger', label: 'دفتر الأستاذ', icon: <Book /> },
   { id: 'trial', label: 'ميزان المراجعة', icon: <BookOpen /> },
@@ -27,6 +28,7 @@ const reports: { id: ReportId; label: string; icon: React.ReactNode }[] = [
   { id: 'monthly', label: 'التقرير الشهري', icon: <TrendingUp /> },
   { id: 'scrap', label: 'تحليل الكسر', icon: <TrendingUp /> },
   { id: 'final', label: 'التقرير النهائي', icon: <BarChart3 /> },
+  { id: 'financial-statements', label: 'القوائم المالية الشاملة', icon: <Briefcase /> },
 ];
 
 export const ReportsView = React.memo(() => {
@@ -80,5 +82,6 @@ export const ReportsView = React.memo(() => {
     {selected === 'monthly' && <MonthlyReportView entries={entries} onNavigate={target => open(target)} />}
     {selected === 'scrap' && <ScrapAnalysisView entries={filteredEntries} allEntries={entries} />}
     {selected === 'final' && <FinalReportView entries={filteredEntries} balanceEntries={balanceEntries} />}
+    {selected === 'financial-statements' && <FinancialStatementsView incomeEntries={filteredEntries} balanceEntries={balanceEntries} />}
   </section>;
 });

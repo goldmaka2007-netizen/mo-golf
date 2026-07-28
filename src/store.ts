@@ -71,8 +71,8 @@ interface AppState {
   printEntry: Entry | null;
   setPrintEntry: (entry: Entry | null) => void;
 
-  reportsTab: 'ledger' | 'trial' | 'income' | 'equity' | 'balance' | 'inventory' | 'final' | 'scrap' | 'monthly' | 'lifecycle' | 'profit-analysis' | 'advanced-analytics';
-  setReportsTab: (tab: 'ledger' | 'trial' | 'income' | 'equity' | 'balance' | 'inventory' | 'final' | 'scrap' | 'monthly' | 'lifecycle' | 'profit-analysis' | 'advanced-analytics') => void;
+  reportsTab: 'ledger' | 'trial' | 'income' | 'equity' | 'balance' | 'inventory' | 'final' | 'scrap' | 'monthly' | 'lifecycle' | 'profit-analysis' | 'advanced-analytics' | 'financial-statements';
+  setReportsTab: (tab: 'ledger' | 'trial' | 'income' | 'equity' | 'balance' | 'inventory' | 'final' | 'scrap' | 'monthly' | 'lifecycle' | 'profit-analysis' | 'advanced-analytics' | 'financial-statements') => void;
 
   globalError: string | null;
   setGlobalError: (error: string | null) => void;
