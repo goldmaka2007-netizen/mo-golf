@@ -1,6 +1,6 @@
 ﻿import React from 'react';
-import { HomeView } from './HomeView';
+import { DashboardView } from './DashboardView';
 
 export const MainDashboard = React.memo(({ refreshData }: { refreshData: () => void }) => {
-  return <HomeView refreshData={refreshData} />;
+  return <DashboardView refreshData={refreshData} />;
 });
