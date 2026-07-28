@@ -1,7 +1,6 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { Calendar, CheckCircle2, ChevronLeft, ChevronRight, ClipboardPaste, Database, Download, PlusCircle, Scale, TrendingUp, Wallet } from 'lucide-react';
 import { format } from 'date-fns';
-import * as XLSX from 'xlsx-js-style';
 import { AccountingLeg } from '../../lib/canonicalAccounting';
 import { buildDailyJournalReport, DailyJournalDiagnosticGroup, DailyJournalDimension } from '../../lib/dailyJournalReport';
 import { cn } from '../../lib/utils';
@@ -17,6 +16,15 @@ const dimensions: { id: DailyJournalDimension; title: string; unit: string; icon
 const entryKey = (entry: Entry) => entry.id || String(entry.seq);
 const unique = (items: string[]) => [...new Set(items)].filter(Boolean);
 const amount = (value: number, dimension: DailyJournalDimension) => value.toLocaleString(undefined, dimension === 'cash' || dimension === 'quantity' ? { maximumFractionDigits: 0 } : { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+export type DailyJournalExportRow = Record<string, string | number | undefined>;
+
+export const createDailyJournalWorkbook = async (summary: DailyJournalExportRow[], operations: DailyJournalExportRow[]) => {
+  const XLSX = await import('xlsx');
+  const workbook = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(workbook, XLSX.utils.json_to_sheet(summary), 'Journal Summary');
+  XLSX.utils.book_append_sheet(workbook, XLSX.utils.json_to_sheet(operations), 'Operations');
+  return { XLSX, workbook };
+};
 
 export const DailyJournalView = React.memo(() => {
   const { entries, setEditingEntry, accountsDb, setView } = useAppStore();
@@ -53,15 +61,13 @@ export const DailyJournalView = React.memo(() => {
     setEditingEntry({ date: targetDate });
     setView('entry');
   };
-  const exportToExcel = () => {
+  const exportToExcel = async () => {
     const summary = dimensions.map(meta => {
       const data = report.dimensions[meta.id];
       return { dimension: meta.title, openingDebit: data.openingDebit, openingCredit: data.openingCredit, periodDebit: data.periodDebit, periodCredit: data.periodCredit, closingDebit: data.closingDebit, closingCredit: data.closingCredit };
     });
     const operations = rawEntries.map(entry => ({ date: entry.date, operation: entry.invoiceNumber || entry.seq, tx: entry.tx, debit: entry.debit, credit: entry.credit, cash: entry.cash, weight: entry.weight, count: entry.count, notes: entry.notes }));
-    const workbook = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(workbook, XLSX.utils.json_to_sheet(summary), 'Journal Summary');
-    XLSX.utils.book_append_sheet(workbook, XLSX.utils.json_to_sheet(operations), 'Operations');
+    const { XLSX, workbook } = await createDailyJournalWorkbook(summary, operations);
     XLSX.writeFile(workbook, `Journal_${selectedDate}.xlsx`);
   };
 

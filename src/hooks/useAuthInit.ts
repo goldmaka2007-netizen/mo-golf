@@ -47,7 +47,6 @@ export const useAuthInit = () => {
     // Main Auth Listener
     const unsubscribe = onAuthStateChanged(auth, async (user) => {
       if (!isMounted) return;
-      console.log("[Auth] State changed handler:", user ? "authenticated" : "signed-out");
       await finish(user);
     });
 
@@ -62,7 +61,6 @@ export const useAuthInit = () => {
     setIsSigningIn(true);
 
     try {
-      console.log("[Auth] Attempting email/password sign in...");
       await signIn(email, password);
     } catch (e: any) {
       console.error('[Auth] Sign In Error:', e.message);

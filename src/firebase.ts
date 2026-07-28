@@ -39,9 +39,6 @@ export { OperationType };
 
 const app = initializeApp(firebaseConfig);
 
-console.info(`[Firebase] projectId: ${firebaseProjectId}`);
-console.info(`[Firebase] Firestore databaseId: ${firestoreDatabaseId}`);
-
 // Stable Auth for PWA - Priority order: IndexedDB -> LocalStorage -> Session
 export const auth = initializeAuth(app, {
   persistence: [
