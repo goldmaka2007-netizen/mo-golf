@@ -28,10 +28,30 @@ export const isDynamicImportFailure = (value: unknown): boolean => {
   return chunkLoadPatterns.some(pattern => pattern.test(message));
 };
 
+const clearApplicationCaches = async (): Promise<void> => {
+  if (typeof caches === 'undefined') return;
+  const cacheNames = await caches.keys();
+  await Promise.all(cacheNames.map(cacheName => caches.delete(cacheName)));
+};
+
+const unregisterServiceWorkers = async (): Promise<void> => {
+  if (typeof navigator === 'undefined' || !('serviceWorker' in navigator)) return;
+  const registrations = await navigator.serviceWorker.getRegistrations();
+  await Promise.all(registrations.map(registration => registration.unregister()));
+};
+
+const recoverAndReload = async (): Promise<void> => {
+  await Promise.allSettled([
+    clearApplicationCaches(),
+    unregisterServiceWorkers(),
+  ]);
+  window.location.reload();
+};
+
 export const reloadOnceForDynamicImportFailure = (value: unknown): boolean => {
   if (!isDynamicImportFailure(value) || typeof window === 'undefined') return false;
   if (sessionStorage.getItem(CHUNK_RELOAD_KEY)) return false;
   sessionStorage.setItem(CHUNK_RELOAD_KEY, '1');
-  window.location.reload();
+  void recoverAndReload();
   return true;
 };

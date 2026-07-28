@@ -24,15 +24,15 @@ if (import.meta.env.DEV && typeof window !== 'undefined') {
 
 // Recover once when a deployed build no longer contains an old hashed chunk.
 window.addEventListener('vite:preloadError', event => {
-  reloadOnceForDynamicImportFailure(event);
+  if (reloadOnceForDynamicImportFailure(event)) event.preventDefault();
 });
 
 window.addEventListener('error', event => {
-  reloadOnceForDynamicImportFailure(event);
+  if (reloadOnceForDynamicImportFailure(event)) event.preventDefault();
 });
 
 window.addEventListener('unhandledrejection', event => {
-  reloadOnceForDynamicImportFailure(event.reason);
+  if (reloadOnceForDynamicImportFailure(event.reason)) event.preventDefault();
 });
 
 import {createRoot} from 'react-dom/client';
