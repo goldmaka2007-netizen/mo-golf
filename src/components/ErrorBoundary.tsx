@@ -1,5 +1,6 @@
 import React from 'react';
 import { AlertCircle } from 'lucide-react';
+import { reloadOnceForDynamicImportFailure } from '../lib/chunkLoadRecovery';
 
 interface ErrorBoundaryProps {
   children: React.ReactNode;
@@ -19,6 +20,10 @@ export class ErrorBoundary extends React.Component<ErrorBoundaryProps, ErrorBoun
 
   static getDerivedStateFromError(error: any): ErrorBoundaryState {
     return { hasError: true, error };
+  }
+
+  componentDidCatch(error: any): void {
+    reloadOnceForDynamicImportFailure(error);
   }
 
   render() {

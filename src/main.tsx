@@ -1,3 +1,5 @@
+import { reloadOnceForDynamicImportFailure } from './lib/chunkLoadRecovery';
+
 const DEVELOPMENT_CACHE_EPOCH = '2026-07-25-opening-cost-schema-v2';
 
 // The LAN development build must never be held behind an old PWA shell.
@@ -20,23 +22,17 @@ if (import.meta.env.DEV && typeof window !== 'undefined') {
   }
 }
 
-// Global handler for Vite chunk loading failures
-window.addEventListener('vite:preloadError', () => {
-  const isReloaded = sessionStorage.getItem('vite-reloaded');
-  if (!isReloaded) {
-    sessionStorage.setItem('vite-reloaded', 'true');
-    window.location.reload();
-  }
+// Recover once when a deployed build no longer contains an old hashed chunk.
+window.addEventListener('vite:preloadError', event => {
+  reloadOnceForDynamicImportFailure(event);
 });
 
-window.addEventListener('error', (e) => {
-  if (e.message && e.message.includes('Failed to fetch dynamically imported module')) {
-    const isReloaded = sessionStorage.getItem('vite-reloaded');
-    if (!isReloaded) {
-      sessionStorage.setItem('vite-reloaded', 'true');
-      window.location.reload();
-    }
-  }
+window.addEventListener('error', event => {
+  reloadOnceForDynamicImportFailure(event);
+});
+
+window.addEventListener('unhandledrejection', event => {
+  reloadOnceForDynamicImportFailure(event.reason);
 });
 
 import {createRoot} from 'react-dom/client';
