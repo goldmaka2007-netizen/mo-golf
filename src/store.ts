@@ -3,8 +3,11 @@ import { persist } from 'zustand/middleware';
 import { Entry, FirebaseUser, AccountCategories, Account, TransactionRule, CustomRule, InventoryCheck, AnnualOpeningCostConfig, CanonicalAccountDefinition } from './types';
 import { ACCOUNT_CATEGORIES } from './constants';
 import type { CostCalculationRun } from './lib/inventoryCostTypes';
-import { PHASE5_COST_CATALOG_VERSION } from './lib/inventoryCostEngine';
-import { commitCostCalculationRun } from './lib/costRecalculation';
+import { INVENTORY_COST_CALCULATION_VERSION } from './lib/inventoryCostTypes';
+import { commitCostCalculationRun } from './lib/costRunState';
+import type { HistoricalCostReviewOverlay } from './lib/historicalCostReview';
+
+const PHASE5_COST_CATALOG_VERSION = 'makka-inventory-taxonomy-v1:' + INVENTORY_COST_CALCULATION_VERSION;
 
 interface AppState {
   user: FirebaseUser | null;
@@ -52,6 +55,9 @@ interface AppState {
   openingCostConfig: AnnualOpeningCostConfig[];
   setOpeningCostConfig: (config: AnnualOpeningCostConfig[]) => void;
 
+  historicalCostReviewOverlays: HistoricalCostReviewOverlay[];
+  setHistoricalCostReviewOverlays: (overlays: HistoricalCostReviewOverlay[]) => void;
+
   costCalculationRun: CostCalculationRun;
   costRetryToken: number;
   beginCostCalculation: (args: {
@@ -68,11 +74,14 @@ interface AppState {
   view: 'home' | 'entry' | 'database' | 'reports' | 'settings' | 'chart-of-accounts' | 'journal' | 'guide' | 'inventory' | 'story' | 'profit-analysis' | 'advanced-analytics' | 'more';
   setView: (view: 'home' | 'entry' | 'database' | 'reports' | 'settings' | 'chart-of-accounts' | 'journal' | 'guide' | 'inventory' | 'story' | 'profit-analysis' | 'advanced-analytics' | 'more') => void;
 
+  journalDate: string;
+  setJournalDate: (date: string) => void;
+
   printEntry: Entry | null;
   setPrintEntry: (entry: Entry | null) => void;
 
-  reportsTab: 'ledger' | 'trial' | 'income' | 'equity' | 'balance' | 'inventory' | 'final' | 'scrap' | 'monthly' | 'lifecycle' | 'profit-analysis' | 'advanced-analytics' | 'financial-statements';
-  setReportsTab: (tab: 'ledger' | 'trial' | 'income' | 'equity' | 'balance' | 'inventory' | 'final' | 'scrap' | 'monthly' | 'lifecycle' | 'profit-analysis' | 'advanced-analytics' | 'financial-statements') => void;
+  reportsTab: 'legacy-income' | 'legacy-position' | 'ledger' | 'trial' | 'income' | 'equity' | 'balance' | 'inventory' | 'final' | 'scrap' | 'monthly' | 'lifecycle' | 'profit-analysis' | 'advanced-analytics' | 'financial-statements' | 'historical-cost-review';
+  setReportsTab: (tab: 'legacy-income' | 'legacy-position' | 'ledger' | 'trial' | 'income' | 'equity' | 'balance' | 'inventory' | 'final' | 'scrap' | 'monthly' | 'lifecycle' | 'profit-analysis' | 'advanced-analytics' | 'financial-statements' | 'historical-cost-review') => void;
 
   globalError: string | null;
   setGlobalError: (error: string | null) => void;
@@ -185,6 +194,9 @@ export const useAppStore = create<AppState>()(
   openingCostConfig: [],
   setOpeningCostConfig: (openingCostConfig) => set({ openingCostConfig }),
 
+  historicalCostReviewOverlays: [],
+  setHistoricalCostReviewOverlays: (historicalCostReviewOverlays) => set({ historicalCostReviewOverlays }),
+
   costCalculationRun: {
     generationId: 0,
     inputRevision: '',
@@ -227,6 +239,9 @@ export const useAppStore = create<AppState>()(
 
   view: 'home',
   setView: (view) => set({ view }),
+
+  journalDate: '',
+  setJournalDate: (journalDate) => set({ journalDate }),
 
   printEntry: null,
   setPrintEntry: (printEntry) => set({ printEntry }),

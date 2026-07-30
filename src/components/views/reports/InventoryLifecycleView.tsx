@@ -26,7 +26,7 @@ interface Props {
 const tabLabels: Record<InventoryCycleTab, string> = { gold: 'ذهب', silver: 'فضة', accessory: 'ملحقات' };
 const storageKey = (tab: InventoryCycleTab) => `inventory-cycle-filters-${tab}`;
 const fmtQty = (value?: number | null) => value === null || value === undefined ? 'غير متاحة' : Number(value.toFixed(3)).toLocaleString('ar-EG', { maximumFractionDigits: 3 });
-const fmtMoney = (value?: number | null) => value === null || value === undefined ? 'غير متاحة' : value.toLocaleString('ar-EG', { maximumFractionDigits: 2, minimumFractionDigits: 2 });
+const fmtMoney = (value?: number | null) => value === null || value === undefined ? 'غير متاحة' : value.toLocaleString('ar-EG', { maximumFractionDigits: 0, minimumFractionDigits: 0 });
 const fmtPct = (value?: number | null) => value === null || value === undefined ? 'غير متاحة' : `${value.toFixed(1)}%`;
 
 const movementLabel = (kind: string) => ({
@@ -75,7 +75,7 @@ const MiniChart = ({ data, color = '#c9a84c', secondLine, marketPrice, tab }: { 
           <CartesianGrid stroke="#1a1e2a" vertical={false} />
           <XAxis dataKey="date" tick={{ fill: '#8a8172', fontSize: 10 }} minTickGap={18} />
           <YAxis tick={{ fill: '#8a8172', fontSize: 10 }} width={42} />
-          <Tooltip contentStyle={{ background: '#0e1018', border: '1px solid #1a1e2a', color: '#f5f1e8', direction: 'rtl' }} />
+          <Tooltip contentStyle={{ background: '#0e1018', border: '1px solid #1a1e2a', color: '#f5f1e8', direction: 'rtl' }} formatter={(value, name) => [name === 'المتوسط المرجح' || name === 'تقييم بسعر اليوم' ? fmtMoney(Number(value)) : fmtQty(Number(value)), name]} />
           <Line type="monotone" dataKey="balance" name={tab === 'gold' ? 'رصيد Equivalent-21' : 'الرصيد'} stroke={color} strokeWidth={2} dot={false} />
           {secondLine && <Line type="monotone" dataKey="averageCost" name="المتوسط المرجح" stroke="#6a8a9e" strokeWidth={2} dot={false} yAxisId={0} />}
           {marketPrice !== undefined && <Line type="monotone" dataKey="marketPrice" name="تقييم بسعر اليوم" stroke="#6a9e6a" strokeDasharray="4 4" dot={false} />}
@@ -92,7 +92,7 @@ const MoneyChart = ({ data }: { data: any[] }) => (
         <CartesianGrid stroke="#1a1e2a" vertical={false} />
         <XAxis dataKey="date" tick={{ fill: '#8a8172', fontSize: 10 }} minTickGap={18} />
         <YAxis tick={{ fill: '#8a8172', fontSize: 10 }} width={42} />
-        <Tooltip contentStyle={{ background: '#0e1018', border: '1px solid #1a1e2a', color: '#f5f1e8', direction: 'rtl' }} />
+        <Tooltip contentStyle={{ background: '#0e1018', border: '1px solid #1a1e2a', color: '#f5f1e8', direction: 'rtl' }} formatter={(value) => Number(value).toLocaleString('ar-EG', { maximumFractionDigits: 0 })} />
         <Area type="monotone" dataKey="bookValue" name="القيمة الدفترية" stroke="#c9a84c" fill="#c9a84c22" />
         <Area type="monotone" dataKey="sales" name="المبيعات" stroke="#6a9e6a" fill="#6a9e6a18" />
         <Area type="monotone" dataKey="cogs" name="COGS" stroke="#6a8a9e" fill="#6a8a9e18" />

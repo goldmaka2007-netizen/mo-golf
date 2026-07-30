@@ -51,6 +51,7 @@ export const LiquidityAnalysisView = React.memo(({ entries }: { entries: Entry[]
                 borderRadius: '12px', 
                 textAlign: 'right' 
               }}
+              formatter={(value) => Number(value).toLocaleString('ar-EG', { maximumFractionDigits: 0 })}
               itemStyle={{ fontSize: '12px', fontWeight: 'bold' }}
               labelStyle={{ color: '#5a5548', fontSize: '10px', marginBottom: '4px' }}
             />

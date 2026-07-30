@@ -3,6 +3,7 @@ import { Book, ChevronDown, ChevronRight, Download, Search, X } from 'lucide-rea
 import { Account, Entry } from '../../../types';
 import { useAppStore } from '../../../store';
 import { buildLedgerAccountSelection, buildLedgerCsv, buildLedgerReport, filterLedgerRows, formatBalance, formatLedgerAmount, getAccountKey, getAvailableDimensions, getFilteredTotals, GoldDisplayMode, LedgerDimension, LedgerRow } from '../../../lib/ledgerReport';
+import { CostDataBlockedView } from './CostDataBlockedView';
 
 const today = () => new Date().toISOString().slice(0, 10);
 const yearStart = () => `${new Date().getFullYear()}-01-01`;
@@ -25,10 +26,11 @@ export const GeneralLedgerView = React.memo(({ entries }: { entries: Entry[]; st
   ], [accountsDb, canonicalAccounts]);
   const groups = useMemo(() => buildLedgerAccountSelection(accounts, search), [accounts, search]);
   const account = useMemo(() => accounts.find(a => getAccountKey(a) === accountKey), [accounts, accountKey]);
+  const completeCostTimeline = costCalculationRun.status === 'valid' && costCalculationRun.timeline?.valid && costCalculationRun.timeline.costDataComplete !== false ? costCalculationRun.timeline : null;
 
+  if (!completeCostTimeline) return <CostDataBlockedView timeline={costCalculationRun.timeline} />;
   if (!account) return <AccountSelection groups={groups} search={search} setSearch={setSearch} expanded={expanded} setExpanded={setExpanded} onSelect={a => setAccountKey(getAccountKey(a))} />;
-  const costTimeline = costCalculationRun.status === 'valid' && costCalculationRun.timeline?.valid ? costCalculationRun.timeline : null;
-  return <LedgerDetails account={account} accounts={accounts} entries={entries} canonicalAccounts={canonicalAccounts} costTimeline={costTimeline} onBack={() => setAccountKey(null)} />;
+  return <LedgerDetails account={account} accounts={accounts} entries={entries} canonicalAccounts={canonicalAccounts} costTimeline={completeCostTimeline} onBack={() => setAccountKey(null)} />;
 });
 
 const AccountSelection = ({ groups, search, setSearch, expanded, setExpanded, onSelect }: { groups: ReturnType<typeof buildLedgerAccountSelection>; search: string; setSearch: (value: string) => void; expanded: Set<string>; setExpanded: React.Dispatch<React.SetStateAction<Set<string>>>; onSelect: (account: Account) => void }) => <section className="space-y-3" dir="rtl">
@@ -46,8 +48,13 @@ const LedgerDetails = ({ account, accounts, entries, canonicalAccounts, costTime
   const [from, setFrom] = useState(yearStart); const [to, setTo] = useState(today);
   const [operation, setOperation] = useState(''); const [opposite, setOpposite] = useState(''); const [mode, setMode] = useState<GoldDisplayMode>('equivalent21'); const [detail, setDetail] = useState<LedgerRow | null>(null);
   useEffect(() => { if (dimensions.length && !dimensions.includes(dimension)) setDimension(dimensions[0]); }, [dimensions, dimension]);
-  const report = useMemo(() => dimensions.includes(dimension) ? buildLedgerReport(entries, accounts, account, dimension, from, to, canonicalAccounts, { enableFinancialProjection: true, costTimeline }) : null, [entries, accounts, account, dimension, dimensions, from, to, canonicalAccounts, costTimeline]);
-  const summary = useMemo(() => dimensions.map(item => ({ dimension: item, report: buildLedgerReport(entries, accounts, account, item, '0000-01-01', today(), canonicalAccounts, { enableFinancialProjection: true, costTimeline }) })), [dimensions, entries, accounts, account, canonicalAccounts, costTimeline]);
+  const ledgerOptions = useMemo(() => ({
+    enableFinancialProjection: true,
+    costTimeline,
+    merchantStatementMode: account.type === 'merchant' ? 'operational' as const : 'financial' as const,
+  }), [account.type, costTimeline]);
+  const report = useMemo(() => dimensions.includes(dimension) ? buildLedgerReport(entries, accounts, account, dimension, from, to, canonicalAccounts, ledgerOptions) : null, [entries, accounts, account, dimension, dimensions, from, to, canonicalAccounts, ledgerOptions]);
+  const summary = useMemo(() => dimensions.map(item => ({ dimension: item, report: buildLedgerReport(entries, accounts, account, item, '0000-01-01', today(), canonicalAccounts, ledgerOptions) })), [dimensions, entries, accounts, account, canonicalAccounts, ledgerOptions]);
   const rows = useMemo(() => report ? filterLedgerRows(report.rows, operation, opposite) : [], [report, operation, opposite]);
   const totals = useMemo(() => getFilteredTotals(rows), [rows]);
   const types = useMemo(() => [...new Set(report?.rows.map(row => row.operationType) || [])], [report]);

@@ -8,7 +8,7 @@ type Grouping = 'invoice' | 'account' | 'day' | 'month' | 'year' | 'shop';
 const money = (minor: number | null | undefined): string =>
   minor === null || minor === undefined
     ? 'غير متاح'
-    : (minor / 100).toLocaleString('ar-EG', { maximumFractionDigits: 2 });
+    : (minor / 100).toLocaleString('ar-EG', { maximumFractionDigits: 0 });
 
 const quantity = (units: number, accessory: boolean): string =>
   (units / (accessory ? 1000 : 100)).toLocaleString('ar-EG', { maximumFractionDigits: 3 });

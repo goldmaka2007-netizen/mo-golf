@@ -25,6 +25,7 @@ import { doc, setDoc } from 'firebase/firestore';
 import { useAppStore } from '../../store';
 import { calculateGoldOwnershipPosition, type GoldOwnershipPosition } from '../../lib/engine';
 import { buildOperationalProjection } from '../../lib/operationalProjection';
+import { formatCashAmount } from '../../lib/accounting';
 
 interface KPICardProps {
   icon: React.ReactNode;
@@ -110,7 +111,11 @@ const PriceCard = React.memo(({
   isBuyPrice,
   spread,
   onSpreadChange
-}: PriceCardProps) => (
+}: PriceCardProps) => {
+  const priceStep = variant === 'gold' ? 5 : 0.5;
+  const rangeRadius = variant === 'gold' ? 100 : 20;
+
+  return (
   <div className={cn(
     "bg-[#0e1018] border rounded-2xl p-4 shadow-lg relative overflow-hidden transition-all h-full flex flex-col justify-between",
     variant === 'gold' ? "border-[#c9a84c33] shadow-[0_0_20px_rgba(201,168,76,0.05)]" : "border-[#ddd8cc11] shadow-[0_0_20px_rgba(221,216,204,0.03)]"
@@ -130,7 +135,9 @@ const PriceCard = React.memo(({
       <div className="space-y-4">
         <div className="flex items-center gap-2">
           <button
-            onClick={() => onPriceChange(Math.max(0, price - 5))}
+            type="button"
+            aria-label={`خفض ${title}`}
+            onClick={() => onPriceChange(Math.max(0, price - priceStep))}
             className="w-12 h-12 flex items-center justify-center bg-[#080a0f] border border-[#1a1e2a] rounded-xl text-[#5a5548] hover:text-red-400 hover:border-red-400/30 transition-all active:scale-90"
           >
             <TrendingUp className="w-6 h-6 rotate-180" />
@@ -140,8 +147,11 @@ const PriceCard = React.memo(({
             <input
               type="number"
               inputMode="decimal"
+              min="0"
+              step={priceStep}
+              aria-label={title}
               value={price}
-              onChange={(e) => onPriceChange(parseInt(e.target.value) || 0)}
+              onChange={(e) => onPriceChange(Number(e.target.value) || 0)}
               className={cn(
                 "w-full bg-[#080a0f] border rounded-2xl px-4 py-3 text-2xl font-mono font-bold outline-none transition-all text-center",
                 variant === 'gold' ? "border-[#c9a84c33] text-[#c9a84c] focus:border-[#c9a84c] shadow-[inset_0_2px_10px_rgba(201,168,76,0.05)]" : "border-[#ddd8cc33] text-[#ddd8cc] focus:border-[#ddd8cc] shadow-[inset_0_2px_10px_rgba(221,216,204,0.03)]"
@@ -151,7 +161,9 @@ const PriceCard = React.memo(({
           </div>
 
           <button
-            onClick={() => onPriceChange(price + 5)}
+            type="button"
+            aria-label={`زيادة ${title}`}
+            onClick={() => onPriceChange(price + priceStep)}
             className="w-12 h-12 flex items-center justify-center bg-[#080a0f] border border-[#1a1e2a] rounded-xl text-[#5a5548] hover:text-[#c9a84c] hover:border-[#c9a84c/30] transition-all active:scale-90"
           >
             <PlusCircle className="w-6 h-6" />
@@ -161,11 +173,12 @@ const PriceCard = React.memo(({
         <div className="px-1">
            <input
              type="range"
-             min={price > 200 ? price - 100 : 0}
-             max={price + 100}
-             step="5"
+             aria-label={`ضبط ${title}`}
+             min={Math.max(0, price - rangeRadius)}
+             max={price + rangeRadius}
+             step={priceStep}
              value={price}
-             onChange={(e) => onPriceChange(parseInt(e.target.value))}
+             onChange={(e) => onPriceChange(Number(e.target.value))}
              className={cn(
                "w-full h-1 bg-[#080a0f] rounded-lg appearance-none cursor-pointer",
                variant === 'gold' ? "accent-[#c9a84c]" : "accent-[#ddd8cc]"
@@ -208,7 +221,8 @@ const PriceCard = React.memo(({
       )}
     </div>
   </div>
-));
+  );
+});
 
 interface RecentEntryRowProps {
   e: Entry;
@@ -232,7 +246,7 @@ const RecentEntryRow = React.memo(({ e, accountCategories, setEditingEntry }: Re
 
   const c = parseFloat(e.cash || '0');
   const w = parseFloat(e.weight || '0');
-  const pricePerGram = w > 0 ? (c / w).toFixed(2) : '0.00';
+  const pricePerGram = w > 0 ? formatCashAmount(c / w) : '0';
 
   return (
     <div
@@ -252,7 +266,7 @@ const RecentEntryRow = React.memo(({ e, accountCategories, setEditingEntry }: Re
         {e.notes && <div className="text-[11px] text-[#5a5548] italic bg-[#080a0f] px-2 py-1 rounded-lg mt-2">{e.notes}</div>}
       </div>
       <div className="text-left space-y-1">
-        {e.cash && e.tx !== 'تيفيت' && <div className="text-lg font-bold text-[#c9a84c] font-mono">{Math.round(c).toLocaleString()} <span className="text-[10px] font-sans">ج</span></div>}
+        {e.cash && e.tx !== 'تيفيت' && <div className="text-lg font-bold text-[#c9a84c] font-mono">{formatCashAmount(c)} <span className="text-[10px] font-sans">ج</span></div>}
         <div className="flex flex-col items-end gap-1">
           {e.weight && (
             <div className="text-xs text-[#ddd8cc] font-bold bg-[#1a1e2a] px-2 py-1 rounded-lg">
@@ -400,7 +414,7 @@ export const HomeView = React.memo(({
           <KPICard
             icon={<Wallet className="w-5 h-5" />}
             title="رصيد الخزنة"
-            value={`${Math.round(totals.cash).toLocaleString()} ج`}
+            value={`${formatCashAmount(totals.cash)} ج`}
             color="text-[#6a9e6a]"
           />
           <GoldSummaryCard
@@ -424,7 +438,73 @@ export const HomeView = React.memo(({
             color="text-[#f5f1e8]"
           />
         </div>
-      </section>      {/* Quick Actions */}
+      </section>
+
+      {/* Official daily prices: kept near the top so they are always visible before starting an invoice. */}
+      <section className="space-y-3" aria-labelledby="official-daily-prices-title">
+        <div className="rounded-2xl border border-[#c9a84c33] bg-gradient-to-l from-[#c9a84c12] to-[#0e1018] p-4">
+          <div className="flex items-start justify-between gap-3">
+            <div>
+              <h2 id="official-daily-prices-title" className="text-base font-black text-[#f5f1e8]">
+                الأسعار الرسمية المعتمدة اليوم
+              </h2>
+              <p className="mt-1 text-[11px] font-bold leading-5 text-[#8a8172]">
+                عدّل سعر الذهب والفضة هنا؛ السعر المحفوظ هو المستخدم تلقائيًا في الفواتير والتقييمات.
+              </p>
+            </div>
+            <span className="shrink-0 rounded-lg border border-[#c9a84c33] bg-[#080a0f] px-2.5 py-1.5 text-[10px] font-black text-[#c9a84c]">
+              {format(new Date(), 'd MMMM', { locale: ar })}
+            </span>
+          </div>
+          <div className="mt-3 flex items-center gap-2 text-[10px] font-bold text-[#6a9e6a]">
+            <span className="h-2 w-2 rounded-full bg-[#6a9e6a]" />
+            يتم الحفظ تلقائيًا في حسابك بعد التعديل
+          </div>
+        </div>
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+        <PriceCard
+          title="سعر الذهب الرسمي عيار 21"
+          price={goldPrice}
+          onPriceChange={(val) => {
+            setGoldPrice(val);
+            const buyPrice = val - goldSpread;
+            setGoldBuyPrice(buyPrice);
+            updatePricesInFirestore(val, buyPrice, silverPrice, silverBuyPrice, goldSpread, silverSpread);
+          }}
+          colorClass="text-[#c9a84c]"
+          onPasteClick={() => setShowPasteModal(true)}
+          variant="gold"
+          spread={goldSpread}
+          onSpreadChange={(spread) => {
+            setGoldSpread(spread);
+            const buyPrice = goldPrice - spread;
+            setGoldBuyPrice(buyPrice);
+            updatePricesInFirestore(goldPrice, buyPrice, silverPrice, silverBuyPrice, spread, silverSpread);
+          }}
+        />
+
+        <PriceCard
+          title="سعر الفضة الرسمي"
+          price={silverPrice}
+          onPriceChange={(val) => {
+            setSilverPrice(val);
+            const buyPrice = val - silverSpread;
+            setSilverBuyPrice(buyPrice);
+            updatePricesInFirestore(goldPrice, goldBuyPrice, val, buyPrice, goldSpread, silverSpread);
+          }}
+          colorClass="text-[#ddd8cc]"
+          variant="silver"
+          spread={silverSpread}
+          onSpreadChange={(spread) => {
+            setSilverSpread(spread);
+            const buyPrice = silverPrice - spread;
+            setSilverBuyPrice(buyPrice);
+            updatePricesInFirestore(goldPrice, goldBuyPrice, silverPrice, buyPrice, goldSpread, spread);
+          }}
+        />
+      </div>
+      </section>
+      {/* Quick Actions */}
       <div className="space-y-3">
         <div className="flex items-center gap-3 px-1">
           <h3 className="text-xs font-black text-[#c9a84c]">إجراءات سريعة</h3>
@@ -472,7 +552,7 @@ export const HomeView = React.memo(({
           <KPICard
             icon={<Wallet className="w-4 h-4" />}
             title="رصيد الخزنة"
-            value={`${Math.round(totals.cash).toLocaleString()} ج`}
+            value={`${formatCashAmount(totals.cash)} ج`}
             color="text-[#6a9e6a]"
           />
           <KPICard
@@ -515,50 +595,6 @@ export const HomeView = React.memo(({
           </div>
         </div>
       )}
-
-      {/* Daily price cards */}
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-        <PriceCard
-          title="ذهب 21 (بيع)"
-          price={goldPrice}
-          onPriceChange={(val) => {
-            setGoldPrice(val);
-            const buyPrice = val - goldSpread;
-            setGoldBuyPrice(buyPrice);
-            updatePricesInFirestore(val, buyPrice, silverPrice, silverBuyPrice, goldSpread, silverSpread);
-          }}
-          colorClass="text-[#c9a84c]"
-          onPasteClick={() => setShowPasteModal(true)}
-          variant="gold"
-          spread={goldSpread}
-          onSpreadChange={(spread) => {
-            setGoldSpread(spread);
-            const buyPrice = goldPrice - spread;
-            setGoldBuyPrice(buyPrice);
-            updatePricesInFirestore(goldPrice, buyPrice, silverPrice, silverBuyPrice, spread, silverSpread);
-          }}
-        />
-
-        <PriceCard
-          title="فضة (بيع)"
-          price={silverPrice}
-          onPriceChange={(val) => {
-            setSilverPrice(val);
-            const buyPrice = val - silverSpread;
-            setSilverBuyPrice(buyPrice);
-            updatePricesInFirestore(goldPrice, goldBuyPrice, val, buyPrice, goldSpread, silverSpread);
-          }}
-          colorClass="text-[#ddd8cc]"
-          variant="silver"
-          spread={silverSpread}
-          onSpreadChange={(spread) => {
-            setSilverSpread(spread);
-            const buyPrice = silverPrice - spread;
-            setSilverBuyPrice(buyPrice);
-            updatePricesInFirestore(goldPrice, goldBuyPrice, silverPrice, buyPrice, goldSpread, spread);
-          }}
-        />
-      </div>
 
       {/* Secondary quick actions */}
       <div className="grid grid-cols-3 gap-3">

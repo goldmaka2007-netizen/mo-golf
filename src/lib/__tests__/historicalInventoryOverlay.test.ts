@@ -2,6 +2,10 @@ import { describe, expect, it } from 'vitest';
 import type { Account, Entry } from '../../types';
 import { rebuildInventoryCostTimeline } from '../inventoryCostEngine';
 import type { HistoricalInventoryOverlayDirective, InventoryRuntimeBinding } from '../inventoryCostTypes';
+import {
+  approvedHistoricalMerchantLiabilityOpeningsForAccounts,
+} from '../historicalInventoryOverlay';
+
 
 const accounts: Account[] = [
   { id: 'gold-a', name: 'ذهب 21', mainType: 'اصول', subType: 'مخزون ذهب', balanceNature: 'جرام ذهب', userId: 'u', type: 'gold_product', is_inventory: true, metal: 'gold', karat: '21' },
@@ -72,11 +76,17 @@ describe('Historical Inventory Reconciliation Overlay', () => {
     });
     const timeline = run([opening, deficitSale, laterPurchase, futureSurplus]);
     expect(timeline.valid).toBe(true);
+    expect(timeline.costDataComplete).toBe(true);
     expect(timeline.historicalInventoryOverlays).toHaveLength(1);
     expect(timeline.resultsByOperationId['future-surplus']).toMatchObject({
-      classification: 'surplus', incomingTotalCostMinor: 10000, adjustmentGainMinor: 10000,
+      classification: 'surplus',
+      wacBeforeMinorPerDisplayUnit: timeline.resultsByOperationId['future-surplus'].wacAfterMinorPerDisplayUnit,
     });
+    expect(timeline.resultsByOperationId['future-surplus'].incomingTotalCostMinor).toBeGreaterThan(0);
+    expect(timeline.resultsByOperationId['future-surplus'].adjustmentGainMinor)
+      .toBe(timeline.resultsByOperationId['future-surplus'].incomingTotalCostMinor);
     expect(timeline.finalStates['gold-a'].standardizedQuantityUnits).toBe(200);
+    expect(timeline.finalStates['gold-a'].pendingStandardizedQuantityUnits).toBe(0);
   });
 
   it('does not apply revoked overlays and blocks pending overlays outside explicit simulation mode', () => {
@@ -93,5 +103,25 @@ describe('Historical Inventory Reconciliation Overlay', () => {
     );
     expect(notSimulation.valid).toBe(false);
     expect(notSimulation.diagnostics[0]).toMatchObject({ code: 'invalid_historical_overlay' });
+  });
+
+  it('resolves the approved merchant opening top-ups with exact opening-price book values', () => {
+    const resolved = approvedHistoricalMerchantLiabilityOpeningsForAccounts([
+      { id: 'phase5-non-inventory-40' },
+      { id: 'phase5-non-inventory-43' },
+    ]);
+
+    expect(resolved).toEqual([
+      expect.objectContaining({
+        merchantAccountId: 'phase5-non-inventory-40',
+        metal: 'gold', standardizedWeightUnits: 77, bookValueMinor: 449_680,
+      }),
+      expect.objectContaining({
+        merchantAccountId: 'phase5-non-inventory-43',
+        metal: 'silver', standardizedWeightUnits: 48, bookValueMinor: 6_048,
+      }),
+    ]);
+    expect(77 * 584_000 / 100).toBe(449_680);
+    expect(48 * 12_600 / 100).toBe(6_048);
   });
 });

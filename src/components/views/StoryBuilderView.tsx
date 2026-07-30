@@ -189,11 +189,11 @@ const generateStoryCanvas = (canvas: HTMLCanvasElement, ctx: CanvasRenderingCont
     
     ctx.fillStyle = '#ddd8cc';
     ctx.font = 'bold 42px "JetBrains Mono", sans-serif';
-    ctx.fillText(k.buy.toLocaleString(), startX + tableWidth/5.4, currentY + 58);
+    ctx.fillText(k.buy.toLocaleString(undefined, { maximumFractionDigits: 0 }), startX + tableWidth/5.4, currentY + 58);
     
     ctx.fillStyle = '#c9a84c';
     ctx.font = 'bold 48px "JetBrains Mono", sans-serif';
-    ctx.fillText(k.sell.toLocaleString(), startX + tableWidth/2 + 20, currentY + 60);
+    ctx.fillText(k.sell.toLocaleString(undefined, { maximumFractionDigits: 0 }), startX + tableWidth/2 + 20, currentY + 60);
 
     ctx.fillStyle = '#ffffff';
     ctx.font = 'bold 36px "Tajawal", sans-serif';
@@ -249,7 +249,7 @@ const generateStoryCanvas = (canvas: HTMLCanvasElement, ctx: CanvasRenderingCont
         ctx.textAlign = 'left';
         ctx.fillStyle = '#c9a84c';
         ctx.font = 'bold 32px "JetBrains Mono", sans-serif';
-        ctx.fillText(finalPrice.toLocaleString(), xPos + 20, currentY + 46);
+        ctx.fillText(finalPrice.toLocaleString(undefined, { maximumFractionDigits: 0 }), xPos + 20, currentY + 46);
       }
     }
     currentY += bRowHeight;
@@ -270,7 +270,7 @@ const generateStoryCanvas = (canvas: HTMLCanvasElement, ctx: CanvasRenderingCont
   
   ctx.fillStyle = '#ddd8cc';
   ctx.font = 'bold 36px "JetBrains Mono", sans-serif';
-  ctx.fillText(`${data.silverSwissBuy.toLocaleString()} / ${data.silverSwissSell.toLocaleString()}`, bStartX + 250, currentY + 50);
+  ctx.fillText(`${data.silverSwissBuy.toLocaleString(undefined, { maximumFractionDigits: 0 })} / ${data.silverSwissSell.toLocaleString(undefined, { maximumFractionDigits: 0 })}`, bStartX + 250, currentY + 50);
 
   currentY += 120;
 
@@ -382,8 +382,8 @@ export const StoryBuilderView = () => {
   const PriceDisplayCard = ({ title, sell, buy, ringColor }: { title: string, sell: number, buy: number, ringColor: string }) => (
     <div className={`bg-[#1a1e2a] rounded-xl p-3 text-center border ${ringColor}`}>
       <div className="text-[10px] text-[#8a8578] font-bold mb-1">{title}</div>
-      <div className="text-xs font-bold text-[#6a9e6a] mb-1">ش: {buy.toLocaleString()}</div>
-      <div className="text-sm font-bold text-[#c9a84c] font-mono">{sell.toLocaleString()}</div>
+      <div className="text-xs font-bold text-[#6a9e6a] mb-1">ش: {buy.toLocaleString(undefined, { maximumFractionDigits: 0 })}</div>
+      <div className="text-sm font-bold text-[#c9a84c] font-mono">{sell.toLocaleString(undefined, { maximumFractionDigits: 0 })}</div>
     </div>
   );
 
@@ -524,8 +524,8 @@ export const StoryBuilderView = () => {
                     { label: 'عيار ١٨', sell: p18Sell, buy: p18Buy },
                   ].map((k, idx) => (
                     <div key={idx} className="grid grid-cols-3 text-center py-2.5 border-b border-white/5 last:border-0 items-center">
-                      <span className="text-[#ddd8cc] font-bold font-mono text-sm">{k.buy.toLocaleString()}</span>
-                      <span className="font-bold font-mono text-lg text-[#c9a84c]">{k.sell.toLocaleString()}</span>
+                      <span className="text-[#ddd8cc] font-bold font-mono text-sm">{k.buy.toLocaleString(undefined, { maximumFractionDigits: 0 })}</span>
+                      <span className="font-bold font-mono text-lg text-[#c9a84c]">{k.sell.toLocaleString(undefined, { maximumFractionDigits: 0 })}</span>
                       <span className="text-[#ffffff] text-[13px] font-bold">{k.label}</span>
                     </div>
                   ))}
@@ -547,7 +547,7 @@ export const StoryBuilderView = () => {
                       return (
                         <div key={i} className="flex justify-between items-center text-[11px] border-b border-white/5 pb-1">
                           <span className="text-[#8a8578] font-bold">{item.label}</span>
-                          <span className="font-mono text-[#c9a84c] font-bold">{finalPrice.toLocaleString()} ج</span>
+                          <span className="font-mono text-[#c9a84c] font-bold">{finalPrice.toLocaleString(undefined, { maximumFractionDigits: 0 })} ج</span>
                         </div>
                       );
                     })}
@@ -556,7 +556,7 @@ export const StoryBuilderView = () => {
 
                 <div className="bg-black/40 backdrop-blur-md rounded-2xl border border-[#6a8a9e22] p-4 shadow-xl flex justify-between items-center ring-1 ring-[#6a8a9e11]">
                    <span className="text-xs font-bold text-[#6a8a9e]">سعر جرام الفضة:</span>
-                   <span className="text-[13px] font-mono font-bold text-[#ddd8cc]">{silverSwissBuy.toLocaleString()} / {silverSwissSell.toLocaleString()}</span>
+                   <span className="text-[13px] font-mono font-bold text-[#ddd8cc]">{silverSwissBuy.toLocaleString(undefined, { maximumFractionDigits: 0 })} / {silverSwissSell.toLocaleString(undefined, { maximumFractionDigits: 0 })}</span>
                 </div>
 
                 {customerMessage && (

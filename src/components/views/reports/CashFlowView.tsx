@@ -96,7 +96,7 @@ export const CashFlowView = React.memo(({ entries }: { entries: Entry[] }) => {
                 <div key={name} className="bg-[#111420] p-4 rounded-xl border border-[#1a1e2a] flex justify-between items-center group hover:border-[#c9a84c33] transition-colors">
                   <span className="text-xs text-[#5a5548] font-bold">{name}</span>
                   <span className="text-base font-bold text-[#ddd8cc] font-mono">
-                    {new Intl.NumberFormat('en-US', { minimumFractionDigits: activeTab === 'cash' ? 0 : 2, maximumFractionDigits: 2 }).format(val as number)}
+                    {new Intl.NumberFormat('en-US', { minimumFractionDigits: activeTab === 'cash' ? 0 : 2, maximumFractionDigits: activeTab === 'cash' ? 0 : 2 }).format(val as number)}
                   </span>
                 </div>
               ))}
@@ -117,7 +117,7 @@ export const CashFlowView = React.memo(({ entries }: { entries: Entry[] }) => {
                 <div key={name} className="bg-[#111420] p-4 rounded-xl border border-[#1a1e2a] flex justify-between items-center group hover:border-[#9e6a6a33] transition-colors">
                   <span className="text-xs text-[#5a5548] font-bold">{name}</span>
                   <span className="text-base font-bold text-[#ddd8cc] font-mono">
-                    {new Intl.NumberFormat('en-US', { minimumFractionDigits: activeTab === 'cash' ? 0 : 2, maximumFractionDigits: 2 }).format(val as number)}
+                    {new Intl.NumberFormat('en-US', { minimumFractionDigits: activeTab === 'cash' ? 0 : 2, maximumFractionDigits: activeTab === 'cash' ? 0 : 2 }).format(val as number)}
                   </span>
                 </div>
               ))}
@@ -139,7 +139,7 @@ export const CashFlowView = React.memo(({ entries }: { entries: Entry[] }) => {
            </div>
            <div className="text-right">
               <span className={cn("text-4xl font-bold font-mono", isPositive ? "text-[#6a9e6a]" : "text-[#9e6a6a]")}>
-                {isPositive ? '+' : ''}{new Intl.NumberFormat('en-US', { minimumFractionDigits: activeTab === 'cash' ? 0 : 2, maximumFractionDigits: 2 }).format(data.netChange)}
+                {isPositive ? '+' : ''}{new Intl.NumberFormat('en-US', { minimumFractionDigits: activeTab === 'cash' ? 0 : 2, maximumFractionDigits: activeTab === 'cash' ? 0 : 2 }).format(data.netChange)}
               </span>
               <span className="text-sm text-[#5a5548] mr-2">{unit}</span>
            </div>

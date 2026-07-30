@@ -64,12 +64,35 @@ export interface Entry {
   clientName?: string;
   clientPhone?: string;
   marketPrice?: number;
+  /** Official invoice price per gram used to value merchant metal receipts. */
+  invoiceOfficialPricePerGramEgp?: number;
   goldEquivalent21Snapshot?: GoldEquivalent21Snapshot;
   goldEquivalent21LegacyComparison?: GoldEquivalent21LegacyComparison;
   userId: string;
   createdAt?: any;
   isSettled?: boolean;
   inventoryCheckId?: string;
+  originalOperationId?: string;
+  reverseWorkmanshipOnReturn?: boolean;
+  transactionGoldValueMinor?: number;
+  merchantGoldBookValueMinor?: number;
+  workmanshipCostMinor?: number;
+  merchantGoldWeight?: string;
+  costAssignmentStatus?: 'pending_cost_assignment' | 'approved' | 'rejected';
+  manualCostAssignmentMinor?: number;
+  costAssignmentApprovedAt?: string;
+  costAssignmentApprovedBy?: string;
+  manufacturing?: ManufacturingTransformation;
+  annualOpeningSnapshot?: {
+    snapshotId: string;
+    auditHash: string;
+    standardizedQuantityUnits: number;
+    physicalWeightUnits: number;
+    accessoryQuantityUnits: number;
+    metalCostMinor: number;
+    workmanshipCostMinor: number;
+    accessoryCostMinor: number;
+  };
 }
 
 export type AccountingOperationKind =
@@ -80,10 +103,33 @@ export type AccountingOperationKind =
   | 'tifeet'
   | 'adjustment'
   | 'merchant_settlement'
+  | 'customer_return'
+  | 'supplier_return'
+  | 'manufacturing'
   | 'personal_withdrawal'
   | 'expense'
   | 'other';
 
+
+export interface ManufacturingMovement {
+  inventoryAccountId: string;
+  physicalWeight: string;
+  standardizedQuantityUnits?: number;
+  allocatedCostMinor?: number;
+  role?: 'finished_good' | 'waste' | 'by_product';
+}
+
+export interface ManufacturingTransformation {
+  version: 'manufacturing-v1';
+  inputs: ManufacturingMovement[];
+  outputs: ManufacturingMovement[];
+  directConversionCostMinor: number;
+  normalLossStandardizedUnits?: number;
+  abnormalLossStandardizedUnits?: number;
+  abnormalLossPhysicalUnits?: number;
+  abnormalLossCostMinor?: number;
+  notes?: string;
+}
 export interface CustomRule {
   id?: string;
   t: string;

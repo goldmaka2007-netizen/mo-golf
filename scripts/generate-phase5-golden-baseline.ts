@@ -15,7 +15,8 @@ import {
   summarizeGoldenTimeline,
   type Phase5GoldenBaseline,
 } from '../src/test-fixtures/phase5GoldenDataset';
-import { HISTORICAL_INVENTORY_OVERLAY_VERSION } from '../src/lib/historicalInventoryOverlay';
+import { HISTORICAL_COST_REVIEW_VERSION } from '../src/lib/historicalCostReview';
+import { HISTORICAL_INVENTORY_OVERLAY_VERSION, HISTORICAL_MERCHANT_LIABILITY_OPENING_VERSION } from '../src/lib/historicalInventoryOverlay';
 import { INVENTORY_COST_TAXONOMY_VERSION } from '../src/lib/inventoryCostCatalog';
 import { INVENTORY_COST_CALCULATION_VERSION } from '../src/lib/inventoryCostTypes';
 
@@ -94,6 +95,7 @@ const buildCandidateBaseline = (
 ): Phase5GoldenBaseline => {
   const { entries, inputRevision, run, timeline } = runPhase5GoldenDataset(1);
   if (run.status !== 'valid' || !timeline?.valid) refuse('Cost Run is not valid');
+  if (timeline.costDataComplete !== true) refuse('Cost Run has unresolved cost data');
   const summary = summarizeGoldenTimeline(timeline);
   if (summary.deficitCount !== 0) refuse(`Cost Run has ${summary.deficitCount} deficit(s)`);
   if (summary.diagnosticCount !== 0) refuse(`Cost Run has ${summary.diagnosticCount} diagnostic(s)`);
@@ -131,7 +133,8 @@ const buildCandidateBaseline = (
     expectedResultFingerprint: createGoldenResultFingerprint(timeline),
     calculationRulesVersion:
       `${INVENTORY_COST_TAXONOMY_VERSION}:${INVENTORY_COST_CALCULATION_VERSION}`
-      + `+${HISTORICAL_INVENTORY_OVERLAY_VERSION}`,
+      + `+${HISTORICAL_INVENTORY_OVERLAY_VERSION}`
+      + `+${HISTORICAL_MERCHANT_LIABILITY_OPENING_VERSION}+${HISTORICAL_COST_REVIEW_VERSION}`,
     approvedOverlayIds: overlayIds,
     approvedOverlayAuditHashes: sortRecord(Object.fromEntries(
       overlayIds.map(id => [id, overlayById.get(id)!.auditHash]),

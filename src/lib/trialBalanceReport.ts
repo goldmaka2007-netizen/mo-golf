@@ -1,6 +1,7 @@
 import { Account, CanonicalAccountDefinition, Entry } from '../types';
 import { formatLedgerAmount, LedgerDimension } from './ledgerReport';
-import { buildLegacyLedgerLegs, type LegacyLedgerBuildOptions } from './legacyLedger';
+import type { LegacyLedgerBuildOptions } from './legacyLedger';
+import { buildFinancialPostingProjection } from './postingProjection';
 import { splitLegsByPeriod } from './periodLegs';
 
 export type TrialBalanceGroupId = 'assets' | 'liabilities' | 'equity' | 'revenue' | 'expenses';
@@ -13,7 +14,7 @@ export interface TrialBalanceRow extends TrialBalanceAmounts {
 }
 export interface TrialBalanceGroup extends TrialBalanceAmounts { id: TrialBalanceGroupId; label: string; rows: TrialBalanceRow[]; }
 export interface TrialBalanceReport extends TrialBalanceAmounts {
-  dimension: LedgerDimension; source: 'legacy_raw_fields'; groups: TrialBalanceGroup[]; balanced: boolean; difference: number; differenceSide: 'debit' | 'credit' | null;
+  dimension: LedgerDimension; source: 'accounting_engine_posting_projection'; groups: TrialBalanceGroup[]; balanced: boolean; difference: number; differenceSide: 'debit' | 'credit' | null;
 }
 
 const tolerance = (dimension: LedgerDimension) => dimension === 'cash' ? 0.0001 : 0.000001;
@@ -49,7 +50,9 @@ export const getTrialBalanceDescription = (account: Account): string => {
   return group === 'revenue' ? '\u0625\u064a\u0631\u0627\u062f' : group === 'expenses' ? '\u0645\u0635\u0631\u0648\u0641' : group === 'equity' ? arabic.equity : group === 'liabilities' ? arabic.liability : arabic.asset;
 };
 export const buildTrialBalanceReport = (entries: Entry[], accounts: Account[], dimension: LedgerDimension, startDate: string, endDate: string, canonicalDefinitions?: CanonicalAccountDefinition[], options: LegacyLedgerBuildOptions = {}): TrialBalanceReport => {
-  const legs = buildLegacyLedgerLegs(entries, accounts, canonicalDefinitions, options).filter(leg => leg.dimension === dimension);
+  const legs = buildFinancialPostingProjection(entries, accounts, canonicalDefinitions, options.costTimeline)
+    .legs
+    .filter(leg => leg.dimension === dimension);
   const groupRows = new Map<TrialBalanceGroupId, TrialBalanceRow[]>();
   const entities = [...new Map(legs.map(leg => [leg.entityId, leg.account])).values()];
   entities.forEach((entity, order) => {
@@ -65,7 +68,7 @@ export const buildTrialBalanceReport = (entries: Entry[], accounts: Account[], d
   const totals = empty(); const ordered: TrialBalanceGroupId[] = ['assets', 'liabilities', 'equity', 'revenue', 'expenses'];
   const groups = ordered.flatMap(id => { const rows = groupRows.get(id); if (!rows?.length) return []; rows.sort((a, b) => a.order - b.order || a.accountName.localeCompare(b.accountName, 'ar')); const group: TrialBalanceGroup = { ...empty(), ...groupMeta(rows[0].group), rows }; rows.forEach(row => add(group, row)); add(totals, group); return [group]; });
   const difference = Math.abs(totals.closingDebit - totals.closingCredit);
-  return { dimension, source: 'legacy_raw_fields', groups, ...totals, balanced: zero(difference, dimension), difference: zero(difference, dimension) ? 0 : difference, differenceSide: zero(difference, dimension) ? null : totals.closingDebit > totals.closingCredit ? 'debit' : 'credit' };
+  return { dimension, source: 'accounting_engine_posting_projection', groups, ...totals, balanced: zero(difference, dimension), difference: zero(difference, dimension) ? 0 : difference, differenceSide: zero(difference, dimension) ? null : totals.closingDebit > totals.closingCredit ? 'debit' : 'credit' };
 };
 const csvEscape = (value: string) => `"${value.replace(/"/g, '""')}"`;
 const dimensionLabel = (dimension: LedgerDimension) => dimension === 'cash' ? '\u0645\u064a\u0632\u0627\u0646 \u0627\u0644\u0646\u0642\u062f\u064a\u0629' : dimension === 'gold' ? '\u0645\u064a\u0632\u0627\u0646 \u0627\u0644\u0630\u0647\u0628' : '\u0645\u064a\u0632\u0627\u0646 \u0627\u0644\u0641\u0636\u0629';

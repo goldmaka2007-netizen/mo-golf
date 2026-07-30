@@ -2,6 +2,7 @@ import { Account, AccountNature, CanonicalAccountDefinition, Entry } from '../ty
 import { getMerchantMetals } from './engine';
 import { getDynamicAccountNature, getMetricActualValue } from '../utils/accountLogic';
 import { buildLegacyLedgerLegs, legacyLedgerEntityId, type LegacyLedgerBuildOptions } from './legacyLedger';
+import { buildFinancialPostingProjection } from './postingProjection';
 import { splitLegsByPeriod } from './periodLegs';
 
 export type LedgerDimension = 'cash' | 'gold' | 'silver' | 'quantity';
@@ -71,7 +72,13 @@ export const buildLedgerReport = (
   options: LegacyLedgerBuildOptions = {},
 ): LedgerReport => {
   const entityId = legacyLedgerEntityId(account);
-  const legs = buildLegacyLedgerLegs(entries, accounts, canonicalDefinitions, options)
+  const isOperationalMerchantStatement =
+    account.type === 'merchant' && options.merchantStatementMode === 'operational';
+  const sourceLegs = options.enableFinancialProjection && !isOperationalMerchantStatement
+    ? buildFinancialPostingProjection(entries, accounts, canonicalDefinitions, options.costTimeline).legs
+    : buildLegacyLedgerLegs(entries, accounts, canonicalDefinitions,
+      isOperationalMerchantStatement ? { ...options, enableFinancialProjection: false } : options);
+  const legs = sourceLegs
     .filter(leg => leg.entityId === entityId && leg.dimension === dimension)
     .sort((a, b) => (a.date || '').localeCompare(b.date || ''));
   if (legs.length) {

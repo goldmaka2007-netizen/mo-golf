@@ -169,21 +169,21 @@ export const AnalysisReportView = React.memo(({ entries }: { entries: Entry[] })
         <div className="grid grid-cols-2 gap-4">
             <div className="bg-[#1a1e2a] p-4 rounded-2xl border border-[#c9a84c33] flex flex-col justify-between h-32">
                 <div className="text-xs text-[#5a5548] font-bold">إجمالي المبيعات</div>
-                <div className="text-3xl font-black text-[#c9a84c]">{exec.salesCash.toLocaleString()} <span className="text-sm">ج</span></div>
+                <div className="text-3xl font-black text-[#c9a84c]">{exec.salesCash.toLocaleString(undefined, { maximumFractionDigits: 0 })} <span className="text-sm">ج</span></div>
             </div>
             <div className="bg-[#1a1e2a] p-4 rounded-2xl border border-[#c9a84c33] flex flex-col justify-between h-32">
                 <div className="text-xs text-[#5a5548] font-bold">إجمالي المشتريات</div>
-                <div className="text-3xl font-black text-[#ddd8cc]">{exec.purchasesCash.toLocaleString()} <span className="text-sm">ج</span></div>
+                <div className="text-3xl font-black text-[#ddd8cc]">{exec.purchasesCash.toLocaleString(undefined, { maximumFractionDigits: 0 })} <span className="text-sm">ج</span></div>
             </div>
             <div className="bg-[#1a1e2a] p-4 rounded-2xl border border-[#c9a84c33] flex flex-col justify-between h-32">
                 <div className="text-xs text-[#5a5548] font-bold">صافي التدفق النقدي للنشاط</div>
                 <div className={cn("text-3xl font-black", exec.rawMargin >= 0 ? "text-green-400" : "text-red-400")}>
-                    {exec.rawMargin.toLocaleString()} <span className="text-sm">ج</span>
+                    {exec.rawMargin.toLocaleString(undefined, { maximumFractionDigits: 0 })} <span className="text-sm">ج</span>
                 </div>
             </div>
             <div className="bg-[#1a1e2a] p-4 rounded-2xl border border-[#c9a84c33] flex flex-col justify-between h-32">
                 <div className="text-xs text-[#5a5548] font-bold">رصيد الخزنة الحالي</div>
-                <div className="text-3xl font-black text-[#6a8a9e]">{exec.treasuryBalance.toLocaleString()} <span className="text-sm">ج</span></div>
+                <div className="text-3xl font-black text-[#6a8a9e]">{exec.treasuryBalance.toLocaleString(undefined, { maximumFractionDigits: 0 })} <span className="text-sm">ج</span></div>
             </div>
         </div>
 
@@ -199,11 +199,11 @@ export const AnalysisReportView = React.memo(({ entries }: { entries: Entry[] })
             </div>
             <div className="flex justify-between text-green-400/80">
                 <span>أعلى مبيعات ({exec.topDay[0]}):</span>
-                <span className="font-bold">{exec.topDay[1].toLocaleString()} ج</span>
+                <span className="font-bold">{exec.topDay[1].toLocaleString(undefined, { maximumFractionDigits: 0 })} ج</span>
             </div>
             <div className="flex justify-between text-red-400/80">
                 <span>أدنى مبيعات ({exec.bottomDay[0]}):</span>
-                <span className="font-bold">{exec.bottomDay[1].toLocaleString()} ج</span>
+                <span className="font-bold">{exec.bottomDay[1].toLocaleString(undefined, { maximumFractionDigits: 0 })} ج</span>
             </div>
         </div>
 
@@ -218,15 +218,15 @@ export const AnalysisReportView = React.memo(({ entries }: { entries: Entry[] })
                         </div>
                         <div className="grid grid-cols-2 gap-y-3 text-sm">
                             <span className="text-[#5a5548]">المبيعات:</span>
-                            <span className="text-left font-bold">{d.sales.toLocaleString()} ج</span>
+                            <span className="text-left font-bold">{d.sales.toLocaleString(undefined, { maximumFractionDigits: 0 })} ج</span>
                             <span className="text-[#5a5548]">المشتريات:</span>
-                            <span className="text-left font-bold">{d.purchases.toLocaleString()} ج</span>
+                            <span className="text-left font-bold">{d.purchases.toLocaleString(undefined, { maximumFractionDigits: 0 })} ج</span>
                             <span className="text-[#5a5548]">التدفق النقدي:</span>
                             <span className={cn("text-left font-bold", (d.sales - d.purchases) >= 0 ? "text-green-400" : "text-red-400")}>
-                                {(d.sales - d.purchases).toLocaleString()} ج
+                                {(d.sales - d.purchases).toLocaleString(undefined, { maximumFractionDigits: 0 })} ج
                             </span>
                             <span className="text-[#5a5548]">إجمالي المصاريف:</span>
-                            <span className="text-left font-bold text-red-400/70">{d.expenses.toLocaleString()} ج</span>
+                            <span className="text-left font-bold text-red-400/70">{d.expenses.toLocaleString(undefined, { maximumFractionDigits: 0 })} ج</span>
                             <span className="text-[#5a5548]">صافي تغير الوزن (جم عربي):</span>
                             <span className={cn("text-left font-bold", (d.goldBuy - d.goldSell) >= 0 ? "text-[#c9a84c]" : "text-red-400")}>
                                 {(d.goldBuy - d.goldSell).toFixed(2)} جم
@@ -254,14 +254,14 @@ export const AnalysisReportView = React.memo(({ entries }: { entries: Entry[] })
                             <div className="grid grid-cols-2 gap-4 text-xs">
                                 <div className="space-y-2">
                                     <div className="text-[#5a5548]">المبيعات:</div>
-                                    <div className="font-bold text-sm">{d.sb.toLocaleString()} ج / {d.sw.toFixed(2)} جم</div>
+                                    <div className="font-bold text-sm">{d.sb.toLocaleString(undefined, { maximumFractionDigits: 0 })} ج / {d.sw.toFixed(2)} جم</div>
                                     <div className="text-[#5a5548]">المشتريات:</div>
-                                    <div className="font-bold text-sm">{d.pb.toLocaleString()} ج / {d.pw.toFixed(2)} جم</div>
+                                    <div className="font-bold text-sm">{d.pb.toLocaleString(undefined, { maximumFractionDigits: 0 })} ج / {d.pw.toFixed(2)} جم</div>
                                 </div>
                                 <div className="space-y-2 text-left">
                                     <div className="text-[#5a5548]">الهامش:</div>
                                     <div className={cn("font-bold text-sm", margin >= 0 ? "text-green-400" : "text-red-400")}>
-                                        {margin.toLocaleString()} ج ({marginPct.toFixed(1)}%)
+                                        {margin.toLocaleString(undefined, { maximumFractionDigits: 0 })} ج ({marginPct.toFixed(1)}%)
                                     </div>
                                     <div className="text-[#5a5548]">متوسط سعر البيع:</div>
                                     <div className="font-bold text-sm text-[#c9a84c]">
@@ -336,7 +336,7 @@ export const AnalysisReportView = React.memo(({ entries }: { entries: Entry[] })
             <div className="space-y-4">
                 <div className="flex justify-between items-end">
                     <span className="text-sm text-[#5a5548]">إجمالي المصاريف:</span>
-                    <span className="text-xl font-bold text-red-400">{totalExpenses.toLocaleString()} ج</span>
+                    <span className="text-xl font-bold text-red-400">{totalExpenses.toLocaleString(undefined, { maximumFractionDigits: 0 })} ج</span>
                 </div>
                 <div className="space-y-4">
                     {(Object.entries(expenses) as [string, number][]).sort((a, b) => b[1] - a[1]).map(([name, val]) => {
@@ -346,7 +346,7 @@ export const AnalysisReportView = React.memo(({ entries }: { entries: Entry[] })
                                 <div className="flex justify-between text-xs">
                                     <span className="text-[#ddd8cc]">{name}</span>
                                     <span className={cn("font-bold", pct > 50 ? "text-red-500" : "text-[#5a5548]")}>
-                                        {val.toLocaleString()} ج ({pct.toFixed(0)}%)
+                                        {val.toLocaleString(undefined, { maximumFractionDigits: 0 })} ج ({pct.toFixed(0)}%)
                                     </span>
                                 </div>
                                 <div className="h-2 bg-[#1a1e2a] rounded-full overflow-hidden">
@@ -376,7 +376,7 @@ export const AnalysisReportView = React.memo(({ entries }: { entries: Entry[] })
                     {topDeals.sales.map((e, i) => (
                         <div key={i} className="flex justify-between items-center text-[10px] bg-[#080a0f] p-2 rounded">
                             <span className="text-[#5a5548]">{e.credit}</span>
-                            <span className="font-bold text-[#ddd8cc]">{getUnitCash(e).toLocaleString()} ج</span>
+                            <span className="font-bold text-[#ddd8cc]">{getUnitCash(e).toLocaleString(undefined, { maximumFractionDigits: 0 })} ج</span>
                         </div>
                     ))}
                 </div>
@@ -385,7 +385,7 @@ export const AnalysisReportView = React.memo(({ entries }: { entries: Entry[] })
                     {topDeals.purchases.map((e, i) => (
                         <div key={i} className="flex justify-between items-center text-[10px] bg-[#080a0f] p-2 rounded">
                             <span className="text-[#5a5548]">{e.debit}</span>
-                            <span className="font-bold text-[#ddd8cc]">{getUnitCash(e).toLocaleString()} ج</span>
+                            <span className="font-bold text-[#ddd8cc]">{getUnitCash(e).toLocaleString(undefined, { maximumFractionDigits: 0 })} ج</span>
                         </div>
                     ))}
                 </div>
@@ -406,9 +406,9 @@ export const AnalysisReportView = React.memo(({ entries }: { entries: Entry[] })
                     <tbody className="divide-y divide-[#1a1e2a]">
                         {[
                             { name: "التدفقات النقدية التشغيلية", val: `${((exec.rawMargin / (exec.salesCash || 1)) * 100).toFixed(1)}%`, score: "جيد" },
-                            { name: "متوسط المبيعات اليومي", val: exec.dailyAvg.toLocaleString(), score: exec.dailyAvg > 10000 ? "ممتاز" : "جيد" },
+                            { name: "متوسط المبيعات اليومي", val: exec.dailyAvg.toLocaleString(undefined, { maximumFractionDigits: 0 }), score: exec.dailyAvg > 10000 ? "ممتاز" : "جيد" },
                             { name: "كفاءة المصاريف", val: `${((totalExpenses / (exec.salesCash || 1)) * 100).toFixed(1)}%`, score: (totalExpenses/exec.salesCash) < 0.1 ? "ممتاز" : "جيد" },
-                            { name: "سيولة الخزنة", val: exec.treasuryBalance.toLocaleString(), score: "جيد" },
+                            { name: "سيولة الخزنة", val: exec.treasuryBalance.toLocaleString(undefined, { maximumFractionDigits: 0 }), score: "جيد" },
                             { name: "نسبة التيفيت", val: `${tefit.ratio.toFixed(1)}%`, score: tefit.ratio < 20 ? "جيد" : "يحتاج تحسين" },
                             { name: "معدل دوران المخزون", val: "N/A", score: "جيد" },
                             { name: "تغطية الأصول للخصوم", val: "100%", score: "ممتاز" },
@@ -461,7 +461,7 @@ export const AnalysisReportView = React.memo(({ entries }: { entries: Entry[] })
                     </div>
                     <div className="p-4 bg-[#0e1018] rounded-xl space-y-2 border-r-4 border-[#c9a84c]">
                         <div className="font-bold text-[#ddd8cc]">4. إدارة السيولة</div>
-                        <p className="text-[#5a5548]">رصيد الخزنة الحالي {exec.treasuryBalance.toLocaleString()} ج. يجب الحفاظ على هذا المستوى وتوزيعه بحكمة بين السيولة الجاهزة للمشتريات الكبرى وبين الأصول الذهبية.</p>
+                        <p className="text-[#5a5548]">رصيد الخزنة الحالي {exec.treasuryBalance.toLocaleString(undefined, { maximumFractionDigits: 0 })} ج. يجب الحفاظ على هذا المستوى وتوزيعه بحكمة بين السيولة الجاهزة للمشتريات الكبرى وبين الأصول الذهبية.</p>
                     </div>
                 </div>
             </div>

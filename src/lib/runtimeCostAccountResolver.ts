@@ -117,6 +117,21 @@ export interface RuntimeCostInputResolution {
   errors: string[];
 }
 
+const boundInventoryAccountIds = new Set(
+  CURRENT_DATASET_INVENTORY_BINDINGS.map(binding => binding.inventoryAccountId),
+);
+
+export const prepareRuntimeCostAccountInputs = (
+  entries: readonly Entry[],
+  accounts: readonly Account[],
+): RuntimeCostInputResolution => {
+  const needsLegacyResolution = accounts.some(account =>
+    account.is_inventory && (!account.id || !boundInventoryAccountIds.has(account.id)));
+  return needsLegacyResolution
+    ? resolveRuntimeCostAccountInputs(entries, accounts)
+    : { entries: [...entries], accounts: [...accounts], audit: [], errors: [] };
+};
+
 /**
  * Resolves legacy Firestore inventory document ids and imported name-only
  * operation sides to stable Phase 5 ids. Resolution is fail-closed and requires

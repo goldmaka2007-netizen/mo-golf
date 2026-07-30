@@ -159,7 +159,7 @@ export const ValuationOverviewView = React.memo(({ entries }: { entries: Entry[]
             <div className="flex-1">
               <div className="text-xs text-[#5a5548] font-bold mb-1">{item.title}</div>
               <div className="text-base md:text-lg font-bold text-[#ddd8cc] font-mono">
-                {new Intl.NumberFormat('en-US', { maximumFractionDigits: 2 }).format(item.val)}
+                {new Intl.NumberFormat('en-US', { maximumFractionDigits: item.unit === 'ج.م' ? 0 : 2 }).format(item.val)}
                 <span className="text-xs font-sans text-[#5a5548] mr-1">{item.unit}</span>
               </div>
             </div>

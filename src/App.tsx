@@ -1,27 +1,18 @@
-﻿import React, { useState, useEffect } from 'react';
-import { deleteDoc, doc, updateDoc, serverTimestamp, addDoc, collection, getDocsFromServer, query, where } from 'firebase/firestore';
+import React, { Suspense, lazy, useCallback, useEffect, useMemo, useState } from 'react';
+import { deleteDoc, doc, updateDoc, serverTimestamp, setDoc, collection, getDocsFromServer, query, where } from 'firebase/firestore';
 import { AnimatePresence, motion } from 'framer-motion';
 import { useAppStore } from './store';
+import { useShallow } from 'zustand/react/shallow';
 import { db, firebaseProjectId, firestoreDatabaseId, logOut } from './firebase';
 import { Entry } from './types';
 import { buildGoldEquivalent21Audit, canCalculateGoldEquivalent21, inferGoldKaratFromMultiplier } from './lib/goldEquivalent';
 import { isGoldEquivalentEntry } from './utils/accountLogic';
 import { resolveEntryIdentity } from './lib/entryIdentity';
+import { calculateMerchantInvoiceMetalValueMinor, isMerchantReceiptEntry, resolveMerchantReceiptMetal } from './lib/merchantInvoiceValuation';
 
 import { Home, BookOpenCheck, PlusCircle, BarChart3, Menu, RefreshCw, Gem } from 'lucide-react';
 
 import { MainDashboard } from './components/views/MainDashboard';
-import { EntryForm } from './components/views/EntryForm';
-import { SettingsView } from './components/views/SettingsView';
-import { EditingEntryModal } from './components/views/EditingEntryModal';
-import { DailyJournalView } from './components/views/DailyJournalView';
-import { AccountingGuideView } from './components/views/AccountingGuideView';
-import { ReportsView } from './components/views/ReportsView';
-import { StoryBuilderView } from './components/views/StoryBuilderView';
-import { InvoicePrintModal } from './components/views/InvoicePrintModal';
-import { MoreView } from './components/views/MoreView';
-import { CanonicalAccountsView } from './components/views/CanonicalAccountsView';
-import { InventoryCheckView } from './components/views/InventoryCheckView';
 
 import { ErrorBoundary } from './components/ErrorBoundary';
 import { NavButton } from './components/ui/NavButton';
@@ -33,10 +24,34 @@ import { GlobalErrorView } from './components/views/GlobalErrorView';
 import { useAuthInit } from './hooks/useAuthInit';
 import { useDataSync } from './hooks/useDataSync';
 import { useCostRecalculation } from './hooks/useCostRecalculation';
-import { areOperationWritesLocked } from './lib/costRecalculation';
+import { areOperationWritesLocked } from './lib/costRunState';
 import { isAdminEmail } from './lib/adminAccess';
+import { generateId } from './utils/generateId';
+
+const EntryForm = lazy(() => import('./components/views/EntryForm').then(module => ({ default: module.EntryForm })));
+const SettingsView = lazy(() => import('./components/views/SettingsView').then(module => ({ default: module.SettingsView })));
+const EditingEntryModal = lazy(() => import('./components/views/EditingEntryModal').then(module => ({ default: module.EditingEntryModal })));
+const DailyJournalView = lazy(() => import('./components/views/DailyJournalView').then(module => ({ default: module.DailyJournalView })));
+const AccountingGuideView = lazy(() => import('./components/views/AccountingGuideView').then(module => ({ default: module.AccountingGuideView })));
+const ReportsView = lazy(() => import('./components/views/ReportsView').then(module => ({ default: module.ReportsView })));
+const StoryBuilderView = lazy(() => import('./components/views/StoryBuilderView').then(module => ({ default: module.StoryBuilderView })));
+const InvoicePrintModal = lazy(() => import('./components/views/InvoicePrintModal').then(module => ({ default: module.InvoicePrintModal })));
+const MoreView = lazy(() => import('./components/views/MoreView').then(module => ({ default: module.MoreView })));
+const CanonicalAccountsView = lazy(() => import('./components/views/CanonicalAccountsView').then(module => ({ default: module.CanonicalAccountsView })));
+const InventoryCheckView = lazy(() => import('./components/views/InventoryCheckView').then(module => ({ default: module.InventoryCheckView })));
 
 type AppView = ReturnType<typeof useAppStore.getState>['view'];
+type DataServicesProps = {
+  user: ReturnType<typeof useAppStore.getState>['user'];
+  isAuthReady: boolean;
+  view: AppView;
+};
+
+const DataServices = React.memo(({ user, isAuthReady, view }: DataServicesProps) => {
+  useDataSync(user, isAuthReady, view);
+  useCostRecalculation();
+  return null;
+});
 
 const reportViews: AppView[] = ['reports', 'inventory', 'profit-analysis', 'advanced-analytics'];
 const moreViews: AppView[] = ['more', 'story', 'guide', 'settings', 'chart-of-accounts'];
@@ -45,16 +60,29 @@ export default function App() {
   const {
     user, isAuthReady, setEntries, view, setView, setReportsTab,
     globalError, setGlobalError, setIsUpdatingPrice,
-    editingEntry, setEditingEntry, accountsDb,
-    costCalculationRun, requestCostRetry
-  } = useAppStore();
+    editingEntry, setEditingEntry, printEntry, accountsDb,
+    costCalculationRun, requestCostRetry,
+  } = useAppStore(useShallow(state => ({
+    user: state.user,
+    isAuthReady: state.isAuthReady,
+    setEntries: state.setEntries,
+    view: state.view,
+    setView: state.setView,
+    setReportsTab: state.setReportsTab,
+    globalError: state.globalError,
+    setGlobalError: state.setGlobalError,
+    setIsUpdatingPrice: state.setIsUpdatingPrice,
+    editingEntry: state.editingEntry,
+    setEditingEntry: state.setEditingEntry,
+    printEntry: state.printEntry,
+    accountsDb: state.accountsDb,
+    costCalculationRun: state.costCalculationRun,
+    requestCostRetry: state.requestCostRetry,
+  })));
 
   const {
     loading, authError, isSigningIn, isStandalone, handleSignIn
   } = useAuthInit();
-
-  useDataSync(user, isAuthReady);
-  useCostRecalculation();
 
   const [isUpdatingEntry, setIsUpdatingEntry] = useState(false);
   const [deleteConfirmId, setDeleteConfirmId] = useState<string | null>(null);
@@ -65,7 +93,7 @@ export default function App() {
 
   const isIOS = typeof window !== 'undefined' && /iPhone|iPad|iPod/.test(navigator.userAgent);
 
-  const refreshData = async () => {
+  const refreshData = useCallback(async () => {
     if (!user) return;
     setIsUpdatingPrice(true);
     try {
@@ -94,7 +122,7 @@ export default function App() {
     } finally {
       setIsUpdatingPrice(false);
     }
-  };
+  }, [user, setEntries, setGlobalError, setIsUpdatingPrice]);
 
   const toggleFullscreen = () => {
     if (isIOS && !isStandalone) {
@@ -145,7 +173,7 @@ export default function App() {
     try {
       await deleteDoc(doc(db, 'entries', id));
       if (user) {
-        await addDoc(collection(db, 'audit_logs'), {
+        await setDoc(doc(db, 'audit_logs', generateId()), {
           action: 'delete', collection: 'entries', documentId: id,
           userId: user.uid, userEmail: user.email, timestamp: serverTimestamp()
         });
@@ -176,6 +204,23 @@ export default function App() {
         return;
       }
       Object.assign(rawData, identity.value);
+      if (isMerchantReceiptEntry(rawData as Entry)) {
+        const metal = resolveMerchantReceiptMetal(rawData as Entry, accountsDb);
+        if (!metal) {
+          setGlobalError('تعذر تحديد نوع معدن فاتورة التاجر من الحسابات المختارة.');
+          return;
+        }
+        rawData.tx = metal === 'silver' ? 'تاجر فضة' : 'تاجر ذهب';
+        rawData.invoiceOfficialPricePerGramEgp = Number(rawData.invoiceOfficialPricePerGramEgp ?? rawData.marketPrice);
+        rawData.marketPrice = rawData.invoiceOfficialPricePerGramEgp;
+        const metalValueMinor = calculateMerchantInvoiceMetalValueMinor(rawData as Entry, accountsDb);
+        if (metalValueMinor === null) {
+          setGlobalError('يجب إدخال سعر الجرام الرسمي الموجود في فاتورة التاجر ووزن صحيح.');
+          return;
+        }
+        rawData.transactionGoldValueMinor = metalValueMinor;
+        rawData.merchantGoldBookValueMinor = metalValueMinor;
+      }
       const calculationKarat = rawData.karat ?? inferGoldKaratFromMultiplier(rawData.multiplier);
       if (isGoldEquivalentEntry(rawData, accountsDb) && canCalculateGoldEquivalent21(rawData.weight || '', calculationKarat)) {
         const goldAudit = buildGoldEquivalent21Audit(rawData.weight || '', calculationKarat, rawData.arabicWeight);
@@ -194,7 +239,7 @@ export default function App() {
 
       await updateDoc(doc(db, 'entries', id), { ...data, updatedAt: serverTimestamp() });
       if (user) {
-        await addDoc(collection(db, 'audit_logs'), {
+        await setDoc(doc(db, 'audit_logs', generateId()), {
           action: 'update', collection: 'entries', documentId: id,
           userId: user.uid, userEmail: user.email, changes: data, timestamp: serverTimestamp()
         });
@@ -221,7 +266,7 @@ export default function App() {
     window.location.href = window.location.origin + '?reset=' + Date.now();
   };
 
-  const navItems = [
+  const navItems = useMemo(() => [
     { id: 'home' as AppView, label: 'الرئيسية', icon: <Home className="h-5 w-5" />, active: view === 'home', onClick: () => setView('home') },
     { id: 'journal' as AppView, label: 'اليومية', icon: <BookOpenCheck className="h-5 w-5" />, active: view === 'journal', onClick: () => setView('journal') },
     {
@@ -240,7 +285,7 @@ export default function App() {
     },
     { id: 'reports' as AppView, label: 'التقارير', icon: <BarChart3 className="h-5 w-5" />, active: reportViews.includes(view), onClick: () => setView('reports') },
     { id: 'more' as AppView, label: 'المزيد', icon: <Menu className="h-5 w-5" />, active: moreViews.includes(view), onClick: () => setView('more') },
-  ];
+  ], [view, setView, costCalculationRun, setGlobalError]);
 
   const pageTitle = (() => {
     if (view === 'entry') return 'العمليات';
@@ -277,6 +322,7 @@ export default function App() {
 
   return (
     <ErrorBoundary>
+      <DataServices user={user} isAuthReady={isAuthReady} view={view} />
       <div
         className={`min-h-[100dvh] pb-[calc(var(--bottom-nav-height)+env(safe-area-inset-bottom)+16px)] font-sans ${view === 'entry' ? 'bg-[#fffdf7] text-[#15203b]' : 'bg-[#020408] text-[#f5f1e8]'}`}
         dir="rtl"
@@ -342,20 +388,18 @@ export default function App() {
               exit={{ opacity: 0, y: -8 }}
               transition={{ duration: 0.18 }}
             >
-              {view === 'home' && <MainDashboard refreshData={refreshData} />}
-              {view === 'entry' && (
-                areOperationWritesLocked(costCalculationRun)
-                  ? <div className="rounded-2xl border border-red-500/30 bg-red-500/10 p-6 text-center text-sm text-red-100">العمليات متوقفة حتى يكتمل احتساب التكلفة بنجاح.</div>
-                  : <EntryForm />
-              )}
-              {view === 'journal' && <DailyJournalView />}
-              {view === 'database' && <InventoryCheckView />}
-              {reportViews.includes(view) && <ReportsView />}
-              {view === 'more' && <MoreView isFullscreen={isFullscreen} onToggleFullscreen={toggleFullscreen} onLogOut={logOut} />}
-              {view === 'story' && <StoryBuilderView />}
-              {view === 'guide' && <AccountingGuideView />}
-              {view === 'settings' && <SettingsView />}
-              {view === 'chart-of-accounts' && <CanonicalAccountsView />}
+              <Suspense fallback={<div className="min-h-32 animate-pulse rounded-2xl border border-[#1a1e2a] bg-[#0e1018]" aria-label="جارٍ تحميل الشاشة" />}>
+                {view === 'home' && <MainDashboard refreshData={refreshData} />}
+                {view === 'entry' && <EntryForm />}
+                {view === 'journal' && <DailyJournalView />}
+                {view === 'database' && <InventoryCheckView />}
+                {reportViews.includes(view) && <ReportsView />}
+                {view === 'more' && <MoreView isFullscreen={isFullscreen} onToggleFullscreen={toggleFullscreen} onLogOut={logOut} />}
+                {view === 'story' && <StoryBuilderView />}
+                {view === 'guide' && <AccountingGuideView />}
+                {view === 'settings' && <SettingsView />}
+                {view === 'chart-of-accounts' && <CanonicalAccountsView />}
+              </Suspense>
             </motion.div>
           </AnimatePresence>
         </main>
@@ -375,19 +419,21 @@ export default function App() {
 
         <AnimatePresence>
           {editingEntry && (editingEntry as any).id && (
-            <EditingEntryModal
-              editingEntry={editingEntry}
-              setEditingEntry={setEditingEntry}
-              handleUpdate={handleUpdate}
-              handleDelete={handleDelete}
-              deleteConfirmId={deleteConfirmId}
-              setDeleteConfirmId={setDeleteConfirmId}
-              isUpdating={isUpdatingEntry}
-            />
+            <Suspense fallback={null}>
+              <EditingEntryModal
+                editingEntry={editingEntry}
+                setEditingEntry={setEditingEntry}
+                handleUpdate={handleUpdate}
+                handleDelete={handleDelete}
+                deleteConfirmId={deleteConfirmId}
+                setDeleteConfirmId={setDeleteConfirmId}
+                isUpdating={isUpdatingEntry}
+              />
+            </Suspense>
           )}
         </AnimatePresence>
 
-        <InvoicePrintModal />
+        {printEntry && <Suspense fallback={null}><InvoicePrintModal /></Suspense>}
       </div>
     </ErrorBoundary>
   );

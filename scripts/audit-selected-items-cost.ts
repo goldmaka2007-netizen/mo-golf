@@ -222,7 +222,7 @@ const markdownRow = (values: Array<string | number>): string =>
 export const buildSelectedItemsCostAudit = (): SelectedItemsCostAudit => {
   const { accounts, timeline } = runPhase5GoldenDataset();
   const baseline = loadPhase5GoldenBaseline();
-  if (!timeline || !timeline.valid) {
+  if (!timeline || !timeline.valid || timeline.costDataComplete !== true) {
     throw new Error(`No valid ${INVENTORY_COST_CALCULATION_VERSION} timeline was produced.`);
   }
 

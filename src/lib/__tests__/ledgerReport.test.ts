@@ -59,6 +59,48 @@ describe('ledger account selection and account-specific dimensions', () => {
     expect(getAvailableDimensions(merchant, [merchantEntry], master)).toEqual(['cash', 'gold']);
     expect(buildLedgerReport([productSale], master, accounts[1], 'cash', '2026-01-01', '2026-01-01').rows).toHaveLength(1);
   });
+  it('keeps the metal carrying value out of the operational merchant cash statement', () => {
+    const receipt = entry({
+      id: 'merchant-receipt',
+      tx: 'تاجر ذهب',
+      debit: accounts[1].name,
+      debitAccountId: accounts[1].id,
+      credit: merchant.name,
+      creditAccountId: merchant.id,
+      cash: '125',
+      weight: '10',
+      arabicWeight: '10',
+      transactionGoldValueMinor: 500_000,
+      workmanshipCostMinor: 12_500,
+    });
+    const costTimeline = {
+      valid: true,
+      costDataComplete: true,
+      results: [{
+        operationId: 'merchant-receipt',
+        entry: receipt,
+        classification: 'merchant_receipt',
+        inventoryAccountId: accounts[1].id,
+        destinationInventoryAccountId: accounts[1].id,
+        merchantLiabilityIncreaseMinor: 500_000,
+      }],
+    } as any;
+    const master = [...accounts, merchant];
+    const financial = buildLedgerReport([receipt], master, merchant, 'cash', receipt.date, receipt.date, [], {
+      enableFinancialProjection: true,
+      costTimeline,
+      merchantStatementMode: 'financial',
+    });
+    const operational = buildLedgerReport([receipt], master, merchant, 'cash', receipt.date, receipt.date, [], {
+      enableFinancialProjection: true,
+      costTimeline,
+      merchantStatementMode: 'operational',
+    });
+
+    expect(financial.totalCredit).toBe(5_125);
+    expect(operational.totalCredit).toBe(125);
+    expect(operational.rows).toHaveLength(1);
+  });
   it('uses invoiceNumber before the legacy seq fallback', () => {
     expect(getVisibleOperationNumber(entry({ invoiceNumber: 'INV-4', seq: 9 }))).toBe('INV-4');
     expect(getVisibleOperationNumber(entry({ invoiceNumber: undefined, seq: 9 }))).toBe('9');

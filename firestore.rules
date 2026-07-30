@@ -75,6 +75,133 @@ service cloud.firestore {
       allow delete: if ownsExisting();
     }
 
+    match /historicalCostReviewOverlays/{overlayId} {
+      function hasExactOwner(data) {
+        return isAuthenticated()
+          && data.userId == request.auth.uid
+          && data.ownerId == request.auth.uid
+          && data.createdBy == request.auth.uid;
+      }
+
+      function hasAllowedFields(data) {
+        return data.keys().hasAll([
+          'overlayId', 'overlayVersion', 'schemaVersion', 'targetOperationId',
+          'overlayType', 'originalDiagnosticCode', 'approvedInterpretedCostMinor',
+          'pricePerGramMinor', 'valueBasis', 'sourceType', 'sourceReference',
+          'approver', 'createdAt', 'approvedAt', 'supersedesOverlayId', 'status',
+          'sourceInventoryAccountId', 'notes', 'confidenceNote',
+          'historicalAssignmentConfirmed', 'userId', 'ownerId', 'createdBy', 'auditHash'
+        ]) && data.keys().hasOnly([
+          'overlayId', 'overlayVersion', 'schemaVersion', 'targetOperationId',
+          'overlayType', 'originalDiagnosticCode', 'approvedInterpretedCostMinor',
+          'pricePerGramMinor', 'valueBasis', 'sourceType', 'sourceReference',
+          'approver', 'createdAt', 'approvedAt', 'supersedesOverlayId', 'status',
+          'sourceInventoryAccountId', 'notes', 'confidenceNote',
+          'historicalAssignmentConfirmed', 'userId', 'ownerId', 'createdBy', 'auditHash'
+        ]);
+      }
+
+      function validNullableCost(value) {
+        return value == null || (value is int && value >= 0);
+      }
+
+      function validCore(data) {
+        return hasAllowedFields(data)
+          && hasExactOwner(data)
+          && data.overlayId == overlayId
+          && data.overlayVersion is int
+          && data.overlayVersion >= 1
+          && data.schemaVersion == 'historical-cost-review-v1'
+          && data.targetOperationId is string
+          && data.targetOperationId.size() > 0
+          && data.overlayType in [
+            'merchant_receipt_cost', 'inventory_surplus_cost',
+            'inventory_two_sided_correction', 'inventory_duplicate_exclusion',
+            'inventory_non_surplus'
+          ]
+          && data.originalDiagnosticCode is string
+          && data.originalDiagnosticCode.size() > 0
+          && validNullableCost(data.approvedInterpretedCostMinor)
+          && validNullableCost(data.pricePerGramMinor)
+          && data.valueBasis in [
+            'total', 'actual_weight', 'standard21_weight',
+            'carrying_cost_transfer', 'exclusion'
+          ]
+          && data.sourceType in [
+            'original_invoice', 'merchant_statement', 'manual_records',
+            'bank_or_cash_evidence', 'approved_accounting_estimate', 'other'
+          ]
+          && data.sourceReference is string
+          && data.approver is string
+          && data.createdAt is string
+          && data.createdAt.size() > 0
+          && (data.approvedAt == null || data.approvedAt is string)
+          && (data.supersedesOverlayId == null || data.supersedesOverlayId is string)
+          && data.status in ['draft', 'approved', 'rejected']
+          && (data.sourceInventoryAccountId == null || data.sourceInventoryAccountId is string)
+          && data.notes is string
+          && data.confidenceNote is string
+          && data.historicalAssignmentConfirmed is bool
+          && data.auditHash is string
+          && data.auditHash.matches('^[a-f0-9]{64}$');
+      }
+
+      function validApproval(data) {
+        return data.status != 'approved' || (
+          data.approvedAt is string
+          && data.approvedAt.size() > 0
+          && data.approver.size() > 0
+          && data.historicalAssignmentConfirmed == true
+          && (data.sourceReference.size() > 0 || data.notes.size() > 0)
+          && (
+            !(data.overlayType in ['merchant_receipt_cost', 'inventory_surplus_cost'])
+            || (data.approvedInterpretedCostMinor is int
+              && data.approvedInterpretedCostMinor > 0)
+          )
+          && (
+            data.overlayType != 'inventory_two_sided_correction'
+            || (data.sourceInventoryAccountId is string
+              && data.sourceInventoryAccountId.size() > 0)
+          )
+        );
+      }
+
+      function validReferencedSupersession(data) {
+        let prior = get(/databases/$(database)/documents/historicalCostReviewOverlays/$(data.supersedesOverlayId)).data;
+        return hasExactOwner(prior)
+          && prior.status == 'approved'
+          && prior.targetOperationId == data.targetOperationId
+          && data.overlayVersion > prior.overlayVersion;
+      }
+
+      function validSupersession(data) {
+        return data.supersedesOverlayId == null
+          || validReferencedSupersession(data);
+      }
+
+      function preservesDraftIdentity() {
+        return request.resource.data.overlayId == resource.data.overlayId
+          && request.resource.data.overlayVersion == resource.data.overlayVersion
+          && request.resource.data.targetOperationId == resource.data.targetOperationId
+          && request.resource.data.createdAt == resource.data.createdAt
+          && request.resource.data.userId == resource.data.userId
+          && request.resource.data.ownerId == resource.data.ownerId
+          && request.resource.data.createdBy == resource.data.createdBy
+          && request.resource.data.supersedesOverlayId == resource.data.supersedesOverlayId;
+      }
+
+      allow read: if hasExactOwner(resource.data);
+      allow create: if validCore(request.resource.data)
+        && validApproval(request.resource.data)
+        && validSupersession(request.resource.data);
+      allow update: if hasExactOwner(resource.data)
+        && resource.data.status == 'draft'
+        && preservesDraftIdentity()
+        && validCore(request.resource.data)
+        && validApproval(request.resource.data)
+        && validSupersession(request.resource.data);
+      allow delete: if false;
+    }
     match /inventory_checks/{checkId} {
       allow read: if ownsExisting();
       allow create: if ownsIncoming();

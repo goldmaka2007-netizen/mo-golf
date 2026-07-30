@@ -6,7 +6,8 @@ import { useAppStore } from '../store';
 import { isAdminEmail } from '../lib/adminAccess';
 
 export const useAuthInit = () => {
-  const { setUser, setIsAuthReady } = useAppStore();
+  const setUser = useAppStore(state => state.setUser);
+  const setIsAuthReady = useAppStore(state => state.setIsAuthReady);
   const [loading, setLoading] = useState(true);
   const [authError, setAuthError] = useState<string | null>(null);
   const [isSigningIn, setIsSigningIn] = useState(false);

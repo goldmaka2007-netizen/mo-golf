@@ -66,7 +66,7 @@ interface SanitizedGoldenAccount {
   type: Account['type'];
   metal: Account['metal'];
   karat: Account['karat'];
-  is_inventory: true;
+  is_inventory: boolean;
   quantityStep?: number;
 }
 
@@ -143,6 +143,44 @@ export const loadPhase5GoldenDataset = (): {
     ...account,
     userId: 'phase5-golden-sanitized',
   })) as Account[];
+  accounts.push(
+    {
+      id: 'phase5-non-inventory-39',
+      name: 'acct_non_inventory_039',
+      mainType: 'liability',
+      subType: 'merchant_gold',
+      balanceNature: 'gold',
+      type: 'merchant',
+      metal: 'gold',
+      karat: '21',
+      is_inventory: false,
+      userId: 'phase5-golden-sanitized',
+    },
+    {
+      id: 'phase5-non-inventory-40',
+      name: 'acct_non_inventory_040',
+      type: 'merchant',
+      mainType: 'liability',
+      subType: 'merchant_gold',
+      balanceNature: 'gold',
+      metal: 'gold',
+      karat: '21',
+      is_inventory: false,
+      userId: 'phase5-golden-sanitized',
+    },
+    {
+      id: 'phase5-non-inventory-43',
+      name: 'acct_non_inventory_043',
+      type: 'merchant',
+      mainType: 'liability',
+      subType: 'merchant_silver',
+      balanceNature: 'silver',
+      metal: 'silver',
+      karat: null,
+      is_inventory: false,
+      userId: 'phase5-golden-sanitized',
+    },
+  );
   const entries = fixture.entries.map(item => ({
     id: item.operationId,
     date: item.date,

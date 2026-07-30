@@ -68,6 +68,9 @@ export interface InventoryCostState {
   standardizedQuantityUnits: number;
   actualPhysicalWeightUnits: number;
   accessoryQuantityUnits: number;
+  pendingStandardizedQuantityUnits: number;
+  pendingActualPhysicalWeightUnits: number;
+  pendingAccessoryQuantityUnits: number;
   remainingMetalCostMinor: number;
   remainingWorkmanshipCostMinor: number;
   remainingAccessoryCostMinor: number;
@@ -105,7 +108,15 @@ export type InventoryCostDiagnosticCode =
   | 'transfer_quantity_mismatch'
   | 'unknown_inventory_account'
   | 'unknown_inventory_operation'
-  | 'unsupported_inventory_account_type';
+  | 'unsupported_inventory_account_type'
+  | 'cost_invariant_failed'
+  | 'missing_original_operation'
+  | 'over_return'
+  | 'unresolved_merchant_cost'
+  | 'pending_surplus_cost'
+  | 'invalid_manufacturing'
+  | 'invalid_snapshot'
+  | 'duplicate_opening';
 
 export interface InventoryCostDiagnostic {
   code: InventoryCostDiagnosticCode;
@@ -133,6 +144,9 @@ export type InventoryCostOperationClassification =
   | 'customer_purchase'
   | 'merchant_receipt'
   | 'merchant_delivery'
+  | 'merchant_cash_settlement'
+  | 'merchant_liability_opening'
+  | 'merchant_liability_transfer'
   | 'sale'
   | 'tafyeet'
   | 'transfer'
@@ -140,7 +154,29 @@ export type InventoryCostOperationClassification =
   | 'surplus'
   | 'two_sided_adjustment'
   | 'quantity_only'
+  | 'customer_return'
+  | 'supplier_return'
+  | 'manufacturing'
+  | 'pending_surplus'
+  | 'approved_surplus'
+  | 'snapshot_opening'
   | 'non_cost';
+
+export interface InventoryCostUnresolvedItem {
+  code: 'unresolved_merchant_cost' | 'pending_surplus_cost' | 'unresolved_return_cost';
+  operationId: string;
+  inventoryAccountId?: string;
+  message: string;
+  requiredCorrection: string;
+}
+
+export interface MerchantGoldLiabilityState {
+  merchantAccountId: string;
+  standardizedWeightUnits: number;
+  physicalWeightUnits: number;
+  bookValueMinor: number;
+  unresolvedWeightUnits: number;
+}
 
 export type HistoricalOverlayOwnerApprovalStatus =
   | 'pending_final_approval'
@@ -200,6 +236,20 @@ export interface OperationCostResultV2 {
   profitMinor: number | null;
   adjustmentGainMinor: number;
   adjustmentLossMinor: number;
+  /** Populated for surplus operations valued from the affected account WAC. */
+  wacBeforeMinorPerDisplayUnit?: number | null;
+  wacAfterMinorPerDisplayUnit?: number | null;
+  revenueReversalMinor: number;
+  reversedCogsMinor: number;
+  purchaseCostReversalMinor: number;
+  merchantLiabilityIncreaseMinor: number;
+  merchantLiabilityDecreaseMinor: number;
+  merchantSettlementGainMinor: number;
+  merchantSettlementLossMinor: number;
+  manufacturingConversionCostMinor: number;
+  manufacturingAbnormalLossMinor: number;
+  originalOperationId?: string;
+  costPostingMovements?: Array<{ accountId: string; side: 'debit' | 'credit'; amountMinor: number; role: string }>;
   calculationVersion: typeof INVENTORY_COST_CALCULATION_VERSION;
   entry: Entry;
 }
@@ -214,6 +264,10 @@ export interface InventoryCostTimeline {
   orderingDiagnostics: LegacySameDayOrderingDiagnostic[];
   historicalInventoryOverlays: AppliedHistoricalInventoryOverlay[];
   valid: boolean;
+  merchantGoldLiabilities: Record<string, MerchantGoldLiabilityState>;
+  unresolvedCostData: InventoryCostUnresolvedItem[];
+  costDataComplete: boolean;
+  excludedHistoricalOperationIds?: string[];
 }
 
 export interface AccessoryOpeningUnitCostConfig {

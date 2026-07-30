@@ -15,18 +15,18 @@ import {
   FilePlus,
 } from 'lucide-react';
 import { 
-  collection, 
-  addDoc, 
   doc, 
   setDoc,
   writeBatch 
 } from 'firebase/firestore';
 import * as XLSX from 'xlsx';
 import { db } from '../../firebase';
+import { generateId } from '../../utils/generateId';
 import { AnnualOpeningCostConfig } from '../../types';
 import { useAppStore } from '../../store';
 import { cn } from '../../lib/utils';
 import { formatMinorUnitsToEgpInput, getAccessoryOpeningCostsMinorByAccountId, getGoldOpeningPriceMinor, getSilverOpeningPriceMinor, mergeAnnualOpeningCostRows, parseEgpToMinorUnits } from '../../lib/openingCostConfig';
+import { formatCashAmount } from '../../lib/accounting';
 import { normalizeNumerals } from '../../lib/accounting';
 import { areOperationWritesLocked } from '../../lib/costRecalculation';
 
@@ -458,7 +458,7 @@ export const SettingsView = React.memo(() => {
           
           const [date, tx, debit, credit, cash, weight, notes, karat, count, arabicWeight, multiplier] = parts;
           
-          await addDoc(collection(db, 'entries'), {
+          await setDoc(doc(db, 'entries', generateId()), {
             date: date || "",
             tx: tx || "",
             debit: debit || "",
@@ -639,8 +639,8 @@ export const SettingsView = React.memo(() => {
                     ) : sortedOpeningCostConfig.map(row => (
                       <tr key={row.year}>
                         <td className="font-mono font-bold text-[#ddd8cc]">{row.year}</td>
-                        <td className="font-mono text-[#ddd8cc]">{formatMinorUnitsToEgpInput(getGoldOpeningPriceMinor(row)) || "-"}</td>
-                        <td className="font-mono text-[#ddd8cc]">{formatMinorUnitsToEgpInput(getSilverOpeningPriceMinor(row)) || "-"}</td>
+                        <td className="font-mono text-[#ddd8cc]">{formatCashAmount(Number(formatMinorUnitsToEgpInput(getGoldOpeningPriceMinor(row))))}</td>
+                        <td className="font-mono text-[#ddd8cc]">{formatCashAmount(Number(formatMinorUnitsToEgpInput(getSilverOpeningPriceMinor(row))))}</td>
                         <td className="text-[#ddd8cc]">
                           {(() => {
                             const accessoryCosts = getAccessoryOpeningCostsMinorByAccountId(row);
@@ -653,7 +653,7 @@ export const SettingsView = React.memo(() => {
                                   {savedAccessories.map(account => (
                                     <div key={account.id} className="flex justify-between gap-3 font-mono text-[10px]">
                                       <span className="font-sans text-[#8a8172]">{account.name}</span>
-                                      <span>{formatMinorUnitsToEgpInput(accessoryCosts[account.id!])} {'\u062c.\u0645'}</span>
+                                      <span>{formatCashAmount(Number(formatMinorUnitsToEgpInput(accessoryCosts[account.id!])))} {'\u062c.\u0645'}</span>
                                     </div>
                                   ))}
                                 </div>

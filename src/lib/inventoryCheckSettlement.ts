@@ -10,6 +10,7 @@ import { isQuantityAlignedToStep } from './weightedAverageCost';
 import { buildOpeningCostConfig } from './openingCostConfig';
 import { rebuildInventoryCostTimeline } from './inventoryCostEngine';
 import { approvedHistoricalInventoryOverlaysForAccounts } from './historicalInventoryOverlay';
+import { prepareRuntimeCostAccountInputs } from './runtimeCostAccountResolver';
 
 const EPSILON = 0.001;
 
@@ -199,9 +200,13 @@ export const prepareEntryForCentralSave = (args: {
   }
 
   const pendingEntry = { ...entry, id: '__pending_inventory_check_settlement__' } as Entry;
+  const costInputs = prepareRuntimeCostAccountInputs([...args.entries, pendingEntry], args.accountsDb);
+  if (costInputs.errors.length > 0) {
+    return { ok: false, message: `\u0631\u0641\u0636 \u0631\u0628\u0637 \u062d\u0633\u0627\u0628\u0627\u062a \u0627\u0644\u0645\u062e\u0632\u0648\u0646: ${costInputs.errors[0]}` };
+  }
   const openingConfig = buildOpeningCostConfig(args.openingCostConfig, args.accountsDb);
-  const costValidation = rebuildInventoryCostTimeline([...args.entries, pendingEntry], args.accountsDb, openingConfig, {
-    historicalInventoryOverlayDirectives: approvedHistoricalInventoryOverlaysForAccounts(args.accountsDb),
+  const costValidation = rebuildInventoryCostTimeline(costInputs.entries, costInputs.accounts, openingConfig, {
+    historicalInventoryOverlayDirectives: approvedHistoricalInventoryOverlaysForAccounts(costInputs.accounts),
   });
   if (!costValidation.valid) {
     const diagnostic = costValidation.diagnostics[0];

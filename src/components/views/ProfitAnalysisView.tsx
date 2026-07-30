@@ -97,7 +97,7 @@ export const ProfitAnalysisView = () => {
 
       <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
         {[
-          { label: "إيرادات الذهب", value: totalGold.salesCash.toLocaleString(), color: "text-green-400" },
+          { label: "إيرادات الذهب", value: totalGold.salesCash.toLocaleString(undefined, { maximumFractionDigits: 0 }), color: "text-green-400" },
           { label: "متوسط البيع/جم 21", value: Math.round(avgSalePrice).toLocaleString(), color: "text-[#ddd8cc]" },
           { label: "متوسط الشراء/جم 21", value: Math.round(avgPurchPrice).toLocaleString(), color: "text-blue-400" },
           { label: "صافي الربح التقديري", value: totalProfit === null ? "غير متاح" : Math.round(totalProfit).toLocaleString(), color: totalProfit === null ? "text-yellow-400" : totalProfit >= 0 ? "text-green-400" : "text-red-400" },

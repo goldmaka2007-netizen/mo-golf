@@ -2,6 +2,7 @@ import type { Account, Entry } from '../types';
 import {
   isHistoricalOverlayActive,
   sealAppliedHistoricalInventoryOverlay,
+  type HistoricalMerchantLiabilityOpeningDirective,
 } from './historicalInventoryOverlay';
 import { normalizeNumerals } from './accounting';
 import {
@@ -30,6 +31,7 @@ import {
   type SupportedGoldKarat,
 } from './goldEquivalent';
 import { isOpeningEntry } from './openingEntry';
+import { calculateMerchantInvoiceMetalValueMinor } from './merchantInvoiceValuation';
 
 const MAX_SAFE_BIGINT = BigInt(Number.MAX_SAFE_INTEGER);
 const ACCESSORY_SCALE = 1000;
@@ -131,7 +133,7 @@ const parseMoneyMinor = (
 const parseConfigMinor = (
   value: number | string | undefined,
   label: string,
-  entry: Entry,
+  entry?: Entry,
 ): number => {
   if (value === undefined || value === '') {
     fail('missing_opening_cost', `Missing ${label}`, entry);
@@ -231,6 +233,9 @@ const emptyState = (account: ResolvedInventoryAccount): InventoryCostState => ({
   standardizedQuantityUnits: 0,
   actualPhysicalWeightUnits: 0,
   accessoryQuantityUnits: 0,
+  pendingStandardizedQuantityUnits: 0,
+  pendingActualPhysicalWeightUnits: 0,
+  pendingAccessoryQuantityUnits: 0,
   remainingMetalCostMinor: 0,
   remainingWorkmanshipCostMinor: 0,
   remainingAccessoryCostMinor: 0,
@@ -284,6 +289,36 @@ const updateDerivedState = (state: InventoryCostState): void => {
     state.totalWacMinorPerDisplayUnit = state.standardizedQuantityUnits > 0
       ? (state.remainingTotalCostMinor * GRAM_SCALE) / state.standardizedQuantityUnits
       : null;
+  }
+};
+
+const assertStateInvariant = (state: InventoryCostState, entry: Entry): void => {
+  const integers = [
+    state.standardizedQuantityUnits, state.actualPhysicalWeightUnits, state.accessoryQuantityUnits,
+    state.remainingMetalCostMinor, state.remainingWorkmanshipCostMinor,
+    state.remainingAccessoryCostMinor, state.remainingTotalCostMinor,
+  ];
+  if (integers.some(value => !Number.isSafeInteger(value) || value < 0)) {
+    fail('cost_invariant_failed', 'Inventory quantity and carrying cost must remain non-negative safe integers', entry, state.inventoryAccountId);
+  }
+  const components = state.remainingMetalCostMinor
+    + state.remainingWorkmanshipCostMinor + state.remainingAccessoryCostMinor;
+  if (components !== state.remainingTotalCostMinor) {
+    fail('cost_invariant_failed', 'Inventory total cost does not equal its cost components', entry, state.inventoryAccountId);
+  }
+  const primaryQuantity = state.kind === 'accessory'
+    ? state.accessoryQuantityUnits : state.standardizedQuantityUnits;
+  if (primaryQuantity === 0 && state.remainingTotalCostMinor !== 0) {
+    fail('cost_invariant_failed', 'Zero inventory cannot retain rounding residual cost', entry, state.inventoryAccountId);
+  }
+  if (primaryQuantity > 0 && state.hasReliableCostBasis) {
+    const derived = state.kind === 'accessory'
+      ? (state.remainingTotalCostMinor * ACCESSORY_SCALE) / primaryQuantity
+      : (state.remainingTotalCostMinor * GRAM_SCALE) / primaryQuantity;
+    if (state.totalWacMinorPerDisplayUnit === null
+      || Math.abs(derived - state.totalWacMinorPerDisplayUnit) > 1e-9) {
+      fail('cost_invariant_failed', 'Derived WAC is inconsistent with remaining carrying cost', entry, state.inventoryAccountId);
+    }
   }
 };
 
@@ -345,6 +380,31 @@ const movementQuantity = (entry: Entry, account: ResolvedInventoryAccount): Move
   fail('missing_karat_conversion', 'Missing approved E21 conversion input', entry, account.inventoryAccountId);
 };
 
+const manufacturingMovementQuantity = (
+  movement: NonNullable<Entry['manufacturing']>['inputs'][number],
+  account: ResolvedInventoryAccount,
+  entry: Entry,
+): MovementQuantity => {
+  if (account.kind === 'accessory') {
+    fail('invalid_manufacturing', 'Manufacturing does not support accessory inventory pools', entry, account.inventoryAccountId);
+  }
+  const physicalUnits = parseScaledDecimal(
+    movement.physicalWeight, GRAM_SCALE, 2, 'manufacturing physical weight', entry, true, true,
+  );
+  let standardizedUnits = movement.standardizedQuantityUnits;
+  if (standardizedUnits === undefined) {
+    if (account.kind === 'silver') standardizedUnits = physicalUnits;
+    else if (account.karat && canCalculateGoldEquivalent21(movement.physicalWeight, account.karat)) {
+      standardizedUnits = calculateGoldEquivalent21(
+        movement.physicalWeight, account.karat as SupportedGoldKarat,
+      ).equivalent21Units;
+    }
+  }
+  if (!Number.isSafeInteger(standardizedUnits) || Number(standardizedUnits) <= 0) {
+    fail('invalid_manufacturing', 'Manufacturing movement requires a positive integer Standard-21 quantity', entry, account.inventoryAccountId);
+  }
+  return { standardizedUnits: Number(standardizedUnits), physicalUnits, accessoryUnits: 0 };
+};
 const blankResult = (
   entry: Entry,
   classification: InventoryCostOperationClassification,
@@ -370,6 +430,16 @@ const blankResult = (
   profitMinor: null,
   adjustmentGainMinor: 0,
   adjustmentLossMinor: 0,
+  revenueReversalMinor: 0,
+  reversedCogsMinor: 0,
+  purchaseCostReversalMinor: 0,
+  merchantLiabilityIncreaseMinor: 0,
+  merchantLiabilityDecreaseMinor: 0,
+  merchantSettlementGainMinor: 0,
+  merchantSettlementLossMinor: 0,
+  manufacturingConversionCostMinor: 0,
+  manufacturingAbnormalLossMinor: 0,
+  originalOperationId: entry.originalOperationId,
   calculationVersion: INVENTORY_COST_CALCULATION_VERSION,
   entry,
 });
@@ -403,6 +473,7 @@ const addIncoming = (
   state.hasReliableCostBasis = true;
   state.lastProcessedOperationId = getPhase5OperationId(entry);
   updateDerivedState(state);
+  assertStateInvariant(state, entry);
 };
 
 interface RemovedCost {
@@ -420,6 +491,10 @@ const calculateRemoval = (
   if (!state.hasReliableCostBasis) fail('missing_wac', 'Inventory account has no reliable WAC', entry, state.inventoryAccountId);
   if (state.kind === 'accessory') {
     if (quantity.accessoryUnits <= 0) fail('invalid_quantity', 'Accessory outgoing quantity must be positive', entry, state.inventoryAccountId);
+    if (quantity.accessoryUnits > state.accessoryQuantityUnits
+      && quantity.accessoryUnits <= state.accessoryQuantityUnits + state.pendingAccessoryQuantityUnits) {
+      fail('pending_surplus_cost', 'Confirmed inventory is insufficient; a pending surplus cannot be used before audited cost approval', entry, state.inventoryAccountId);
+    }
     if (quantity.accessoryUnits > state.accessoryQuantityUnits) {
       fail(
         'insufficient_inventory',
@@ -439,6 +514,11 @@ const calculateRemoval = (
   }
   if (quantity.standardizedUnits <= 0 || quantity.physicalUnits <= 0) {
     fail('invalid_quantity', 'Metal outgoing weight must be positive', entry, state.inventoryAccountId);
+  }
+  if ((quantity.standardizedUnits > state.standardizedQuantityUnits || quantity.physicalUnits > state.actualPhysicalWeightUnits)
+    && quantity.standardizedUnits <= state.standardizedQuantityUnits + state.pendingStandardizedQuantityUnits
+    && quantity.physicalUnits <= state.actualPhysicalWeightUnits + state.pendingActualPhysicalWeightUnits) {
+    fail('pending_surplus_cost', 'Confirmed inventory is insufficient; a pending surplus cannot be used before audited cost approval', entry, state.inventoryAccountId);
   }
   if (
     quantity.standardizedUnits > state.standardizedQuantityUnits
@@ -473,8 +553,17 @@ const calculateRemoval = (
   };
 };
 
-const calculateAtCurrentWac = (
-  state: InventoryCostState,
+const hasValidPreOperationWac = (state: InventoryCostState): boolean => {
+  if (!state.hasReliableCostBasis
+    || state.remainingTotalCostMinor <= 0
+    || state.totalWacMinorPerDisplayUnit === null
+    || state.totalWacMinorPerDisplayUnit <= 0) return false;
+  return state.kind === 'accessory'
+    ? state.accessoryQuantityUnits > 0
+    : state.standardizedQuantityUnits > 0 && state.actualPhysicalWeightUnits > 0;
+};
+
+const calculateAtCurrentWac = (  state: InventoryCostState,
   quantity: MovementQuantity,
   entry: Entry,
 ): RemovedCost => {
@@ -556,8 +645,38 @@ const applyRemoval = (
   }
   state.lastProcessedOperationId = getPhase5OperationId(entry);
   updateDerivedState(state);
+  assertStateInvariant(state, entry);
 };
 
+
+const applySpecifiedRemoval = (
+  state: InventoryCostState,
+  quantity: MovementQuantity,
+  removed: RemovedCost,
+  entry: Entry,
+): void => {
+  const available = state.kind === 'accessory' ? state.accessoryQuantityUnits : state.standardizedQuantityUnits;
+  const required = state.kind === 'accessory' ? quantity.accessoryUnits : quantity.standardizedUnits;
+  if (required <= 0 || required > available || quantity.physicalUnits > state.actualPhysicalWeightUnits) {
+    fail('insufficient_inventory', 'Original-cost return exceeds confirmed inventory', entry, state.inventoryAccountId);
+  }
+  if (removed.metalCostMinor > state.remainingMetalCostMinor
+    || removed.workmanshipCostMinor > state.remainingWorkmanshipCostMinor
+    || removed.accessoryCostMinor > state.remainingAccessoryCostMinor) {
+    fail('cost_invariant_failed', 'Original acquisition cost exceeds the remaining pool carrying cost', entry, state.inventoryAccountId);
+  }
+  state.standardizedQuantityUnits -= quantity.standardizedUnits;
+  state.actualPhysicalWeightUnits -= quantity.physicalUnits;
+  state.accessoryQuantityUnits -= quantity.accessoryUnits;
+  state.remainingMetalCostMinor -= removed.metalCostMinor;
+  state.remainingWorkmanshipCostMinor -= removed.workmanshipCostMinor;
+  state.remainingAccessoryCostMinor -= removed.accessoryCostMinor;
+  const primary = state.kind === 'accessory' ? state.accessoryQuantityUnits : state.standardizedQuantityUnits;
+  if (primary === 0) state.hasReliableCostBasis = false;
+  state.lastProcessedOperationId = getPhase5OperationId(entry);
+  updateDerivedState(state);
+  assertStateInvariant(state, entry);
+};
 const applyZeroCostMerchantDelivery = (
   state: InventoryCostState,
   quantity: MovementQuantity,
@@ -579,6 +698,7 @@ const applyZeroCostMerchantDelivery = (
   }
   state.lastProcessedOperationId = getPhase5OperationId(entry);
   updateDerivedState(state);
+  assertStateInvariant(state, entry);
 };
 
 const accountIdForSide = (entry: Entry, side: 'debit' | 'credit'): string | undefined =>
@@ -604,9 +724,13 @@ const classify = (
   debitInventory?: ResolvedInventoryAccount,
   creditInventory?: ResolvedInventoryAccount,
 ): InventoryCostOperationClassification => {
+  if (entry.operationKind === 'customer_return') return 'customer_return';
+  if (entry.operationKind === 'supplier_return') return 'supplier_return';
+  if (entry.operationKind === 'manufacturing') return 'manufacturing';
+  if (entry.tx === 'مرتجع ذهب' || entry.tx === 'مرتجع فضة') return 'customer_return';
   if (entry.tx === 'تاجر ذهب' || entry.tx === 'تاجر فضة') return 'merchant_receipt';
   if (entry.tx === 'حساب تاجر ذهب' || entry.tx === 'حساب تاجر فضة') {
-    return creditInventory ? 'merchant_delivery' : 'non_cost';
+    return creditInventory ? 'merchant_delivery' : entry.merchantGoldWeight ? 'merchant_cash_settlement' : 'non_cost';
   }
   if (isOpeningEntry(entry)) return 'opening';
   if (entry.operationKind === 'sale' || ['بيع ذهب', 'بيع فضة', 'بيع ملحقات'].includes(entry.tx)) return 'sale';
@@ -616,7 +740,9 @@ const classify = (
   if (entry.operationKind === 'adjustment' || ['تسوية', 'تسوية عجز', 'تسوية زيادة'].includes(entry.tx)) {
     if (debitInventory && creditInventory) return 'two_sided_adjustment';
     if (creditInventory) return 'shortage';
-    if (debitInventory) return 'surplus';
+    if (debitInventory) return entry.costAssignmentStatus === 'approved'
+      ? 'approved_surplus'
+      : 'pending_surplus';
   }
   return debitInventory || creditInventory ? 'non_cost' : 'non_cost';
 };
@@ -647,6 +773,25 @@ const isLegacyBatchEligible = (entry: Entry): boolean =>
   isLegacyEntry(entry) && !hasReliableLegacyOrder(entry);
 
 type LegacyBatchPhase = 'opening' | 'incoming' | 'outgoing' | 'none';
+
+const isMerchantAccount = (account: Account | undefined): boolean =>
+  account?.type === 'merchant';
+
+const merchantLiabilityPhaseForAccount = (
+  entry: Entry,
+  accountId: string,
+  accountsById: ReadonlyMap<string, Account>,
+): LegacyBatchPhase => {
+  const debit = entry.debitAccountId === accountId;
+  const credit = entry.creditAccountId === accountId;
+  if (!debit && !credit) return 'none';
+  if (!isMerchantAccount(accountsById.get(accountId))) return 'none';
+  if (isOpeningEntry(entry) && credit) return 'opening';
+  if ((entry.tx === 'تاجر ذهب' || entry.tx === 'تاجر فضة') && credit) return 'incoming';
+  if (entry.tx === 'حوالة') return credit ? 'incoming' : 'outgoing';
+  if ((entry.tx === 'حساب تاجر ذهب' || entry.tx === 'حساب تاجر فضة') && debit) return 'outgoing';
+  return 'none';
+};
 
 const legacyBatchPhaseForAccount = (
   entry: Entry,
@@ -684,6 +829,7 @@ const inventoryAccountIdsForEntry = (
 const reorderLegacySegment = (
   segment: Entry[],
   catalog: InventoryRuntimeCatalog,
+  accountsById: ReadonlyMap<string, Account>,
 ): Entry[] => {
   if (segment.length < 2) return segment;
   const edges = segment.map(() => new Set<number>());
@@ -698,6 +844,23 @@ const reorderLegacySegment = (
 
   for (const accountId of accountIds) {
     const phases = segment.map(entry => legacyBatchPhaseForAccount(entry, accountId, catalog));
+    const openings = phases.flatMap((phase, index) => phase === 'opening' ? [index] : []);
+    const incoming = phases.flatMap((phase, index) => phase === 'incoming' ? [index] : []);
+    const outgoing = phases.flatMap((phase, index) => phase === 'outgoing' ? [index] : []);
+    for (const opening of openings) {
+      for (const later of [...incoming, ...outgoing]) addEdge(opening, later);
+    }
+    for (const receipt of incoming) {
+      for (const issue of outgoing) addEdge(receipt, issue);
+    }
+  }
+
+  const merchantAccountIds = new Set(segment.flatMap(entry => [
+    entry.debitAccountId,
+    entry.creditAccountId,
+  ]).filter((id): id is string => !!id && isMerchantAccount(accountsById.get(id))));
+  for (const accountId of merchantAccountIds) {
+    const phases = segment.map(entry => merchantLiabilityPhaseForAccount(entry, accountId, accountsById));
     const openings = phases.flatMap((phase, index) => phase === 'opening' ? [index] : []);
     const incoming = phases.flatMap((phase, index) => phase === 'incoming' ? [index] : []);
     const outgoing = phases.flatMap((phase, index) => phase === 'outgoing' ? [index] : []);
@@ -729,6 +892,7 @@ const reorderLegacySegment = (
 const orderEntriesWithLegacySameDayPolicy = (
   entries: Entry[],
   catalog: InventoryRuntimeCatalog,
+  accountsById: ReadonlyMap<string, Account>,
 ): { ordered: Entry[]; diagnostics: LegacySameDayOrderingDiagnostic[] } => {
   const base = [...entries].sort(compareEntriesForPhase5Cost);
   const byDate = new Map<string, Entry[]>();
@@ -744,7 +908,7 @@ const orderEntriesWithLegacySameDayPolicy = (
     const reorderedDay: Entry[] = [];
     let segment: Entry[] = [];
     const flush = () => {
-      if (segment.length > 0) reorderedDay.push(...reorderLegacySegment(segment, catalog));
+      if (segment.length > 0) reorderedDay.push(...reorderLegacySegment(segment, catalog, accountsById));
       segment = [];
     };
     for (const entry of day) {
@@ -830,6 +994,16 @@ const openingCosts = (
   config: Phase5OpeningCostConfig,
 ): { metal: number; workmanship: number; accessory: number } => {
   const year = entry.date.slice(0, 4);
+  if (entry.annualOpeningSnapshot) {
+    const snapshot = entry.annualOpeningSnapshot;
+    if (snapshot.standardizedQuantityUnits !== quantity.standardizedUnits
+      || snapshot.physicalWeightUnits !== quantity.physicalUnits
+      || snapshot.accessoryQuantityUnits !== quantity.accessoryUnits
+      || ![snapshot.metalCostMinor, snapshot.workmanshipCostMinor, snapshot.accessoryCostMinor].every(value => Number.isSafeInteger(value) && value >= 0)) {
+      fail('invalid_snapshot', 'Annual opening snapshot quantity or cost components are invalid', entry, account.inventoryAccountId);
+    }
+    return { metal: snapshot.metalCostMinor, workmanship: snapshot.workmanshipCostMinor, accessory: snapshot.accessoryCostMinor };
+  }
   if (account.kind === 'gold') {
     const price = parseConfigMinor(config.gold21PriceByYearMinor?.[year], 'gold E21 opening price', entry);
     return {
@@ -934,6 +1108,7 @@ const applyHistoricalOverlayDirective = (
 export interface RebuildInventoryCostOptions {
   bindings?: readonly InventoryRuntimeBinding[];
   historicalInventoryOverlayDirectives?: readonly HistoricalInventoryOverlayDirective[];
+  historicalMerchantLiabilityOpeningDirectives?: readonly HistoricalMerchantLiabilityOpeningDirective[];
   allowPendingFinalApprovalForSimulation?: boolean;
   calculationGenerationId?: number;
 }
@@ -947,6 +1122,14 @@ export const rebuildInventoryCostTimeline = (
   const diagnostics: InventoryCostDiagnostic[] = [];
   let orderingDiagnostics: LegacySameDayOrderingDiagnostic[] = [];
   const historicalInventoryOverlays: AppliedHistoricalInventoryOverlay[] = [];
+  const unresolvedCostData: InventoryCostTimeline['unresolvedCostData'] = [];
+  const merchantGoldLiabilities: InventoryCostTimeline['merchantGoldLiabilities'] = {};
+  const returnedByOriginalOperation = new Map<string, MovementQuantity>();
+
+  const merchantState = (merchantAccountId: string) => merchantGoldLiabilities[merchantAccountId] ??= {
+    merchantAccountId, standardizedWeightUnits: 0, physicalWeightUnits: 0,
+    bookValueMinor: 0, unresolvedWeightUnits: 0,
+  };
   const catalog = buildInventoryRuntimeCatalog(
     accounts,
     options.bindings ?? CURRENT_DATASET_INVENTORY_BINDINGS,
@@ -970,6 +1153,9 @@ export const rebuildInventoryCostTimeline = (
       orderingDiagnostics,
       historicalInventoryOverlays,
       valid: false,
+      merchantGoldLiabilities,
+      unresolvedCostData,
+      costDataComplete: false,
     };
   }
 
@@ -1014,7 +1200,52 @@ export const rebuildInventoryCostTimeline = (
     );
 
     validateOrdering(entries);
-    const ordering = orderEntriesWithLegacySameDayPolicy(entries, catalog);
+    const accountsById = new Map(accounts.map(account => [account.id, account]));
+    const merchantOpeningOverlayIds = new Set<string>();
+    for (const directive of options.historicalMerchantLiabilityOpeningDirectives ?? []) {
+      if (merchantOpeningOverlayIds.has(directive.overlayId)) {
+        fail('invalid_historical_overlay', `Duplicate merchant liability opening overlayId: ${directive.overlayId}`);
+      }
+      merchantOpeningOverlayIds.add(directive.overlayId);
+      const account = accountsById.get(directive.merchantAccountId);
+      if (!account || !isMerchantAccount(account) || account.metal !== directive.metal) {
+        fail('invalid_historical_overlay', `Merchant liability opening overlay ${directive.overlayId} has invalid account metadata`);
+      }
+      if (!/^\d{4}-\d{2}-\d{2}$/.test(directive.effectiveDate)
+        || !Number.isSafeInteger(directive.standardizedWeightUnits)
+        || directive.standardizedWeightUnits <= 0
+        || !Number.isSafeInteger(directive.physicalWeightUnits)
+        || directive.physicalWeightUnits <= 0
+        || !Number.isSafeInteger(directive.bookValueMinor)
+        || directive.bookValueMinor <= 0
+        || directive.ownerApprovalStatus !== 'approved'
+        || !directive.approvedAt
+        || !directive.sourceReference) {
+        fail('invalid_historical_overlay', `Merchant liability opening overlay ${directive.overlayId} is incomplete`);
+      }
+      const year = directive.effectiveDate.slice(0, 4);
+      const approvedOpeningPrice = parseConfigMinor(
+        directive.metal === 'silver'
+          ? openingConfig.silverPriceByYearMinor?.[year]
+          : openingConfig.gold21PriceByYearMinor?.[year],
+        `${directive.metal} merchant opening overlay price`,
+      );
+      const expectedBookValue = toSafeInteger(
+        roundDivide(
+          BigInt(directive.standardizedWeightUnits) * BigInt(approvedOpeningPrice),
+          BigInt(GRAM_SCALE),
+        ),
+        'merchant liability opening overlay book value',
+      );
+      if (directive.bookValueMinor !== expectedBookValue) {
+        fail('invalid_historical_overlay', `Merchant liability opening overlay ${directive.overlayId} does not match the approved opening price`);
+      }
+      const liability = merchantState(directive.merchantAccountId);
+      liability.standardizedWeightUnits += directive.standardizedWeightUnits;
+      liability.physicalWeightUnits += directive.physicalWeightUnits;
+      liability.bookValueMinor += directive.bookValueMinor;
+    }
+    const ordering = orderEntriesWithLegacySameDayPolicy(entries, catalog, accountsById);
     ordered = ordering.ordered;
     orderingDiagnostics = ordering.diagnostics;
     for (const entry of ordered) {
@@ -1048,8 +1279,23 @@ export const rebuildInventoryCostTimeline = (
         fail('unknown_inventory_account', 'Inventory operation references an unknown accountId', entry);
       }
 
-      const classification = classify(entry, debitInventory, creditInventory);
-      if (!debitInventory && !creditInventory) continue;
+      const debitAccount = entry.debitAccountId ? accountsById.get(entry.debitAccountId) : undefined;
+      const creditAccount = entry.creditAccountId ? accountsById.get(entry.creditAccountId) : undefined;
+      const baseClassification = classify(entry, debitInventory, creditInventory);
+      const classification: InventoryCostOperationClassification =
+        isOpeningEntry(entry) && isMerchantAccount(creditAccount)
+          ? 'merchant_liability_opening'
+          : entry.tx === 'حوالة' && isMerchantAccount(debitAccount) && isMerchantAccount(creditAccount)
+            ? 'merchant_liability_transfer'
+            : baseClassification;
+      if (
+        !debitInventory
+        && !creditInventory
+        && classification !== 'manufacturing'
+        && classification !== 'merchant_cash_settlement'
+        && classification !== 'merchant_liability_opening'
+        && classification !== 'merchant_liability_transfer'
+      ) continue;
       if (classification === 'non_cost') {
         const rawWeight = Number(normalizeNumerals(String(entry.weight ?? '0')));
         const rawCount = Number(normalizeNumerals(String(entry.count ?? '0')));
@@ -1061,6 +1307,275 @@ export const rebuildInventoryCostTimeline = (
         fail('unknown_inventory_operation', `Unknown inventory operation variant: ${entry.tx}`, entry);
       }
 
+      if (classification === 'merchant_liability_opening') {
+        const merchantAccountId = entry.creditAccountId;
+        if (!merchantAccountId || !creditAccount) {
+          fail('missing_inventory_account_id', 'Merchant opening liability requires merchant accountId', entry);
+        }
+        if (creditAccount.metal !== 'gold' && creditAccount.metal !== 'silver') {
+          fail('unknown_inventory_operation', 'Merchant opening liability requires gold or silver account metadata', entry);
+        }
+        const standardizedWeight = parseScaledDecimal(
+          creditAccount.metal === 'silver' ? entry.weight : (entry.arabicWeight || entry.weight),
+          GRAM_SCALE,
+          2,
+          'merchant opening liability weight',
+          entry,
+          true,
+          true,
+        );
+        const physicalWeight = parseScaledDecimal(
+          entry.weight,
+          GRAM_SCALE,
+          2,
+          'merchant opening physical weight',
+          entry,
+          true,
+          true,
+        );
+        if (standardizedWeight === 0) continue;
+        const year = entry.date.slice(0, 4);
+        const price = parseConfigMinor(
+          creditAccount.metal === 'silver'
+            ? openingConfig.silverPriceByYearMinor?.[year]
+            : openingConfig.gold21PriceByYearMinor?.[year],
+          `${creditAccount.metal === 'silver' ? 'silver' : 'gold E21'} merchant opening price`,
+          entry,
+        );
+        const bookValue = toSafeInteger(
+          roundDivide(BigInt(standardizedWeight) * BigInt(price), BigInt(GRAM_SCALE)),
+          'merchant opening liability book value',
+          entry,
+        );
+        const liability = merchantState(merchantAccountId);
+        liability.standardizedWeightUnits += standardizedWeight;
+        liability.physicalWeightUnits += physicalWeight;
+        liability.bookValueMinor += bookValue;
+        const result = blankResult(entry, classification);
+        result.merchantLiabilityIncreaseMinor = bookValue;
+        results.push(result);
+        continue;
+      }
+      if (classification === 'merchant_liability_transfer') {
+        const sourceMerchantAccountId = entry.debitAccountId;
+        const destinationMerchantAccountId = entry.creditAccountId;
+        if (!sourceMerchantAccountId || !destinationMerchantAccountId || !debitAccount || !creditAccount) {
+          fail('missing_inventory_account_id', 'Merchant liability transfer requires both merchant accountIds', entry);
+        }
+        if (debitAccount.metal !== creditAccount.metal
+          || (creditAccount.metal !== 'gold' && creditAccount.metal !== 'silver')) {
+          fail('unknown_inventory_operation', 'Merchant liability transfer cannot cross metals', entry);
+        }
+        const standardizedWeight = parseScaledDecimal(
+          creditAccount.metal === 'silver' ? entry.weight : (entry.arabicWeight || entry.weight),
+          GRAM_SCALE,
+          2,
+          'merchant liability transfer weight',
+          entry,
+          false,
+          true,
+        );
+        const physicalWeight = parseScaledDecimal(
+          entry.weight,
+          GRAM_SCALE,
+          2,
+          'merchant liability transfer physical weight',
+          entry,
+          false,
+          true,
+        );
+        const source = merchantState(sourceMerchantAccountId);
+        if (standardizedWeight > source.standardizedWeightUnits) {
+          if (!isLegacyEntry(entry)) {
+            fail('over_return', 'Merchant liability transfer exceeds source liability weight', entry);
+          }
+          const gap = standardizedWeight - source.standardizedWeightUnits;
+          source.standardizedWeightUnits += gap;
+          source.physicalWeightUnits += Math.max(0, physicalWeight - source.physicalWeightUnits);
+          source.unresolvedWeightUnits += gap;
+          unresolvedCostData.push({
+            code: 'unresolved_merchant_cost',
+            operationId: getPhase5OperationId(entry),
+            message: 'Historical merchant liability transfer has no complete source book value',
+            requiredCorrection: 'أدخل رصيد التزام التاجر المصدر الافتتاحي وقيمته الدفترية قبل الحوالة.',
+          });
+        }
+        const transferredBookValue = standardizedWeight === source.standardizedWeightUnits
+          ? source.bookValueMinor
+          : proportionalCost(
+            source.bookValueMinor,
+            standardizedWeight,
+            source.standardizedWeightUnits,
+            entry,
+            'merchant liability transfer',
+          );
+        const transferredUnresolvedWeight = Math.min(source.unresolvedWeightUnits, standardizedWeight);
+        source.standardizedWeightUnits -= standardizedWeight;
+        source.physicalWeightUnits = Math.max(0, source.physicalWeightUnits - physicalWeight);
+        source.bookValueMinor -= transferredBookValue;
+        source.unresolvedWeightUnits -= transferredUnresolvedWeight;
+        const destination = merchantState(destinationMerchantAccountId);
+        destination.standardizedWeightUnits += standardizedWeight;
+        destination.physicalWeightUnits += physicalWeight;
+        destination.bookValueMinor += transferredBookValue;
+        destination.unresolvedWeightUnits += transferredUnresolvedWeight;
+        const result = blankResult(entry, classification);
+        result.merchantLiabilityDecreaseMinor = transferredBookValue;
+        result.merchantLiabilityIncreaseMinor = transferredBookValue;
+        results.push(result);
+        continue;
+      }
+      if (classification === 'merchant_cash_settlement') {
+        const merchantAccountId = entry.debitAccountId;
+        if (!merchantAccountId) fail('missing_inventory_account_id', 'Merchant cash settlement requires merchant accountId', entry);
+        const liability = merchantState(merchantAccountId);
+        const settledWeight = parseScaledDecimal(entry.merchantGoldWeight, GRAM_SCALE, 2, 'merchant settlement Standard-21 weight', entry, false, true);
+        if (settledWeight > liability.standardizedWeightUnits) fail('over_return', 'Cash settlement exceeds merchant gold liability weight', entry);
+        const liabilityDecrease = settledWeight === liability.standardizedWeightUnits
+          ? liability.bookValueMinor
+          : proportionalCost(liability.bookValueMinor, settledWeight, liability.standardizedWeightUnits, entry, 'merchant cash liability settlement');
+        const cashPaid = parseMoneyMinor(entry.cash, entry, false);
+        liability.standardizedWeightUnits -= settledWeight;
+        liability.physicalWeightUnits = Math.max(0, liability.physicalWeightUnits - settledWeight);
+        liability.bookValueMinor -= liabilityDecrease;
+        liability.unresolvedWeightUnits = Math.max(0, liability.unresolvedWeightUnits - settledWeight);
+        const difference = liabilityDecrease - cashPaid;
+        const result = blankResult(entry, classification);
+        Object.assign(result, {
+          merchantLiabilityDecreaseMinor: liabilityDecrease,
+          merchantSettlementGainMinor: Math.max(0, difference),
+          merchantSettlementLossMinor: Math.max(0, -difference),
+        });
+        results.push(result);
+        continue;
+      }
+      if (classification === 'manufacturing') {
+        const transformation = entry.manufacturing;
+        if (!transformation || transformation.version !== 'manufacturing-v1'
+          || transformation.inputs.length === 0 || transformation.outputs.length === 0) {
+          fail('invalid_manufacturing', 'Manufacturing requires a versioned transformation with inputs and outputs', entry);
+        }
+        const workingStates: Record<string, InventoryCostState> = { ...states };
+        const touched = new Set<string>();
+        const mutableState = (accountId: string): InventoryCostState => {
+          if (!touched.has(accountId)) {
+            workingStates[accountId] = cloneState(states[accountId]);
+            touched.add(accountId);
+          }
+          return workingStates[accountId];
+        };
+        let inputStandardUnits = 0;
+        let inputPhysicalUnits = 0;
+        let inputMetalCost = 0;
+        let inputWorkmanshipCost = 0;
+        let inputAccessoryCost = 0;
+        const costPostingMovements: NonNullable<OperationCostResultV2['costPostingMovements']> = [];
+        for (const movement of transformation.inputs) {
+          const account = catalog.byAccountId.get(movement.inventoryAccountId);
+          if (!account) fail('unknown_inventory_account', 'Unknown manufacturing input accountId', entry, movement.inventoryAccountId);
+          const quantity = manufacturingMovementQuantity(movement, account, entry);
+          const source = mutableState(account.inventoryAccountId);
+          const removed = calculateRemoval(source, quantity, entry);
+          applyRemoval(source, quantity, removed, entry);
+          inputStandardUnits += quantity.standardizedUnits;
+          inputPhysicalUnits += quantity.physicalUnits;
+          inputMetalCost += removed.metalCostMinor;
+          inputWorkmanshipCost += removed.workmanshipCostMinor;
+          inputAccessoryCost += removed.accessoryCostMinor;
+          costPostingMovements.push({ accountId: account.inventoryAccountId, side: 'credit', amountMinor: removed.totalCostMinor, role: 'raw_material' });
+        }
+        const outputDefinitions = transformation.outputs.map(movement => {
+          const account = catalog.byAccountId.get(movement.inventoryAccountId);
+          if (!account) fail('unknown_inventory_account', 'Unknown manufacturing output accountId', entry, movement.inventoryAccountId);
+          return { movement, account, quantity: manufacturingMovementQuantity(movement, account, entry) };
+        });
+        const outputStandardUnits = outputDefinitions.reduce((sum, item) => sum + item.quantity.standardizedUnits, 0);
+        const outputPhysicalUnits = outputDefinitions.reduce((sum, item) => sum + item.quantity.physicalUnits, 0);
+        const normalLossUnits = transformation.normalLossStandardizedUnits ?? 0;
+        const abnormalLossUnits = transformation.abnormalLossStandardizedUnits ?? 0;
+        if (![normalLossUnits, abnormalLossUnits].every(Number.isSafeInteger)
+          || normalLossUnits < 0 || abnormalLossUnits < 0
+          || outputStandardUnits + normalLossUnits + abnormalLossUnits !== inputStandardUnits) {
+          fail('invalid_manufacturing', 'Manufacturing Standard-21 inputs must equal outputs plus normal and abnormal loss', entry);
+        }
+        const conversionCost = transformation.directConversionCostMinor ?? 0;
+        if (!Number.isSafeInteger(conversionCost) || conversionCost < 0) {
+          fail('invalid_amount', 'Direct conversion cost must be a non-negative integer minor amount', entry);
+        }
+        const inputTotalCost = inputMetalCost + inputWorkmanshipCost + inputAccessoryCost;
+        const totalAvailableCost = inputTotalCost + conversionCost;
+        let abnormalLossCost = transformation.abnormalLossCostMinor;
+        if (abnormalLossCost === undefined) {
+          abnormalLossCost = abnormalLossUnits === 0 ? 0
+            : proportionalCost(totalAvailableCost, abnormalLossUnits, inputStandardUnits, entry, 'manufacturing abnormal loss cost');
+        }
+        if (!Number.isSafeInteger(abnormalLossCost) || abnormalLossCost < 0 || abnormalLossCost > totalAvailableCost) {
+          fail('invalid_manufacturing', 'Abnormal loss cost is outside the available manufacturing cost', entry);
+        }
+        const distributableCost = totalAvailableCost - abnormalLossCost;
+        const explicitCost = outputDefinitions.reduce((sum, item) => sum + (item.movement.allocatedCostMinor ?? 0), 0);
+        if (!outputDefinitions.every(item => item.movement.allocatedCostMinor === undefined
+          || (Number.isSafeInteger(item.movement.allocatedCostMinor) && Number(item.movement.allocatedCostMinor) >= 0))
+          || explicitCost > distributableCost) {
+          fail('invalid_manufacturing', 'Manufacturing output allocations exceed available cost', entry);
+        }
+        const unallocated = outputDefinitions.filter(item => item.movement.allocatedCostMinor === undefined);
+        if (unallocated.length === 0 && explicitCost !== distributableCost) {
+          fail('invalid_manufacturing', 'Explicit output allocations must equal distributable manufacturing cost', entry);
+        }
+        const remainingForAutomatic = distributableCost - explicitCost;
+        const automaticBasis = unallocated.reduce((sum, item) => sum + item.quantity.standardizedUnits, 0);
+        let automaticAssigned = 0;
+        const totalAllocations = outputDefinitions.map((item, index) => {
+          if (item.movement.allocatedCostMinor !== undefined) return Number(item.movement.allocatedCostMinor);
+          const isLastAutomatic = unallocated[unallocated.length - 1] === item;
+          const allocated = isLastAutomatic
+            ? remainingForAutomatic - automaticAssigned
+            : proportionalCost(remainingForAutomatic, item.quantity.standardizedUnits, automaticBasis, entry, `manufacturing output ${index + 1}`);
+          automaticAssigned += allocated;
+          return allocated;
+        });
+        const abnormalMetalCost = inputTotalCost === 0 ? 0
+          : proportionalCost(inputMetalCost, abnormalLossCost, totalAvailableCost, entry, 'abnormal metal loss');
+        const distributableMetalCost = inputMetalCost - abnormalMetalCost;
+        const distributableWorkmanshipCost = distributableCost - distributableMetalCost - inputAccessoryCost;
+        let metalAssigned = 0;
+        let workmanshipAssigned = 0;
+        outputDefinitions.forEach((item, index) => {
+          const isLast = index === outputDefinitions.length - 1;
+          const totalCost = totalAllocations[index];
+          const metalCost = isLast ? distributableMetalCost - metalAssigned
+            : proportionalCost(distributableMetalCost, totalCost, distributableCost || 1, entry, 'manufacturing metal allocation');
+          const workmanshipCost = isLast ? distributableWorkmanshipCost - workmanshipAssigned
+            : proportionalCost(distributableWorkmanshipCost, totalCost, distributableCost || 1, entry, 'manufacturing workmanship allocation');
+          metalAssigned += metalCost;
+          workmanshipAssigned += workmanshipCost;
+          addIncoming(mutableState(item.account.inventoryAccountId), item.quantity, metalCost, workmanshipCost, 0, entry);
+          costPostingMovements.push({ accountId: item.account.inventoryAccountId, side: 'debit', amountMinor: totalCost, role: item.movement.role ?? 'finished_good' });
+        });
+        touched.forEach(accountId => { states[accountId] = workingStates[accountId]; });
+        const result = blankResult(entry, classification);
+        Object.assign(result, {
+          sourceInventoryAccountId: transformation.inputs.length === 1 ? transformation.inputs[0].inventoryAccountId : undefined,
+          destinationInventoryAccountId: transformation.outputs.length === 1 ? transformation.outputs[0].inventoryAccountId : undefined,
+          outgoingStandardizedQuantityUnits: inputStandardUnits,
+          outgoingActualPhysicalWeightUnits: inputPhysicalUnits,
+          outgoingMetalCostMinor: inputMetalCost,
+          outgoingWorkmanshipCostMinor: inputWorkmanshipCost,
+          outgoingTotalCostMinor: inputTotalCost,
+          incomingStandardizedQuantityUnits: outputStandardUnits,
+          incomingActualPhysicalWeightUnits: outputPhysicalUnits,
+          incomingMetalCostMinor: distributableMetalCost,
+          incomingWorkmanshipCostMinor: distributableWorkmanshipCost,
+          incomingTotalCostMinor: distributableCost,
+          manufacturingConversionCostMinor: conversionCost,
+          manufacturingAbnormalLossMinor: abnormalLossCost,
+          adjustmentLossMinor: abnormalLossCost,
+          costPostingMovements,
+        });
+        results.push(result);
+        continue;
+      }
       if (classification === 'opening' || classification === 'customer_purchase' || classification === 'merchant_receipt') {
         if (!debitInventory) fail('missing_inventory_account_id', 'Incoming inventory accountId is missing', entry);
         const state = states[debitInventory.inventoryAccountId];
@@ -1090,10 +1605,38 @@ export const rebuildInventoryCostTimeline = (
           if (debitInventory.kind === 'accessory') {
             fail('unknown_inventory_operation', 'Merchant receipt does not support accessories', entry);
           }
-          workmanshipCost = parseMoneyMinor(entry.cash, entry, true);
+          const recognizedMetalValue = calculateMerchantInvoiceMetalValueMinor(entry, accounts)
+            ?? entry.transactionGoldValueMinor
+            ?? entry.merchantGoldBookValueMinor;
+          if (Number.isSafeInteger(recognizedMetalValue) && Number(recognizedMetalValue) > 0) {
+            metalCost = Number(recognizedMetalValue);
+          } else if (isLegacyEntry(entry)) {
+            unresolvedCostData.push({
+              code: 'unresolved_merchant_cost',
+              operationId: getPhase5OperationId(entry),
+              inventoryAccountId: debitInventory.inventoryAccountId,
+              message: 'Historical merchant receipt has no approved EGP metal carrying value',
+              requiredCorrection: 'أدخل القيمة الدفترية التاريخية المعتمدة أو أضف Historical Cost Overlay مُراجعًا.',
+            });
+          } else {
+            fail('unresolved_merchant_cost', 'Merchant receipt requires the official invoice price per gram', entry, debitInventory.inventoryAccountId);
+          }
+          workmanshipCost = entry.workmanshipCostMinor === undefined
+            ? parseMoneyMinor(entry.cash, entry, true)
+            : Number(entry.workmanshipCostMinor);
+          if (!Number.isSafeInteger(workmanshipCost) || workmanshipCost < 0) {
+            fail('invalid_amount', 'Merchant workmanship must be non-negative integer minor units', entry);
+          }
           if (workmanshipCost > 0 && quantity.physicalUnits <= 0) {
             fail('merchant_workmanship_without_weight', 'Merchant workmanship requires positive physical weight', entry);
           }
+          const merchantAccountId = entry.creditAccountId;
+          if (!merchantAccountId) fail('missing_inventory_account_id', 'Merchant receipt requires merchant accountId', entry);
+          const liability = merchantState(merchantAccountId);
+          liability.standardizedWeightUnits += quantity.standardizedUnits;
+          liability.physicalWeightUnits += quantity.physicalUnits;
+          liability.bookValueMinor += metalCost;
+          if (metalCost === 0) liability.unresolvedWeightUnits += quantity.standardizedUnits;
         }
         addIncoming(state, quantity, metalCost, workmanshipCost, accessoryCost, entry);
         const result = blankResult(entry, classification);
@@ -1106,6 +1649,103 @@ export const rebuildInventoryCostTimeline = (
           incomingMetalCostMinor: metalCost,
           incomingWorkmanshipCostMinor: workmanshipCost,
           incomingTotalCostMinor: metalCost + workmanshipCost + accessoryCost,
+          merchantLiabilityIncreaseMinor: classification === 'merchant_receipt' ? metalCost : 0,
+        });
+        results.push(result);
+        continue;
+      }
+
+      if (classification === 'customer_return' || classification === 'supplier_return') {
+        if (!entry.originalOperationId) fail('missing_original_operation', 'Return requires originalOperationId', entry);
+        const original = results.find(item => item.operationId === entry.originalOperationId);
+        const expected = classification === 'customer_return'
+          ? original?.classification === 'sale'
+          : original?.classification === 'customer_purchase' || original?.classification === 'merchant_receipt';
+        if (!original || !expected) fail('missing_original_operation', 'Return does not reference an eligible earlier operation', entry);
+        const inventory = classification === 'customer_return' ? debitInventory : creditInventory;
+        if (!inventory) fail('missing_inventory_account_id', 'Return inventory accountId is missing', entry);
+        const originalAccountId = classification === 'customer_return'
+          ? original.sourceInventoryAccountId : original.destinationInventoryAccountId;
+        if (originalAccountId !== inventory.inventoryAccountId) {
+          fail('missing_original_operation', 'Return inventory account differs from the original operation', entry, inventory.inventoryAccountId);
+        }
+        const quantity = movementQuantity(entry, inventory);
+        const originalQuantity: MovementQuantity = {
+          standardizedUnits: classification === 'customer_return'
+            ? original.outgoingStandardizedQuantityUnits : original.incomingStandardizedQuantityUnits,
+          physicalUnits: classification === 'customer_return'
+            ? original.outgoingActualPhysicalWeightUnits : original.incomingActualPhysicalWeightUnits,
+          accessoryUnits: classification === 'customer_return'
+            ? original.outgoingAccessoryQuantityUnits : original.incomingAccessoryQuantityUnits,
+        };
+        const returned = returnedByOriginalOperation.get(entry.originalOperationId)
+          ?? { standardizedUnits: 0, physicalUnits: 0, accessoryUnits: 0 };
+        if (returned.standardizedUnits + quantity.standardizedUnits > originalQuantity.standardizedUnits
+          || returned.physicalUnits + quantity.physicalUnits > originalQuantity.physicalUnits
+          || returned.accessoryUnits + quantity.accessoryUnits > originalQuantity.accessoryUnits) {
+          fail('over_return', 'Returned quantity exceeds the unreturned quantity of the original operation', entry, inventory.inventoryAccountId);
+        }
+        const costFrom = classification === 'customer_return'
+          ? { metal: original.outgoingMetalCostMinor, workmanship: original.outgoingWorkmanshipCostMinor,
+              accessory: original.outgoingTotalCostMinor - original.outgoingMetalCostMinor - original.outgoingWorkmanshipCostMinor }
+          : { metal: original.incomingMetalCostMinor, workmanship: original.incomingWorkmanshipCostMinor,
+              accessory: original.incomingTotalCostMinor - original.incomingMetalCostMinor - original.incomingWorkmanshipCostMinor };
+        const metalCost = originalQuantity.standardizedUnits > 0
+          ? proportionalCost(costFrom.metal, quantity.standardizedUnits, originalQuantity.standardizedUnits, entry, 'original return metal cost') : 0;
+        let workmanshipCost = originalQuantity.physicalUnits > 0
+          ? proportionalCost(costFrom.workmanship, quantity.physicalUnits, originalQuantity.physicalUnits, entry, 'original return workmanship cost') : 0;
+        if (classification === 'supplier_return' && !entry.reverseWorkmanshipOnReturn) workmanshipCost = 0;
+        const accessoryCost = originalQuantity.accessoryUnits > 0
+          ? proportionalCost(costFrom.accessory, quantity.accessoryUnits, originalQuantity.accessoryUnits, entry, 'original return accessory cost') : 0;
+        const restored: RemovedCost = { metalCostMinor: metalCost, workmanshipCostMinor: workmanshipCost,
+          accessoryCostMinor: accessoryCost, totalCostMinor: metalCost + workmanshipCost + accessoryCost };
+        const state = states[inventory.inventoryAccountId];
+        if (classification === 'customer_return') {
+          addIncoming(state, quantity, metalCost, workmanshipCost, accessoryCost, entry);
+        } else {
+          applySpecifiedRemoval(state, quantity, restored, entry);
+        }
+        returnedByOriginalOperation.set(entry.originalOperationId, {
+          standardizedUnits: returned.standardizedUnits + quantity.standardizedUnits,
+          physicalUnits: returned.physicalUnits + quantity.physicalUnits,
+          accessoryUnits: returned.accessoryUnits + quantity.accessoryUnits,
+        });
+        const primaryReturned = inventory.kind === 'accessory' ? quantity.accessoryUnits : quantity.standardizedUnits;
+        const primaryOriginal = inventory.kind === 'accessory' ? originalQuantity.accessoryUnits : originalQuantity.standardizedUnits;
+        const revenueReversal = classification === 'customer_return' && primaryOriginal > 0
+          ? proportionalCost(original.saleAmountMinor, primaryReturned, primaryOriginal, entry, 'original revenue reversal') : 0;
+        const result = blankResult(entry, classification);
+        if (classification === 'supplier_return' && original.classification === 'merchant_receipt') {
+          const merchantAccountId = original.entry.creditAccountId;
+          if (!merchantAccountId) fail('missing_original_operation', 'Original merchant receipt is missing merchant accountId', entry);
+          const liability = merchantState(merchantAccountId);
+          if (quantity.standardizedUnits > liability.standardizedWeightUnits || metalCost > liability.bookValueMinor) {
+            fail('over_return', 'Merchant return exceeds the remaining merchant liability', entry);
+          }
+          liability.standardizedWeightUnits -= quantity.standardizedUnits;
+          liability.physicalWeightUnits = Math.max(0, liability.physicalWeightUnits - quantity.physicalUnits);
+          liability.bookValueMinor -= metalCost;
+          result.merchantLiabilityDecreaseMinor = metalCost;
+        }
+        Object.assign(result, {
+          inventoryAccountId: inventory.inventoryAccountId,
+          sourceInventoryAccountId: classification === 'supplier_return' ? inventory.inventoryAccountId : undefined,
+          destinationInventoryAccountId: classification === 'customer_return' ? inventory.inventoryAccountId : undefined,
+          incomingStandardizedQuantityUnits: classification === 'customer_return' ? quantity.standardizedUnits : 0,
+          incomingActualPhysicalWeightUnits: classification === 'customer_return' ? quantity.physicalUnits : 0,
+          incomingAccessoryQuantityUnits: classification === 'customer_return' ? quantity.accessoryUnits : 0,
+          outgoingStandardizedQuantityUnits: classification === 'supplier_return' ? quantity.standardizedUnits : 0,
+          outgoingActualPhysicalWeightUnits: classification === 'supplier_return' ? quantity.physicalUnits : 0,
+          outgoingAccessoryQuantityUnits: classification === 'supplier_return' ? quantity.accessoryUnits : 0,
+          incomingMetalCostMinor: classification === 'customer_return' ? metalCost : 0,
+          incomingWorkmanshipCostMinor: classification === 'customer_return' ? workmanshipCost : 0,
+          incomingTotalCostMinor: classification === 'customer_return' ? restored.totalCostMinor : 0,
+          outgoingMetalCostMinor: classification === 'supplier_return' ? metalCost : 0,
+          outgoingWorkmanshipCostMinor: classification === 'supplier_return' ? workmanshipCost : 0,
+          outgoingTotalCostMinor: classification === 'supplier_return' ? restored.totalCostMinor : 0,
+          revenueReversalMinor: revenueReversal,
+          reversedCogsMinor: classification === 'customer_return' ? restored.totalCostMinor : 0,
+          purchaseCostReversalMinor: classification === 'supplier_return' ? restored.totalCostMinor : 0,
         });
         results.push(result);
         continue;
@@ -1148,7 +1788,7 @@ export const rebuildInventoryCostTimeline = (
         continue;
       }
 
-      if (classification === 'surplus') {
+      if (classification === 'pending_surplus' || classification === 'approved_surplus') {
         if (!debitInventory) fail('missing_inventory_account_id', 'Surplus inventory accountId is missing', entry);
         const state = states[debitInventory.inventoryAccountId];
         const quantity = movementQuantity(entry, debitInventory);
@@ -1160,15 +1800,72 @@ export const rebuildInventoryCostTimeline = (
           results.push(blankResult(entry, 'quantity_only'));
           continue;
         }
-        const current = calculateAtCurrentWac(state, quantity, entry);
-        addIncoming(
-          state,
-          quantity,
-          current.metalCostMinor,
-          current.workmanshipCostMinor,
-          current.accessoryCostMinor,
-          entry,
-        );
+
+        // A surplus belongs to this inventory pool. When that same pool has a
+        // reliable pre-operation WAC, value the new quantity at that WAC and
+        // recognize an equal inventory-surplus gain. Manual values (including
+        // historical overlays) are only a fallback when no valid WAC exists.
+        if (hasValidPreOperationWac(state)) {
+          const wacBeforeMinorPerDisplayUnit = state.totalWacMinorPerDisplayUnit;
+          const surplusCost = calculateAtCurrentWac(state, quantity, entry);
+          addIncoming(
+            state,
+            quantity,
+            surplusCost.metalCostMinor,
+            surplusCost.workmanshipCostMinor,
+            surplusCost.accessoryCostMinor,
+            entry,
+          );
+          const result = blankResult(entry, 'surplus');
+          Object.assign(result, {
+            inventoryAccountId: debitInventory.inventoryAccountId,
+            destinationInventoryAccountId: debitInventory.inventoryAccountId,
+            incomingStandardizedQuantityUnits: quantity.standardizedUnits,
+            incomingActualPhysicalWeightUnits: quantity.physicalUnits,
+            incomingAccessoryQuantityUnits: quantity.accessoryUnits,
+            incomingMetalCostMinor: surplusCost.metalCostMinor,
+            incomingWorkmanshipCostMinor: surplusCost.workmanshipCostMinor,
+            incomingTotalCostMinor: surplusCost.totalCostMinor,
+            adjustmentGainMinor: surplusCost.totalCostMinor,
+            wacBeforeMinorPerDisplayUnit,
+            wacAfterMinorPerDisplayUnit: state.totalWacMinorPerDisplayUnit,
+          });
+          results.push(result);
+          continue;
+        }
+
+        if (classification === 'pending_surplus') {
+          state.pendingStandardizedQuantityUnits += quantity.standardizedUnits;
+          state.pendingActualPhysicalWeightUnits += quantity.physicalUnits;
+          state.pendingAccessoryQuantityUnits += quantity.accessoryUnits;
+          unresolvedCostData.push({
+            code: 'pending_surplus_cost', operationId: getPhase5OperationId(entry),
+            inventoryAccountId: debitInventory.inventoryAccountId,
+            message: 'Inventory surplus has no valid pre-operation WAC and is excluded pending approval',
+            requiredCorrection: 'لا يوجد WAC سابق صالح؛ أدخل Manual Cost Assignment موثقًا.',
+          });
+          const result = blankResult(entry, classification);
+          Object.assign(result, {
+            inventoryAccountId: debitInventory.inventoryAccountId,
+            destinationInventoryAccountId: debitInventory.inventoryAccountId,
+            incomingStandardizedQuantityUnits: quantity.standardizedUnits,
+            incomingActualPhysicalWeightUnits: quantity.physicalUnits,
+            incomingAccessoryQuantityUnits: quantity.accessoryUnits,
+            wacBeforeMinorPerDisplayUnit: null,
+            wacAfterMinorPerDisplayUnit: null,
+          });
+          results.push(result);
+          continue;
+        }
+        if (!Number.isSafeInteger(entry.manualCostAssignmentMinor)
+          || Number(entry.manualCostAssignmentMinor) <= 0
+          || !entry.costAssignmentApprovedAt || !entry.costAssignmentApprovedBy) {
+          fail('pending_surplus_cost', 'Approved surplus requires positive manual cost, approver and approval timestamp', entry, debitInventory.inventoryAccountId);
+        }
+        const assignedCost = Number(entry.manualCostAssignmentMinor);
+        const metalCost = debitInventory.kind === 'accessory' ? 0 : assignedCost;
+        const accessoryCost = debitInventory.kind === 'accessory' ? assignedCost : 0;
+        addIncoming(state, quantity, metalCost, 0, accessoryCost, entry);
         const result = blankResult(entry, classification);
         Object.assign(result, {
           inventoryAccountId: debitInventory.inventoryAccountId,
@@ -1176,10 +1873,11 @@ export const rebuildInventoryCostTimeline = (
           incomingStandardizedQuantityUnits: quantity.standardizedUnits,
           incomingActualPhysicalWeightUnits: quantity.physicalUnits,
           incomingAccessoryQuantityUnits: quantity.accessoryUnits,
-          incomingMetalCostMinor: current.metalCostMinor,
-          incomingWorkmanshipCostMinor: current.workmanshipCostMinor,
-          incomingTotalCostMinor: current.totalCostMinor,
-          adjustmentGainMinor: current.totalCostMinor,
+          incomingMetalCostMinor: metalCost,
+          incomingTotalCostMinor: assignedCost,
+          adjustmentGainMinor: assignedCost,
+          wacBeforeMinorPerDisplayUnit: null,
+          wacAfterMinorPerDisplayUnit: state.totalWacMinorPerDisplayUnit,
         });
         results.push(result);
         continue;
@@ -1239,12 +1937,45 @@ export const rebuildInventoryCostTimeline = (
         if (!creditInventory) fail('missing_inventory_account_id', 'Merchant delivery inventory accountId is missing', entry);
         const state = states[creditInventory.inventoryAccountId];
         const quantity = movementQuantity(entry, creditInventory);
-        applyZeroCostMerchantDelivery(state, quantity, entry);
+        const removed = calculateRemoval(state, quantity, entry);
+        const merchantAccountId = entry.debitAccountId;
+        if (!merchantAccountId) fail('missing_inventory_account_id', 'Merchant delivery requires merchant accountId', entry);
+        const liability = merchantState(merchantAccountId);
+        if (quantity.standardizedUnits > liability.standardizedWeightUnits) {
+          if (!isLegacyEntry(entry)) fail('insufficient_inventory', 'Merchant delivery exceeds merchant liability weight', entry);
+          const gap = quantity.standardizedUnits - liability.standardizedWeightUnits;
+          liability.standardizedWeightUnits += gap;
+          liability.physicalWeightUnits += Math.max(0, quantity.physicalUnits - liability.physicalWeightUnits);
+          liability.unresolvedWeightUnits += gap;
+          unresolvedCostData.push({
+            code: 'unresolved_merchant_cost', operationId: getPhase5OperationId(entry),
+            inventoryAccountId: creditInventory.inventoryAccountId,
+            message: 'Historical merchant delivery has no complete opening liability book value',
+            requiredCorrection: 'أدخل رصيد التزام التاجر الافتتاحي وقيمته الدفترية قبل التسوية.',
+          });
+        }
+        const liabilityDecrease = liability.standardizedWeightUnits === quantity.standardizedUnits
+          ? liability.bookValueMinor
+          : proportionalCost(liability.bookValueMinor, quantity.standardizedUnits, liability.standardizedWeightUnits, entry, 'merchant liability settlement');
+        applyRemoval(state, quantity, removed, entry);
+        liability.standardizedWeightUnits -= quantity.standardizedUnits;
+        liability.physicalWeightUnits = Math.max(0, liability.physicalWeightUnits - quantity.physicalUnits);
+        liability.bookValueMinor -= liabilityDecrease;
+        liability.unresolvedWeightUnits = Math.max(0, liability.unresolvedWeightUnits - quantity.standardizedUnits);
+        const settlementDifference = liabilityDecrease - removed.totalCostMinor;
         const result = blankResult(entry, classification);
         Object.assign(result, {
           sourceInventoryAccountId: creditInventory.inventoryAccountId,
           outgoingStandardizedQuantityUnits: quantity.standardizedUnits,
           outgoingActualPhysicalWeightUnits: quantity.physicalUnits,
+          outgoingMetalCostMinor: removed.metalCostMinor,
+          outgoingWorkmanshipCostMinor: removed.workmanshipCostMinor,
+          outgoingTotalCostMinor: removed.totalCostMinor,
+          merchantLiabilityDecreaseMinor: liabilityDecrease,
+          merchantSettlementGainMinor: Math.max(0, settlementDifference),
+          merchantSettlementLossMinor: Math.max(0, -settlementDifference),
+          adjustmentGainMinor: Math.max(0, settlementDifference),
+          adjustmentLossMinor: Math.max(0, -settlementDifference),
         });
         results.push(result);
         continue;
@@ -1260,9 +1991,10 @@ export const rebuildInventoryCostTimeline = (
         const sourceQuantity = movementQuantity(entry, creditInventory);
         const destinationQuantity = movementQuantity(entry, debitInventory);
         const source = cloneState(states[creditInventory.inventoryAccountId]);
+        validateSameMovement(sourceQuantity, destinationQuantity, entry, false);
         const destination = cloneState(states[debitInventory.inventoryAccountId]);
         const shortageCost = calculateRemoval(source, sourceQuantity, entry);
-        const surplusCost = calculateAtCurrentWac(destination, destinationQuantity, entry);
+        const surplusCost = shortageCost;
         applyRemoval(source, sourceQuantity, shortageCost, entry);
         addIncoming(
           destination,
@@ -1290,8 +2022,8 @@ export const rebuildInventoryCostTimeline = (
           incomingMetalCostMinor: surplusCost.metalCostMinor,
           incomingWorkmanshipCostMinor: surplusCost.workmanshipCostMinor,
           incomingTotalCostMinor: surplusCost.totalCostMinor,
-          adjustmentLossMinor: shortageCost.totalCostMinor,
-          adjustmentGainMinor: surplusCost.totalCostMinor,
+          adjustmentLossMinor: 0,
+          adjustmentGainMinor: 0,
         });
         results.push(result);
       }
@@ -1320,6 +2052,9 @@ export const rebuildInventoryCostTimeline = (
     orderingDiagnostics,
     historicalInventoryOverlays: valid ? historicalInventoryOverlays : [],
     valid,
+    merchantGoldLiabilities: valid ? merchantGoldLiabilities : {},
+    unresolvedCostData,
+    costDataComplete: valid && unresolvedCostData.length === 0,
   };
 };
 

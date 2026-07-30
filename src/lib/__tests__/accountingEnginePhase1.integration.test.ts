@@ -58,7 +58,7 @@ describe('Accounting Engine Repair — Phase 1', () => {
 
   it('uses only LegacyLedgerLegs in all historical Trial Balances', () => {
     reports.forEach(report => {
-      expect(report.source).toBe('legacy_raw_fields');
+      expect(report.source).toBe('accounting_engine_posting_projection');
       expect(report.balanced).toBe(true);
       expect(report.difference).toBe(0);
     });

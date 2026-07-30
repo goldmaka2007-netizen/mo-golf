@@ -15,6 +15,9 @@ export interface PostingPolicy {
 const all: AccountTrackingDimension[] = ['cash', 'gold', 'silver', 'quantity'];
 export const POSTING_MATRIX: Record<AccountingOperationKind, PostingPolicy> = {
   opening: { operationKind: 'opening', requiredDimensions: [], optionalDimensions: all, forbiddenDimensions: [], allowsQuantity: true, affectsInventory: true, affectsMerchant: true },
+  customer_return: { operationKind: 'customer_return', requiredDimensions: [], optionalDimensions: all, forbiddenDimensions: [], allowsQuantity: true, affectsInventory: true, affectsMerchant: false },
+  supplier_return: { operationKind: 'supplier_return', requiredDimensions: [], optionalDimensions: all, forbiddenDimensions: [], allowsQuantity: true, affectsInventory: true, affectsMerchant: true },
+  manufacturing: { operationKind: 'manufacturing', requiredDimensions: ['gold'], optionalDimensions: ['quantity'], forbiddenDimensions: ['cash', 'silver'], allowsQuantity: true, affectsInventory: true, affectsMerchant: false },
   purchase: { operationKind: 'purchase', requiredDimensions: [], optionalDimensions: all, forbiddenDimensions: [], allowsQuantity: true, affectsInventory: true, affectsMerchant: true },
   sale: { operationKind: 'sale', requiredDimensions: [], optionalDimensions: all, forbiddenDimensions: [], allowsQuantity: true, affectsInventory: true, affectsMerchant: false },
   transfer: { operationKind: 'transfer', requiredDimensions: [], optionalDimensions: all, forbiddenDimensions: [], allowsQuantity: true, affectsInventory: true, affectsMerchant: true },
@@ -57,13 +60,17 @@ export interface CanonicalPostingResult {
 }
 
 const entryValues = (entry: Entry, debit?: CanonicalAccountDefinition, credit?: CanonicalAccountDefinition): Record<AccountTrackingDimension, number> => {
+  const tracksQuantity = [debit, credit].some(account => account?.allowedDimensions.includes('quantity'));
   const hasWeight = Number(entry.weight) > 0 || Number(entry.arabicWeight) > 0;
-  const metal = debit?.metal === 'gold' || credit?.metal === 'gold' ? 'gold' : debit?.metal === 'silver' || credit?.metal === 'silver' ? 'silver' : hasWeight ? 'gold' : null;
+  const metal = debit?.metal === 'gold' || credit?.metal === 'gold' ? 'gold' : debit?.metal === 'silver' || credit?.metal === 'silver' ? 'silver' : hasWeight && !tracksQuantity ? 'gold' : null;
   return {
     cash: Math.abs(parseCash(entry)),
     gold: metal === 'gold' ? Math.abs(getEntryArabicWeight(entry, debit?.metal === 'gold' ? undefined : undefined)) : 0,
     silver: metal === 'silver' ? Math.abs(Number(entry.weight) || 0) : 0,
-    quantity: Math.abs(Number(entry.count) || 0),
+    // `count` on gold/silver invoices is an operational piece count, not a
+    // quantity-ledger dimension. Accessory accounts track quantity and legacy
+    // accessory rows may store their piece count in `weight`.
+    quantity: tracksQuantity ? Math.abs(Number(entry.count) || Number(entry.weight) || 0) : 0,
   };
 };
 

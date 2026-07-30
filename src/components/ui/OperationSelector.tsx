@@ -134,7 +134,7 @@ const configuredIds = new Set([
   ...operationSections.flatMap(section => section.items.map(item => item.id)),
 ]);
 
-const hiddenCreationOperationIds = new Set(['مرتجع ذهب', 'مرتجع فضة']);
+const hiddenCreationOperationIds = new Set<string>();
 
 function OperationCard({ item, selected, onSelect, tone }: { item: OperationItem; selected: boolean; onSelect: (id: string) => void; tone: string; key?: Key }) {
   const Icon = item.icon;

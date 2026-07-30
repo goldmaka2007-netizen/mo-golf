@@ -3,6 +3,7 @@ import { describe, expect, it } from 'vitest';
 import type { Account, Entry } from '../../types';
 import {
   APPROVED_RUNTIME_INVENTORY_ACCOUNT_ALIAS_AUDIT,
+  prepareRuntimeCostAccountInputs,
   resolveRuntimeCostAccountInputs,
   RUNTIME_COST_ACCOUNT_RESOLVER_VERSION,
 } from '../runtimeCostAccountResolver';
@@ -53,6 +54,20 @@ describe('runtime cost account resolver', () => {
     expect(sourceEntry.debitAccountId).toBeUndefined();
     expect(legacyBandAccount.id).toBe('09qdBCNEiu9JxX4N6JnK');
   });
+
+  it('prepares legacy Firestore inventory ids before save-time cost validation', () => {
+    const { accounts: stableAccounts } = loadPhase5GoldenDataset();
+    const accounts = stableAccounts.map(account =>
+      account.id === 'seed-account-585a165916de021adb5a'
+        ? legacyBandAccount
+        : account);
+    const prepared = prepareRuntimeCostAccountInputs([], accounts);
+
+    expect(prepared.errors).toEqual([]);
+    expect(prepared.accounts.find(account => account.name === legacyBandAccount.name)?.id)
+      .toBe('seed-account-585a165916de021adb5a');
+  });
+
 
   it('fails closed when inventory metadata conflicts with the stable catalog', () => {
     const { accounts: stableAccounts } = loadPhase5GoldenDataset();

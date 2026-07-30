@@ -121,7 +121,7 @@ export const FinalReportView: React.FC<FinalReportViewProps> = ({ entries, balan
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
             <div className="bg-[#080a0f] p-4 rounded-xl border border-[#1a1e2a]">
               <div className="text-xs text-[#5a5548] font-bold">صافي النقدية</div>
-              <div className="text-xl font-black text-[#6a9e6a]">{incomeData.cashNet.toLocaleString()} ج.م</div>
+              <div className="text-xl font-black text-[#6a9e6a]">{incomeData.cashNet.toLocaleString(undefined, { maximumFractionDigits: 0 })} ج.م</div>
             </div>
             <div className="bg-[#080a0f] p-4 rounded-xl border border-[#1a1e2a]">
               <div className="text-xs text-[#5a5548] font-bold">قيمة فائض الذهب ({incomeData.goldNetWeight.toFixed(3)} ج)</div>
@@ -157,7 +157,7 @@ export const FinalReportView: React.FC<FinalReportViewProps> = ({ entries, balan
           <div className="grid grid-cols-3 gap-2 mt-4 text-center">
              <div className="bg-[#080a0f] p-2 rounded-lg border border-[#1a1e2a]">
                <div className="text-[10px] text-[#5a5548]">نقدي</div>
-               <div className="text-sm font-bold text-[#ddd8cc]">{Math.abs(positionData.equity.cash).toLocaleString()}</div>
+               <div className="text-sm font-bold text-[#ddd8cc]">{Math.abs(positionData.equity.cash).toLocaleString(undefined, { maximumFractionDigits: 0 })}</div>
              </div>
              <div className="bg-[#080a0f] p-2 rounded-lg border border-[#1a1e2a]">
                <div className="text-[10px] text-[#5a5548]">ذهب</div>
@@ -186,7 +186,7 @@ export const FinalReportView: React.FC<FinalReportViewProps> = ({ entries, balan
                 <div className="bg-[#6a9e6a] h-full" style={{ width: '100%' }}></div>
               </div>
               <div className="text-[10px] text-[#5a5548] space-y-1">
-                <div className="flex justify-between"><span>نقدية:</span> <span>{positionData.assets.cash.toLocaleString()} ج.م</span></div>
+                <div className="flex justify-between"><span>نقدية:</span> <span>{positionData.assets.cash.toLocaleString(undefined, { maximumFractionDigits: 0 })} ج.م</span></div>
                 <div className="flex justify-between"><span>ذهب ({positionData.assets.gold.toFixed(3)} ج):</span> <span>{(positionData.assets.gold * (goldPrice || 0)).toLocaleString(undefined, {maximumFractionDigits: 0})} ج.م</span></div>
                 <div className="flex justify-between"><span>فضة ({positionData.assets.silver.toFixed(2)} ج):</span> <span>{(positionData.assets.silver * (silverPrice || 0)).toLocaleString(undefined, {maximumFractionDigits: 0})} ج.م</span></div>
               </div>
@@ -201,7 +201,7 @@ export const FinalReportView: React.FC<FinalReportViewProps> = ({ entries, balan
                 <div className="bg-[#9e6a6a] h-full" style={{ width: `${Math.min(100, (positionData.totalLiabilities / positionData.totalAssets) * 100)}%` }}></div>
               </div>
               <div className="text-[10px] text-[#5a5548] space-y-1">
-                <div className="flex justify-between"><span>نقدية:</span> <span>{Math.abs(positionData.liabilities.cash).toLocaleString()} ج.م</span></div>
+                <div className="flex justify-between"><span>نقدية:</span> <span>{Math.abs(positionData.liabilities.cash).toLocaleString(undefined, { maximumFractionDigits: 0 })} ج.م</span></div>
                 <div className="flex justify-between"><span>ذهب ({Math.abs(positionData.liabilities.gold).toFixed(3)} ج):</span> <span>{(Math.abs(positionData.liabilities.gold) * (goldPrice || 0)).toLocaleString(undefined, {maximumFractionDigits: 0})} ج.م</span></div>
                 <div className="flex justify-between"><span>فضة ({Math.abs(positionData.liabilities.silver).toFixed(2)} ج):</span> <span>{(Math.abs(positionData.liabilities.silver) * (silverPrice || 0)).toLocaleString(undefined, {maximumFractionDigits: 0})} ج.م</span></div>
               </div>

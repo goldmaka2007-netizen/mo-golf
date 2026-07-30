@@ -64,6 +64,14 @@ describe('Phase 5 recalculation coordinator', () => {
     expect(findEarliestCostAffectedOperationId(before, after)).toBeUndefined();
   });
 
+  it('invalidates cost when a merchant invoice official price changes', () => {
+    const before = [entry({ tx: 'تاجر ذهب', marketPrice: 6000 })];
+    const after = [entry({ tx: 'تاجر ذهب', marketPrice: 6600 })];
+    const config = { gold21PriceByYearMinor: { '2026': 600000 } };
+    expect(createCostInputRevision(before, accounts, config))
+      .not.toBe(createCostInputRevision(after, accounts, config));
+    expect(findEarliestCostAffectedOperationId(before, after)).toBe('op');
+  });
   it('finds the earliest affected operation for edits and deletions', () => {
     const first = entry({ id: 'first', seq: 1 });
     const second = entry({ id: 'second', seq: 2, date: '2026-01-02' });

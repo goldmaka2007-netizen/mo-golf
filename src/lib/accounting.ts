@@ -37,6 +37,8 @@ export function normalizeNumerals(val: string): string {
   res = res.replace(/,/g, '.');
   // 4. Arabic comma
   res = res.replace(/،/g, '.');
+  // Accept common fractional input such as `.25` as `0.25`.
+  res = res.replace(/^([+-]?)\./, '$10.');
   return res;
 }
 
@@ -47,8 +49,23 @@ export function formatCurrency(amount: number): string {
   return new Intl.NumberFormat('ar-EG', {
     style: 'currency',
     currency: 'EGP',
-    minimumFractionDigits: 0
+    minimumFractionDigits: 0,
+    maximumFractionDigits: 0
   }).format(amount);
+}
+
+/**
+ * Formats a displayed cash value without piasters.
+ *
+ * This is intentionally a presentation-only rule. Stored and calculated
+ * accounting values keep their original precision.
+ */
+export function formatCashAmount(amount: number, locale: string = 'ar-EG'): string {
+  if (!Number.isFinite(amount)) return '—';
+  return amount.toLocaleString(locale, {
+    minimumFractionDigits: 0,
+    maximumFractionDigits: 0,
+  });
 }
 
 /**

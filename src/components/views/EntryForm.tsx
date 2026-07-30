@@ -4,7 +4,7 @@ import {
   CheckCircle2,
 } from 'lucide-react';
 import { format } from 'date-fns';
-import { collection, addDoc, serverTimestamp } from 'firebase/firestore';
+import { doc, setDoc, serverTimestamp } from 'firebase/firestore';
 import { db } from '../../firebase';
 import { Entry } from '../../types';
 import { CATS, RAW_DATA } from '../../constants';
@@ -13,7 +13,8 @@ import { cn } from '../../lib/utils';
 import { 
   calculateArabicWeight, 
   normalizeNumerals, 
-  calculateKaratPrice 
+  calculateKaratPrice,
+  formatCashAmount
 } from '../../lib/accounting';
 import { FormInput } from '../ui/FormInput';
 import { buildGoldEquivalent21Audit, canCalculateGoldEquivalent21, inferGoldKaratFromMultiplier } from '../../lib/goldEquivalent';
@@ -27,8 +28,11 @@ import { AccountSearchSelect } from '../ui/AccountSearchSelect';
 import { resolveEntryIdentity } from '../../lib/entryIdentity';
 import { validateEntryNumberingPolicy } from '../../lib/entryValidation';
 import { OperationSelector } from '../ui/OperationSelector';
+import { generateId } from '../../utils/generateId';
 import { buildAccountRegistry } from '../../lib/accountRegistry';
 import { buildCanonicalPosting } from '../../lib/postingMatrix';
+import { calculateMerchantInvoiceMetalValueMinor, isMerchantReceiptEntry, resolveMerchantReceiptMetal } from '../../lib/merchantInvoiceValuation';
+import { prepareRuntimeCostAccountInputs } from '../../lib/runtimeCostAccountResolver';
 
 export const normalizeAccessoryEntryPayload = <T extends { weight?: string; count?: string }>(entry: T, isAccessory: boolean): T => (
   isAccessory ? { ...entry, weight: entry.weight || '0', count: '0' } : entry
@@ -56,6 +60,7 @@ export const EntryForm = React.memo(() => {
 
   const [step, setStep] = useState(1);
   const [isSaving, setIsSaving] = useState(false);
+  const [startedFromJournal, setStartedFromJournal] = useState(false);
 
   const [usageStats, setUsageStats] = useState<Record<string, number>>({});
 
@@ -134,10 +139,40 @@ export const EntryForm = React.memo(() => {
     arabicWeight: '',
     karat: null as number | null,
     multiplier: 1,
-    marketPrice: undefined as number | undefined
+    marketPrice: undefined as number | undefined,
+    originalOperationId: '',
+    returnKind: 'customer_return' as 'customer_return' | 'supplier_return',
+    transactionGoldValue: '',
+    workmanshipCost: '',
+    merchantGoldSettlementWeight: '',
+    costAssignmentStatus: 'pending_cost_assignment' as 'pending_cost_assignment' | 'approved',
+    manualCostAssignment: '',
+    reverseWorkmanshipOnReturn: false,
+    manufacturingOutputWeight: '',
+    directConversionCost: '',
+    normalLossStandardizedUnits: '',
+    abnormalLossStandardizedUnits: '',
+    abnormalLossCost: ''
   };
 
   const [formData, setFormData] = useState(initialFormState);
+  const merchantDraftEntry = {
+    tx: formData.tx,
+    debit: formData.debit,
+    credit: formData.credit,
+    date: formData.date,
+    cash: formData.cash,
+    weight: formData.weight,
+    count: formData.count,
+    arabicWeight: formData.arabicWeight,
+    multiplier: formData.multiplier,
+    notes: formData.notes,
+    userId: user?.uid || '',
+    marketPrice: formData.marketPrice,
+    invoiceOfficialPricePerGramEgp: formData.marketPrice,
+  } as Entry;
+  const merchantReceiptMetal = resolveMerchantReceiptMetal(merchantDraftEntry, accountsDb);
+  const merchantInvoiceValueMinor = calculateMerchantInvoiceMetalValueMinor(merchantDraftEntry, accountsDb);
   const debitSearchRef = React.useRef<HTMLInputElement>(null);
   const creditSearchRef = React.useRef<HTMLInputElement>(null);
   const cashRef = React.useRef<HTMLInputElement>(null);
@@ -149,6 +184,7 @@ export const EntryForm = React.memo(() => {
     if (editingEntry && !editingEntry.id) {
       // Clear any existing draft to ensure a fresh entry for the shortcut
       localStorage.removeItem('entry_form_draft');
+      setStartedFromJournal(Boolean(editingEntry.date && !editingEntry.tx));
       
       setFormData(prev => ({
         ...prev,
@@ -230,13 +266,23 @@ export const EntryForm = React.memo(() => {
         }));
       }
 
-      const isGold = formData.tx.includes('ذهب') || formData.debit.includes('ذهب') || formData.credit.includes('ذهب');
-      const isSilver = formData.tx.includes('فضة') || formData.debit.includes('فضة') || formData.credit.includes('فضة');
-      if (isGold) basePrice = goldPrice || 0;
-      else if (isSilver) { basePrice = silverPrice || 0; mult = 1; }
-      if (basePrice > 0) setFormData(prev => ({ ...prev, marketPrice: calculateKaratPrice(basePrice, mult) }));
+      const draftEntry = {
+        tx: formData.tx, debit: formData.debit, credit: formData.credit,
+        date: formData.date, cash: '0', weight: formData.weight || '0', count: '0',
+        arabicWeight: formData.arabicWeight || '0', notes: '', userId: '',
+      } as Entry;
+      const receiptMetal = resolveMerchantReceiptMetal(draftEntry, accountsDb);
+      const isMerchantReceipt = isMerchantReceiptEntry(draftEntry);
+      const isGold = receiptMetal === 'gold' || (!receiptMetal && (formData.tx.includes('ذهب') || formData.debit.includes('ذهب') || formData.credit.includes('ذهب')));
+      const isSilver = receiptMetal === 'silver' || (!receiptMetal && (formData.tx.includes('فضة') || formData.debit.includes('فضة') || formData.credit.includes('فضة')));
+      if (isSilver) { basePrice = silverPrice || 0; mult = 1; }
+      else if (isGold) basePrice = goldPrice || 0;
+      if (basePrice > 0) setFormData(prev => ({
+        ...prev,
+        marketPrice: isMerchantReceipt ? basePrice : calculateKaratPrice(basePrice, mult),
+      }));
     }
-  }, [formData.tx, formData.debit, formData.credit, goldPrice, silverPrice]);
+  }, [formData.tx, formData.debit, formData.credit, formData.weight, formData.arabicWeight, goldPrice, silverPrice, accountsDb]);
 
   const generateInvoiceNumber = (txType: string) => {
     if (!txType) return '';
@@ -378,6 +424,69 @@ export const EntryForm = React.memo(() => {
       return;
     }
     Object.assign(entry, identity.value);
+    if (formData.tx.includes('مرتجع')) {
+      entry.operationKind = formData.returnKind;
+      entry.originalOperationId = formData.originalOperationId.trim();
+      entry.reverseWorkmanshipOnReturn = formData.reverseWorkmanshipOnReturn;
+      const originalEntry = entries.find(item => (item.id || item.legacyOperationId || String(item.seq)) === entry.originalOperationId);
+      if (originalEntry) {
+        if (formData.returnKind === 'customer_return') {
+          entry.debit = originalEntry.credit; entry.debitAccountId = originalEntry.creditAccountId;
+          entry.credit = originalEntry.debit; entry.creditAccountId = originalEntry.debitAccountId;
+        } else {
+          entry.debit = originalEntry.credit; entry.debitAccountId = originalEntry.creditAccountId;
+          entry.credit = originalEntry.debit; entry.creditAccountId = originalEntry.debitAccountId;
+        }
+      }
+      if (!entry.originalOperationId) {
+        setGlobalError('يجب اختيار أو إدخال رقم العملية الأصلية قبل تسجيل المرتجع.');
+        return;
+      }
+    }
+    if (isMerchantReceiptEntry(entry)) {
+      const receiptMetal = resolveMerchantReceiptMetal(entry, accountsDb);
+      if (!receiptMetal) {
+        setGlobalError('تعذر تحديد نوع المعدن من حساب المخزون أو حساب التاجر.');
+        return;
+      }
+      entry.tx = receiptMetal === 'silver' ? 'تاجر فضة' : 'تاجر ذهب';
+      entry.invoiceOfficialPricePerGramEgp = Number(formData.marketPrice);
+      entry.marketPrice = Number(formData.marketPrice);
+      const valueMinor = calculateMerchantInvoiceMetalValueMinor(entry, accountsDb);
+      const workmanshipMinor = Math.round(Number(formData.workmanshipCost || '0') * 100);
+      if (valueMinor === null) {
+        setGlobalError('يجب إدخال سعر الجرام الرسمي الموجود في فاتورة التاجر ووزن صحيح.');
+        return;
+      }
+      entry.transactionGoldValueMinor = valueMinor;
+      entry.merchantGoldBookValueMinor = valueMinor;
+      entry.workmanshipCostMinor = workmanshipMinor;
+      entry.merchantGoldWeight = formData.weight;
+    }
+    if ((formData.tx === 'حساب تاجر ذهب' || formData.tx === 'حساب تاجر فضة') && formData.merchantGoldSettlementWeight) {
+      entry.merchantGoldWeight = formData.merchantGoldSettlementWeight;
+    }    if (formData.tx.includes('تسوية زيادة')) {
+      entry.operationKind = 'adjustment';
+      entry.costAssignmentStatus = formData.costAssignmentStatus;
+      if (formData.costAssignmentStatus === 'approved') {
+        entry.manualCostAssignmentMinor = Math.round(Number(formData.manualCostAssignment) * 100);
+        entry.costAssignmentApprovedAt = new Date().toISOString();
+        entry.costAssignmentApprovedBy = user?.uid || '';
+      }
+    }
+    if (formData.tx === 'تيفيت') {
+      const outputWeight = formData.manufacturingOutputWeight || formData.weight;
+      entry.operationKind = 'manufacturing';
+      entry.manufacturing = {
+        version: 'manufacturing-v1',
+        inputs: [{ inventoryAccountId: entry.creditAccountId, physicalWeight: formData.weight }],
+        outputs: [{ inventoryAccountId: entry.debitAccountId, physicalWeight: outputWeight, role: 'finished_good' }],
+        directConversionCostMinor: Math.round(Number(formData.directConversionCost || '0') * 100),
+        normalLossStandardizedUnits: Math.round(Number(formData.normalLossStandardizedUnits || '0') * 100),
+        abnormalLossStandardizedUnits: Math.round(Number(formData.abnormalLossStandardizedUnits || '0') * 100),
+        abnormalLossCostMinor: formData.abnormalLossCost ? Math.round(Number(formData.abnormalLossCost) * 100) : undefined,
+      };
+    }
 
     const numberingValidation = validateEntryNumberingPolicy(entry);
     if (!numberingValidation.valid) {
@@ -420,16 +529,21 @@ export const EntryForm = React.memo(() => {
       }
 
       const pendingEntry = { ...entry, id: '__pending_cost_validation__' } as Entry;
-      const openingConfig = buildOpeningCostConfig(openingCostConfig);
-      const costValidation = rebuildInventoryCostTimeline([...entries, pendingEntry], accountsDb, openingConfig, {
-        historicalInventoryOverlayDirectives: approvedHistoricalInventoryOverlaysForAccounts(accountsDb),
+      const costInputs = prepareRuntimeCostAccountInputs([...entries, pendingEntry], accountsDb);
+      if (costInputs.errors.length > 0) {
+        setGlobalError(`\u0631\u0641\u0636 \u0631\u0628\u0637 \u062d\u0633\u0627\u0628\u0627\u062a \u0627\u0644\u0645\u062e\u0632\u0648\u0646: ${costInputs.errors[0]}`);
+        return;
+      }
+      const openingConfig = buildOpeningCostConfig(openingCostConfig, accountsDb);
+      const costValidation = rebuildInventoryCostTimeline(costInputs.entries, costInputs.accounts, openingConfig, {
+        historicalInventoryOverlayDirectives: approvedHistoricalInventoryOverlaysForAccounts(costInputs.accounts),
       });
       if (!costValidation.valid) {
         const diagnostic = costValidation.diagnostics[0];
         setGlobalError(`رفض محرك التكلفة: ${diagnostic?.code || 'unknown'} — ${diagnostic?.message || 'تعذر اعتماد تكلفة العملية.'}`);
         return;
       }
-      await addDoc(collection(db, 'entries'), entry);
+      await setDoc(doc(db, 'entries', generateId()), entry);
       
       // Transition to success step only after successful save
       setStep(4);
@@ -451,6 +565,16 @@ export const EntryForm = React.memo(() => {
     setStep(1);
   };
 
+  const continueSameOperationType = () => {
+    setFormData(prev => ({
+      ...initialFormState,
+      tx: prev.tx,
+      date: prev.date,
+      invoiceNumber: generateInvoiceNumber(prev.tx),
+    }));
+    setStep(2);
+  };
+
   const clearDraft = () => {
     localStorage.removeItem('entry_form_draft');
     resetForm();
@@ -459,12 +583,13 @@ export const EntryForm = React.memo(() => {
   const continueSameInvoice = () => {
     setFormData(prev => ({
       ...initialFormState,
+      tx: prev.tx,
       date: prev.date,
       invoiceNumber: prev.invoiceNumber,
       clientName: prev.clientName,
       clientPhone: prev.clientPhone,
     }));
-    setStep(1); // Go back to step 1 to choose the new tx type
+    setStep(2);
   };
 
   const renderStep1 = () => (
@@ -627,6 +752,54 @@ export const EntryForm = React.memo(() => {
         </div>
       )}
 
+      {formData.tx.includes('مرتجع') && (
+        <div className="space-y-3 rounded-2xl border border-amber-500/30 bg-amber-500/10 p-3">
+          <label className="block text-sm font-black text-amber-200">نوع المرتجع</label>
+          <select value={formData.returnKind} onChange={e => setFormData(p => ({ ...p, returnKind: e.target.value as 'customer_return' | 'supplier_return' }))} className="w-full rounded-xl border border-amber-500/30 bg-[#0e1018] p-3 text-white">
+            <option value="customer_return">مرتجع من عميل (عكس بيع)</option>
+            <option value="supplier_return">مرتجع إلى مورد/تاجر (عكس شراء)</option>
+          </select>
+          <label className="block text-sm font-black text-amber-200">العملية الأصلية</label>
+          <select value={formData.originalOperationId} onChange={e => setFormData(p => ({ ...p, originalOperationId: e.target.value }))} className="w-full rounded-xl border border-amber-500/30 bg-[#0e1018] p-3 text-white">
+            <option value="">اختر العملية الأصلية</option>
+            {entries.filter(item => formData.returnKind === 'customer_return' ? item.operationKind === 'sale' || item.tx.includes('بيع') : item.operationKind === 'purchase' || item.tx.includes('شراء') || item.tx.startsWith('تاجر')).map(item => <option key={item.id || item.legacyOperationId || item.seq} value={item.id || item.legacyOperationId || String(item.seq)}>{item.date} — {item.tx} — {item.weight || item.count}</option>)}
+          </select>
+          {formData.returnKind === 'supplier_return' && <label className="flex items-center gap-2 text-xs text-amber-100"><input type="checkbox" checked={formData.reverseWorkmanshipOnReturn} onChange={e => setFormData(p => ({ ...p, reverseWorkmanshipOnReturn: e.target.checked }))} />عكس المصنعية المرتبطة أيضًا حسب اتفاق المرتجع</label>}
+        </div>
+      )}
+      {(formData.tx === 'تاجر ذهب' || formData.tx === 'تاجر فضة') && (
+        <div className="grid gap-3 rounded-2xl border border-[#c9a84c55] bg-[#c9a84c0d] p-3 sm:grid-cols-2">
+          <FormInput label={merchantReceiptMetal === 'silver' ? 'سعر جرام الفضة الرسمي في الفاتورة (ج.م)' : 'سعر جرام الذهب الرسمي في الفاتورة (ج.م)'} type="text" inputMode="decimal" value={formData.marketPrice ?? ''} onChangeValue={v => setFormData(p => ({ ...p, marketPrice: Number(normalize(v)) || undefined }))} />
+          <FormInput label="المصنعية المنفصلة (ج.م)" type="text" inputMode="decimal" value={formData.workmanshipCost} onChangeValue={v => setFormData(p => ({ ...p, workmanshipCost: normalize(v) }))} />
+          <div className="rounded-xl border border-[#c9a84c55] bg-[#11141d] p-3 sm:col-span-2">
+            <p className="text-xs text-[#8a8578]">إجمالي قيمة المعدن المحسوبة تلقائيًا</p>
+            <p className="mt-1 text-xl font-black text-[#c9a84c]">{merchantInvoiceValueMinor === null ? 'غير محدد' : `${formatCashAmount(merchantInvoiceValueMinor / 100)} ج.م`}</p>
+            <p className="mt-1 text-[11px] text-[#8a8578]">سعر الفاتورة × {merchantReceiptMetal === 'gold' ? 'الوزن العربي Standard-21' : 'الوزن الفعلي للفضة'}</p>
+          </div>
+          <p className="text-xs text-[#c9a84c] sm:col-span-2">تُثبت قيمة المعدن المسجلة في الفاتورة بتاريخ الاستلام. لا يُستخدم سعر السوق وقت التقرير.</p>
+        </div>
+      )}
+      {(formData.tx === 'حساب تاجر ذهب' || formData.tx === 'حساب تاجر فضة') && (
+        <div className="space-y-2 rounded-2xl border border-emerald-500/30 bg-emerald-500/10 p-3">
+          <FormInput label="وزن التزام المعدن المسدد Standard-21 (اتركه فارغًا للمصنعية/النقد فقط)" type="text" inputMode="decimal" value={formData.merchantGoldSettlementWeight} onChangeValue={v => setFormData(p => ({ ...p, merchantGoldSettlementWeight: normalize(v) }))} />
+          <p className="text-xs text-emerald-100">عند إدخال وزن، يُخفض الالتزام بقيمته الدفترية المتوسطة ويُفصل فرق التسوية المحقق.</p>
+        </div>
+      )}      {formData.tx.includes('تسوية') && (
+        <div className="space-y-3 rounded-2xl border border-sky-500/30 bg-sky-500/10 p-3">
+          <select value={formData.costAssignmentStatus} onChange={e => setFormData(p => ({ ...p, costAssignmentStatus: e.target.value as 'pending_cost_assignment' | 'approved' }))} className="w-full rounded-xl bg-[#0e1018] p-3 text-white"><option value="pending_cost_assignment">زيادة فعلية معلقة لحين تعيين التكلفة</option><option value="approved">تكلفة الزيادة معتمدة</option></select>
+          {formData.costAssignmentStatus === 'approved' && <FormInput label="التكلفة الدفترية المعتمدة (ج.م)" type="text" inputMode="decimal" value={formData.manualCostAssignment} onChangeValue={v => setFormData(p => ({ ...p, manualCostAssignment: normalize(v) }))} />}
+        </div>
+      )}
+      {formData.tx === 'تيفيت' && (
+        <div className="grid gap-3 rounded-2xl border border-violet-500/30 bg-violet-500/10 p-3 sm:grid-cols-2">
+          <FormInput label="وزن المنتج النهائي" type="text" inputMode="decimal" value={formData.manufacturingOutputWeight} onChangeValue={v => setFormData(p => ({ ...p, manufacturingOutputWeight: normalize(v) }))} />
+          <FormInput label="تكلفة التحويل المباشرة (ج.م)" type="text" inputMode="decimal" value={formData.directConversionCost} onChangeValue={v => setFormData(p => ({ ...p, directConversionCost: normalize(v) }))} />
+          <FormInput label="الفاقد الطبيعي Standard-21" type="text" inputMode="decimal" value={formData.normalLossStandardizedUnits} onChangeValue={v => setFormData(p => ({ ...p, normalLossStandardizedUnits: normalize(v) }))} />
+          <FormInput label="الفاقد غير الطبيعي Standard-21" type="text" inputMode="decimal" value={formData.abnormalLossStandardizedUnits} onChangeValue={v => setFormData(p => ({ ...p, abnormalLossStandardizedUnits: normalize(v) }))} />
+          <FormInput label="تكلفة الفاقد غير الطبيعي (ج.م، اختياري)" type="text" inputMode="decimal" value={formData.abnormalLossCost} onChangeValue={v => setFormData(p => ({ ...p, abnormalLossCost: normalize(v) }))} />
+          <p className="text-xs text-violet-100 sm:col-span-2">يجب أن يتساوى Standard-21 للمدخلات مع المخرجات + الفاقد الطبيعي + الفاقد غير الطبيعي.</p>
+        </div>
+      )}
       <button onClick={() => setStep(3)} className="w-full bg-gradient-to-r from-[#c9a84c] to-[#9a7830] text-[#080a0f] font-bold py-4 rounded-2xl shadow-lg hover:shadow-[#c9a84c44] transition-all active:scale-95">التالي</button>
     </div>
   );
@@ -655,7 +828,7 @@ export const EntryForm = React.memo(() => {
           {showCash && (
             <div className="flex justify-between items-center bg-[#1a1e2a]/30 p-2 rounded-lg">
               <span className="text-sm text-[#8a8578] font-bold">نقدا:</span>
-              <span className="text-lg font-mono font-bold text-[#6a9e6a]">{parseFloat(formData.cash || '0').toLocaleString()} <span className="text-xs">ج.م</span></span>
+              <span className="text-lg font-mono font-bold text-[#6a9e6a]">{formatCashAmount(parseFloat(formData.cash || '0'))} <span className="text-xs">ج.م</span></span>
             </div>
           )}
           {showWeightAndCount && (
@@ -672,9 +845,9 @@ export const EntryForm = React.memo(() => {
           )}
           {formData.marketPrice && formData.marketPrice > 0 ? (
             <div className="flex justify-between items-center bg-[#1a1e2a]/30 p-2 rounded-lg">
-              <span className="text-sm text-[#8a8578] font-bold">سعر الذهب الرسمي:</span>
+              <span className="text-sm text-[#8a8578] font-bold">{merchantReceiptMetal === 'silver' ? 'سعر الفضة الرسمي:' : 'سعر الذهب الرسمي:'}</span>
               <span className="text-sm font-mono font-bold text-[#8a8578]">
-                {Math.round(formData.marketPrice).toLocaleString()} <span className="text-xs">ج.م</span>
+                {formatCashAmount(formData.marketPrice)} <span className="text-xs">ج.م</span>
               </span>
             </div>
           ) : null}
@@ -764,7 +937,8 @@ export const EntryForm = React.memo(() => {
   const renderStep4 = () => {
     const isCashDebit = (formData.debit || '').includes('خزنة') || (formData.debit || '').includes('الخزنة');
     const isCashCredit = (formData.credit || '').includes('خزنة') || (formData.credit || '').includes('الخزنة');
-    const cashImpact = isCashDebit ? `+${formData.cash}` : isCashCredit ? `-${formData.cash}` : '0';
+    const cashAmount = formatCashAmount(parseFloat(formData.cash || '0'));
+    const cashImpact = isCashDebit ? `+${cashAmount}` : isCashCredit ? `-${cashAmount}` : '0';
     
     const isGoldDebit = (formData.debit || '').includes('ذهب') || (formData.debit || '').includes('كسر') || (formData.debit || '').includes('خاتم') || (formData.debit || '').includes('حلق') || (formData.debit || '').includes('دبلة') || (formData.debit || '').includes('سلسلة') || (formData.debit || '').includes('سبيكة') || (formData.debit || '').includes('جنية');
     const isGoldCredit = (formData.credit || '').includes('ذهب') || (formData.credit || '').includes('كسر') || (formData.credit || '').includes('خاتم') || (formData.credit || '').includes('حلق') || (formData.credit || '').includes('دبلة') || (formData.credit || '').includes('سلسلة') || (formData.credit || '').includes('سبيكة') || (formData.credit || '').includes('جنية');
@@ -815,9 +989,21 @@ export const EntryForm = React.memo(() => {
           <button onClick={continueSameInvoice} className="w-full bg-[#1a1e2a] text-[#ddd8cc] border border-[#c9a84c33] hover:border-[#c9a84c66] hover:bg-[#c9a84c11] py-4 rounded-2xl font-bold transition-all active:scale-95">
             إضافة صنف آخر (نفس الفاتورة)
           </button>
-          <button onClick={resetForm} className="w-full bg-gradient-to-r from-[#c9a84c] to-[#9a7830] text-[#080a0f] py-4 rounded-2xl font-bold shadow-lg hover:shadow-[#c9a84c44] transition-all active:scale-95">
-            إنهاء وبدء قيد جديد
+          <button onClick={continueSameOperationType} className="w-full bg-[#11141d] text-[#ddd8cc] border border-[#1a1e2a] hover:border-[#c9a84c66] py-4 rounded-2xl font-bold transition-all active:scale-95">
+            عملية جديدة من نفس النوع
           </button>
+          <button onClick={resetForm} className="w-full bg-gradient-to-r from-[#c9a84c] to-[#9a7830] text-[#080a0f] py-4 rounded-2xl font-bold shadow-lg hover:shadow-[#c9a84c44] transition-all active:scale-95">
+            اختيار نوع عملية جديدة
+          </button>
+          {startedFromJournal ? (
+            <button onClick={() => setView('journal')} className="w-full border border-[#c9a84c55] bg-[#c9a84c11] text-[#c9a84c] py-4 rounded-2xl font-bold transition-all active:scale-95">
+              الرجوع ليومية {formData.date}
+            </button>
+          ) : (
+            <button onClick={() => setView('home')} className="w-full border border-[#1a1e2a] bg-[#080a0f] text-[#ddd8cc] py-4 rounded-2xl font-bold transition-all active:scale-95">
+              الرجوع للرئيسية
+            </button>
+          )}
         </div>
       </div>
     );

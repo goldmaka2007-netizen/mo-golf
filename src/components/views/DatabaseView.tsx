@@ -18,6 +18,7 @@ import { format } from 'date-fns';
 import { ar } from 'date-fns/locale';
 import { Entry } from '../../types';
 import { useAppStore } from '../../store';
+import { formatCashAmount } from '../../lib/accounting';
 import { cn } from '../../lib/utils';
 
 export const EntryRow = React.memo(({ e, setEditingEntry }: { e: Entry, setEditingEntry: (e: Entry) => void }) => {
@@ -28,7 +29,7 @@ export const EntryRow = React.memo(({ e, setEditingEntry }: { e: Entry, setEditi
 
   const handleCopy = (event: React.MouseEvent) => {
     event.stopPropagation();
-    const text = `عملية: ${e.tx} | من ح/ ${e.debit} إلى ح/ ${e.credit} | ${e.cash ? e.cash + ' ج' : ''} ${e.weight ? e.weight + ' ' + unit : ''} ${e.notes ? '(' + e.notes + ')' : ''}`;
+    const text = `عملية: ${e.tx} | من ح/ ${e.debit} إلى ح/ ${e.credit} | ${e.cash ? formatCashAmount(parseFloat(e.cash)) + ' ج' : ''} ${e.weight ? e.weight + ' ' + unit : ''} ${e.notes ? '(' + e.notes + ')' : ''}`;
     navigator.clipboard.writeText(text);
     setCopied(true);
     setTimeout(() => setCopied(false), 2000);
@@ -37,7 +38,7 @@ export const EntryRow = React.memo(({ e, setEditingEntry }: { e: Entry, setEditi
   const c = parseFloat(e.cash || '0');
   const w = parseFloat(e.weight || '0');
   // Removed targetWeight since we should calculate price per gram using raw weight
-  const pricePerGram = w > 0 ? (c / w).toFixed(2) : '0.00';
+  const pricePerGram = w > 0 ? formatCashAmount(c / w) : '0';
 
   return (
     <div 
@@ -124,7 +125,7 @@ export const EntryRow = React.memo(({ e, setEditingEntry }: { e: Entry, setEditi
           )}
           {e.cash && e.tx !== 'تيفيت' && (
             <div className="text-2xl font-bold text-[#c9a84c] font-mono bg-[#c9a84c11] px-2.5 py-1 rounded-lg border border-[#c9a84c22]">
-              {Math.round(parseFloat(e.cash)).toLocaleString()} <span className="text-sm font-sans">ج.م</span>
+              {formatCashAmount(parseFloat(e.cash))} <span className="text-sm font-sans">ج.م</span>
             </div>
           )}
         </div>

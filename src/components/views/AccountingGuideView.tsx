@@ -3,11 +3,12 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { BookOpen, Search, Edit2, Trash2, CheckCircle2, X } from 'lucide-react';
 import { useAppStore } from '../../store';
 import { RAW_DATA } from '../../constants';
-import { doc, deleteDoc, updateDoc, collection, addDoc, serverTimestamp } from 'firebase/firestore';
+import { doc, deleteDoc, updateDoc, setDoc, serverTimestamp } from 'firebase/firestore';
 import { db, handleFirestoreError } from '../../firebase';
 import { cn } from '../../lib/utils';
 import { AccountsTreeView } from './AccountsTreeView';
 import { OperationType } from '../../types';
+import { generateId } from '../../utils/generateId';
 
 export const AccountingGuideView = React.memo(() => {
   const { transactionRules, user } = useAppStore();
@@ -63,7 +64,7 @@ export const AccountingGuideView = React.memo(() => {
       };
 
       if (isAddingNew || editingRule.isRaw) {
-        await addDoc(collection(db, 'transactionRules'), { ...ruleData, createdAt: serverTimestamp() });
+        await setDoc(doc(db, 'transactionRules', generateId()), { ...ruleData, createdAt: serverTimestamp() });
       } else {
         await updateDoc(doc(db, 'transactionRules', editingRule.id), ruleData);
       }

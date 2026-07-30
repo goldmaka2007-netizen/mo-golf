@@ -4,10 +4,28 @@ import {
 } from '../historicalInventoryOverlay';
 import { selectCostIntegrity } from '../costIntegrity';
 import type { CostCalculationRun } from '../inventoryCostTypes';
-import { runPhase5GoldenDataset } from '../../test-fixtures/phase5GoldenDataset';
 
 describe('Cost Integrity status selector', () => {
-  const valid = runPhase5GoldenDataset(77).run;
+  const valid: CostCalculationRun = {
+    generationId: 77,
+    inputRevision: 'fixture-revision',
+    catalogVersion: 'fixture-catalog',
+    status: 'valid',
+    timeline: {
+      calculationVersion: 'phase5-wac-v1',
+      orderedOperationIds: [],
+      results: [],
+      resultsByOperationId: {},
+      finalStates: {},
+      diagnostics: [],
+      orderingDiagnostics: [],
+      historicalInventoryOverlays: [],
+      valid: true,
+      merchantGoldLiabilities: {},
+      unresolvedCostData: [],
+      costDataComplete: true,
+    },
+  };
   const base = {
     currentInputRevision: valid.inputRevision,
     datasetRecordCount: 2169,
@@ -24,8 +42,8 @@ describe('Cost Integrity status selector', () => {
       datasetRecordCount: 2169,
       deficitCount: 0,
       diagnosticCount: 0,
-      approvedOverlayCount: 3,
-      approvedOverlayQuantityByAsset: { goldE21QuantityUnits: 80 },
+      approvedOverlayCount: 4,
+      approvedOverlayQuantityByAsset: { goldE21QuantityUnits: 85 },
       pendingOverlayCount: 0,
       revokedOverlayCount: 0,
       currentBaselineVersion: 'phase5-cost-baseline-v1',

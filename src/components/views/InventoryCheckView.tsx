@@ -4,7 +4,7 @@ import { ClipboardList, Plus, CheckCircle2, History, X, Save, Scale, Package, Ar
 import { format } from 'date-fns';
 import { ar } from 'date-fns/locale';
 import { useAppStore } from '../../store';
-import { collection, addDoc, serverTimestamp, deleteDoc, doc, updateDoc, runTransaction } from 'firebase/firestore';
+import { serverTimestamp, deleteDoc, doc, setDoc, updateDoc, runTransaction } from 'firebase/firestore';
 import { db, handleFirestoreError } from '../../firebase';
 import { cn } from '../../lib/utils';
 import { parseWeight } from '../../lib/accounting';
@@ -21,6 +21,7 @@ import {
   prepareEntryForCentralSave,
   statusForInventoryCheck,
 } from '../../lib/inventoryCheckSettlement';
+import { generateId } from '../../utils/generateId';
 
 const HistoryCard = React.memo(({
   item,
@@ -374,8 +375,8 @@ export const InventoryCheckView = React.memo(() => {
       }
 
       const checkRef = doc(db, 'inventory_checks', check.id);
-      const entryRef = doc(collection(db, 'entries'));
-      const auditRef = doc(collection(db, 'audit_logs'));
+      const entryRef = doc(db, 'entries', generateId());
+      const auditRef = doc(db, 'audit_logs', generateId());
       await runTransaction(db, async transaction => {
         const currentCheck = await transaction.get(checkRef);
         if (!currentCheck.exists()) throw new Error('جرد غير موجود.');
@@ -524,7 +525,7 @@ export const InventoryCheckView = React.memo(() => {
     setSaveLoading(false);
 
     try {
-      await addDoc(collection(db, 'inventory_checks'), {
+      await setDoc(doc(db, 'inventory_checks', generateId()), {
         ...data,
         createdAt: serverTimestamp()
       });

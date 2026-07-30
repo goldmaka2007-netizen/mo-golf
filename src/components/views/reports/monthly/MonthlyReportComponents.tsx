@@ -142,7 +142,7 @@ export const InventoryMovementCard = ({ title, movement }: { title: string; move
   );
 };
 
-const compact = (value: number) => value.toLocaleString('ar-EG', { notation: 'compact', maximumFractionDigits: 1 });
+const compact = (value: number) => value.toLocaleString('ar-EG', { notation: 'compact', maximumFractionDigits: 0 });
 
 export const MonthlyTrendCharts = ({ data }: { data: MonthlyTrendPoint[] }) => {
   const hasData = data.some(point => point.sales || point.purchases || point.goldSalesWeight || point.operatingExpenses);
@@ -155,7 +155,7 @@ export const MonthlyTrendCharts = ({ data }: { data: MonthlyTrendPoint[] }) => {
             <CartesianGrid stroke="#1a1e2a" vertical={false} />
             <XAxis dataKey="label" tick={{ fill: '#8a8172', fontSize: 9 }} />
             <YAxis width={46} tickFormatter={compact} tick={{ fill: '#8a8172', fontSize: 9 }} />
-            <Tooltip contentStyle={{ background: '#080a0f', border: '1px solid #1a1e2a', direction: 'rtl', fontSize: 11 }} formatter={(value) => Number(value).toLocaleString('ar-EG')} />
+            <Tooltip contentStyle={{ background: '#080a0f', border: '1px solid #1a1e2a', direction: 'rtl', fontSize: 11 }} formatter={(value) => Number(value).toLocaleString('ar-EG', { maximumFractionDigits: 0 })} />
             <Legend wrapperStyle={{ fontSize: 10, direction: 'rtl' }} />
             <Bar name="المبيعات" dataKey="sales" fill="#c9a84c" radius={[4, 4, 0, 0]} />
             <Bar name="المشتريات" dataKey="purchases" fill="#6a8a9e" radius={[4, 4, 0, 0]} />
@@ -168,7 +168,7 @@ export const MonthlyTrendCharts = ({ data }: { data: MonthlyTrendPoint[] }) => {
             <CartesianGrid stroke="#1a1e2a" vertical={false} />
             <XAxis dataKey="label" tick={{ fill: '#8a8172', fontSize: 9 }} />
             <YAxis width={46} tickFormatter={compact} tick={{ fill: '#8a8172', fontSize: 9 }} />
-            <Tooltip contentStyle={{ background: '#080a0f', border: '1px solid #1a1e2a', direction: 'rtl', fontSize: 11 }} formatter={(value) => Number(value).toLocaleString('ar-EG')} />
+            <Tooltip contentStyle={{ background: '#080a0f', border: '1px solid #1a1e2a', direction: 'rtl', fontSize: 11 }} formatter={(value) => Number(value).toLocaleString('ar-EG', { maximumFractionDigits: 0 })} />
             <Legend wrapperStyle={{ fontSize: 10, direction: 'rtl' }} />
             <Line name="النقدية الختامية" type="monotone" dataKey="closingCash" stroke="#6a9e6a" strokeWidth={2} dot={false} />
             <Line name="مصروفات التشغيل" type="monotone" dataKey="operatingExpenses" stroke="#d97777" strokeWidth={2} dot={false} />

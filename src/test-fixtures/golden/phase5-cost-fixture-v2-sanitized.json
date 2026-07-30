@@ -39320,10 +39320,10 @@
   ],
   "openingConfig": {
     "gold21PriceByYearMinor": {
-      "2026": 600000
+      "2026": 584000
     },
     "silverPriceByYearMinor": {
-      "2026": 6000
+      "2026": 12600
     },
     "accessoryUnitCostByYearAndAccountMinor": {
       "2026": {

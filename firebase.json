@@ -3,6 +3,7 @@
     "rules": "firestore.rules"
   },
   "hosting": {
+    "site": "makka-central-accounting",
     "public": "dist",
     "ignore": [
       "firebase.json",
@@ -21,7 +22,7 @@
         "headers": [
           {
             "key": "Cache-Control",
-            "value": "no-cache"
+            "value": "no-store, max-age=0, must-revalidate"
           }
         ]
       },
@@ -30,7 +31,7 @@
         "headers": [
           {
             "key": "Cache-Control",
-            "value": "no-cache"
+            "value": "no-store, max-age=0, must-revalidate"
           }
         ]
       },
@@ -39,7 +40,7 @@
         "headers": [
           {
             "key": "Cache-Control",
-            "value": "no-cache"
+            "value": "no-store, max-age=0, must-revalidate"
           }
         ]
       },

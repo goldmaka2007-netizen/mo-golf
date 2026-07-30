@@ -58,6 +58,12 @@ export interface LegacyJournalProjection {
 export interface LegacyLedgerBuildOptions {
   costTimeline?: InventoryCostTimeline | null;
   enableFinancialProjection?: boolean;
+  /**
+   * A merchant statement is an operational reconciliation: actual cash
+   * (workmanship/settlements) plus metal weight. The EGP carrying value of the
+   * metal belongs to the financial projection, not to the merchant's cash due.
+   */
+  merchantStatementMode?: 'financial' | 'operational';
 }
 
 const normalize = (value: unknown): string => String(value ?? '').trim().replace(/\s+/g, ' ');
@@ -148,7 +154,19 @@ const storedMetalDimension = (entry: Entry, debit: Account | undefined, credit: 
   return positive(entry.arabicWeight) > 0 || positive(entry.weight) > 0 ? 'gold' : null;
 };
 
-const operationId = (entry: Entry): string => entry.id || entry.legacyOperationId || entry.legacyOperationNo || String(entry.seq ?? '');
+export const accountingOperationId = (entry: Entry): string =>
+  entry.id || entry.legacyOperationId || entry.legacyOperationNo || String(entry.seq ?? '');
+
+const deduplicateEntries = (entries: Entry[]): Entry[] => {
+  const seen = new Set<string>();
+  return entries.filter(entry => {
+    const id = accountingOperationId(entry);
+    if (!id) return true;
+    if (seen.has(id)) return false;
+    seen.add(id);
+    return true;
+  });
+};
 
 const virtualAccount = (
   entityId: string,
@@ -163,11 +181,25 @@ const virtualAccount = (
   normalBalance: ['liabilities', 'equity', 'revenue'].includes(group) ? 'credit' : 'debit',
 });
 
-const virtualSalesRevenue = virtualAccount('system:income:sales-revenue', '\u0625\u064a\u0631\u0627\u062f \u0645\u0628\u064a\u0639\u0627\u062a \u0627\u0644\u0645\u062e\u0632\u0648\u0646', 'revenue', '\u0625\u064a\u0631\u0627\u062f \u0645\u0628\u064a\u0639\u0627\u062a \u0645\u0646 \u0625\u0633\u0642\u0627\u0637 \u0645\u062d\u0627\u0633\u0628\u064a \u0645\u0631\u0643\u0632\u064a');
-const virtualCogsExpense = virtualAccount('system:income:cogs', '\u062a\u0643\u0644\u0641\u0629 \u0627\u0644\u0628\u0636\u0627\u0639\u0629 \u0627\u0644\u0645\u0628\u0627\u0639\u0629', 'expenses', 'COGS \u0645\u0646 \u0627\u0644\u0645\u062a\u0648\u0633\u0637 \u0627\u0644\u0645\u0631\u062c\u062d');
-const virtualShortageLoss = virtualAccount('system:income:inventory-shortage-loss', '\u062e\u0633\u0627\u0626\u0631 \u062a\u0633\u0648\u064a\u0629 \u0639\u062c\u0632 \u0627\u0644\u0645\u062e\u0632\u0648\u0646', 'expenses', '\u062e\u0633\u0627\u0631\u0629 \u0639\u062c\u0632 \u0645\u0646 \u0627\u0644\u0645\u062a\u0648\u0633\u0637 \u0627\u0644\u0645\u0631\u062c\u062d');
+export const FINANCIAL_POSTING_ACCOUNT_IDS = {
+  salesRevenue: 'system:income:sales-revenue',
+  cogs: 'system:income:cogs',
+  inventoryShortageLoss: 'system:income:inventory-shortage-loss',
+  inventorySurplusGain: 'system:income:inventory-surplus-gain',
+  merchantSettlementGain: 'system:income:merchant-settlement-gain',
+  merchantSettlementLoss: 'system:income:merchant-settlement-loss',
+  manufacturingAbnormalLoss: 'system:income:manufacturing-abnormal-loss',
+  manufacturingConversionClearing: 'system:liability:manufacturing-conversion-clearing',
+} as const;
 
-const isInventoryAccount = (account: Account | undefined): boolean =>
+const virtualSalesRevenue = virtualAccount(FINANCIAL_POSTING_ACCOUNT_IDS.salesRevenue, '\u0625\u064a\u0631\u0627\u062f \u0645\u0628\u064a\u0639\u0627\u062a \u0627\u0644\u0645\u062e\u0632\u0648\u0646', 'revenue', '\u0625\u064a\u0631\u0627\u062f \u0645\u0628\u064a\u0639\u0627\u062a \u0645\u0646 \u0625\u0633\u0642\u0627\u0637 \u0645\u062d\u0627\u0633\u0628\u064a \u0645\u0631\u0643\u0632\u064a');
+const virtualCogsExpense = virtualAccount(FINANCIAL_POSTING_ACCOUNT_IDS.cogs, '\u062a\u0643\u0644\u0641\u0629 \u0627\u0644\u0628\u0636\u0627\u0639\u0629 \u0627\u0644\u0645\u0628\u0627\u0639\u0629', 'expenses', 'COGS \u0645\u0646 \u0627\u0644\u0645\u062a\u0648\u0633\u0637 \u0627\u0644\u0645\u0631\u062c\u062d');
+const virtualShortageLoss = virtualAccount(FINANCIAL_POSTING_ACCOUNT_IDS.inventoryShortageLoss, '\u062e\u0633\u0627\u0626\u0631 \u062a\u0633\u0648\u064a\u0629 \u0639\u062c\u0632 \u0627\u0644\u0645\u062e\u0632\u0648\u0646', 'expenses', '\u062e\u0633\u0627\u0631\u0629 \u0639\u062c\u0632 \u0645\u0646 \u0627\u0644\u0645\u062a\u0648\u0633\u0637 \u0627\u0644\u0645\u0631\u062c\u062d');
+const virtualSurplusGain = virtualAccount(FINANCIAL_POSTING_ACCOUNT_IDS.inventorySurplusGain, '\u0645\u0643\u0627\u0633\u0628 \u0632\u064a\u0627\u062f\u0629 \u0627\u0644\u0645\u062e\u0632\u0648\u0646', 'revenue', '\u0645\u0643\u0633\u0628 \u063a\u064a\u0631 \u062a\u0634\u063a\u064a\u0644\u064a \u0645\u0646 \u062a\u0633\u0648\u064a\u0629 \u0632\u064a\u0627\u062f\u0629 \u0627\u0644\u0645\u062e\u0632\u0648\u0646');
+const virtualMerchantSettlementGain = virtualAccount(FINANCIAL_POSTING_ACCOUNT_IDS.merchantSettlementGain, 'أرباح تسوية التزامات ذهب التجار', 'revenue', 'فرق محقق بين القيمة الدفترية للالتزام وتكلفة المخزون');
+const virtualMerchantSettlementLoss = virtualAccount(FINANCIAL_POSTING_ACCOUNT_IDS.merchantSettlementLoss, 'خسائر تسوية التزامات ذهب التجار', 'expenses', 'فرق محقق بين القيمة الدفترية للالتزام وتكلفة المخزون');
+const virtualManufacturingAbnormalLoss = virtualAccount(FINANCIAL_POSTING_ACCOUNT_IDS.manufacturingAbnormalLoss, 'خسائر تصنيع غير طبيعية', 'expenses', 'فاقد غير طبيعي مفصول عن تكلفة الإنتاج');
+const virtualManufacturingConversionClearing = virtualAccount(FINANCIAL_POSTING_ACCOUNT_IDS.manufacturingConversionClearing, 'تكاليف تحويل مستحقة', 'liabilities', 'مصدر تكلفة التحويل المباشرة المعتمدة');const isInventoryAccount = (account: Account | undefined): boolean =>
   !!account && (account.is_inventory === true || ['gold_product', 'gold_raw', 'gold_direct', 'silver', 'accessory'].includes(account.type ?? ''));
 
 const legFrom = (
@@ -180,7 +212,7 @@ const legFrom = (
 ): LegacyLedgerLeg => ({
   dimension,
   amount,
-  sourceEntryId: operationId(entry),
+  sourceEntryId: accountingOperationId(entry),
   operationKind: resolveOperationKind(entry),
   date: entry.date,
   isOpening: isOpeningEntry(entry),
@@ -193,31 +225,83 @@ const legFrom = (
   oppositeAccount: opposite.accountName,
 });
 
-const costAmount = (result: OperationCostResultV2): number =>
-  (result.classification === 'sale' ? result.totalCogsMinor : result.classification === 'shortage' ? result.adjustmentLossMinor : 0) / 100;
-
 const appendCostLegs = (
   legs: LegacyLedgerLeg[],
   accounts: Account[],
   index: LegacyAccountIndex,
   timeline: InventoryCostTimeline | null | undefined,
 ) => {
-  if (!timeline?.valid) return;
+  if (!timeline?.valid || timeline.costDataComplete === false) return;
+  const seenOperationIds = new Set<string>();
   timeline.results.forEach(result => {
-    const amount = costAmount(result);
-    if (!Number.isFinite(amount) || amount <= 0) return;
+    const resultOperationId = result.operationId || accountingOperationId(result.entry);
+    if (resultOperationId && seenOperationIds.has(resultOperationId)) return;
+    if (resultOperationId) seenOperationIds.add(resultOperationId);
     const entry = result.entry;
-    const inventoryAccountId = result.sourceInventoryAccountId || result.inventoryAccountId;
-    const inventoryAccount = inventoryAccountId ? accounts.find(account => account.id === inventoryAccountId) : undefined;
-    const credit = inventoryAccount
-      ? metadataFor({ ...entry, credit: inventoryAccount.name, creditAccountId: inventoryAccount.id }, 'credit', index)
-      : metadataFor(entry, 'credit', index);
-    const debit = result.classification === 'shortage' ? virtualShortageLoss : virtualCogsExpense;
-    legs.push(legFrom(entry, debit, credit, 'debit', 'cash', amount));
-    legs.push(legFrom(entry, credit, debit, 'credit', 'cash', amount));
+    const accountMetadata = (accountId: string | undefined, side: LegacyLedgerSide) => {
+      const account = accountId ? accounts.find(item => item.id === accountId) : undefined;
+      return account
+        ? metadataFor({ ...entry, [side]: account.name, [`${side}AccountId`]: account.id }, side, index)
+        : metadataFor(entry, side, index);
+    };
+    const pushPair = (debit: LegacyLedgerAccountMetadata, credit: LegacyLedgerAccountMetadata, amountMinor: number) => {
+      if (!Number.isSafeInteger(amountMinor) || amountMinor <= 0) return;
+      const amount = amountMinor / 100;
+      legs.push(legFrom(entry, debit, credit, 'debit', 'cash', amount));
+      legs.push(legFrom(entry, credit, debit, 'credit', 'cash', amount));
+    };
+    const inventoryDebit = accountMetadata(result.destinationInventoryAccountId || result.inventoryAccountId, 'debit');
+    const inventoryCredit = accountMetadata(result.sourceInventoryAccountId || result.inventoryAccountId, 'credit');
+    if (result.classification === 'sale') {
+      pushPair(virtualCogsExpense, inventoryCredit, result.totalCogsMinor);
+      return;
+    }
+    if (result.classification === 'shortage') {
+      pushPair(virtualShortageLoss, inventoryCredit, result.adjustmentLossMinor);
+      return;
+    }
+    if (result.classification === 'approved_surplus' || result.classification === 'surplus') {
+      pushPair(inventoryDebit, virtualSurplusGain, result.adjustmentGainMinor);
+      return;
+    }
+    if (result.classification === 'customer_return') {
+      pushPair(inventoryDebit, virtualCogsExpense, result.reversedCogsMinor);
+      pushPair(virtualSalesRevenue, accountMetadata(entry.creditAccountId, 'credit'), result.revenueReversalMinor);
+      return;
+    }
+    if (result.classification === 'supplier_return') {
+      pushPair(accountMetadata(entry.debitAccountId, 'debit'), inventoryCredit, result.purchaseCostReversalMinor);
+      return;
+    }
+    if (result.classification === 'merchant_receipt') {
+      pushPair(inventoryDebit, accountMetadata(entry.creditAccountId, 'credit'), result.merchantLiabilityIncreaseMinor);
+      return;
+    }
+    if (result.classification === 'merchant_delivery') {
+      const merchant = accountMetadata(entry.debitAccountId, 'debit');
+      pushPair(merchant, inventoryCredit, Math.min(result.merchantLiabilityDecreaseMinor, result.outgoingTotalCostMinor));
+      if (result.merchantSettlementGainMinor > 0) pushPair(merchant, virtualMerchantSettlementGain, result.merchantSettlementGainMinor);
+      if (result.merchantSettlementLossMinor > 0) pushPair(virtualMerchantSettlementLoss, inventoryCredit, result.merchantSettlementLossMinor);
+      return;
+    }
+    if (result.classification === 'merchant_cash_settlement') {
+      const merchantDebit = accountMetadata(entry.debitAccountId, 'debit');
+      const merchantCredit = accountMetadata(entry.debitAccountId, 'credit');
+      if (result.merchantSettlementGainMinor > 0) pushPair(merchantDebit, virtualMerchantSettlementGain, result.merchantSettlementGainMinor);
+      if (result.merchantSettlementLossMinor > 0) pushPair(virtualMerchantSettlementLoss, merchantCredit, result.merchantSettlementLossMinor);
+      return;
+    }    if (result.classification === 'manufacturing') {
+      result.costPostingMovements?.forEach(movement => {
+        const account = accountMetadata(movement.accountId, movement.side);
+        const opposite = movement.side === 'debit' ? virtualManufacturingConversionClearing : virtualManufacturingAbnormalLoss;
+        if (movement.amountMinor <= 0) return;
+        legs.push(legFrom(entry, account, opposite, movement.side, 'cash', movement.amountMinor / 100));
+      });
+      if (result.manufacturingAbnormalLossMinor > 0) legs.push(legFrom(entry, virtualManufacturingAbnormalLoss, inventoryCredit, 'debit', 'cash', result.manufacturingAbnormalLossMinor / 100));
+      if (result.manufacturingConversionCostMinor > 0) legs.push(legFrom(entry, virtualManufacturingConversionClearing, inventoryDebit, 'credit', 'cash', result.manufacturingConversionCostMinor / 100));
+    }
   });
 };
-
 /** Builds exactly two historical legs for every dimension physically stored on
  * a valid imported row. No account-dimension eligibility or canonical rule is
  * allowed to suppress either historical side. */
@@ -229,7 +313,10 @@ export const buildLegacyLedgerLegs = (
 ): LegacyLedgerLeg[] => {
   const index = buildIndex(accounts, canonicalDefinitions);
   const legs: LegacyLedgerLeg[] = [];
-  entries.filter(isValidAccountingEntry).forEach(entry => {
+  const entriesToPost = options.enableFinancialProjection ? deduplicateEntries(entries) : entries;
+  const costResultByOperationId = new Map((options.costTimeline?.results ?? []).map(result => [result.operationId, result]));
+  entriesToPost.filter(isValidAccountingEntry).forEach(entry => {
+    const projectedCostResult = costResultByOperationId.get(accountingOperationId(entry));
     const debitAccount = (entry.debitAccountId ? index.byId.get(entry.debitAccountId) : undefined) ?? index.byName.get(normalize(entry.debit));
     const creditAccount = (entry.creditAccountId ? index.byId.get(entry.creditAccountId) : undefined) ?? index.byName.get(normalize(entry.credit));
     const debit = metadataFor(entry, 'debit', index);
@@ -244,9 +331,11 @@ export const buildLegacyLedgerLegs = (
     const metalAmount = metal === 'silver' ? positive(entry.weight) : metal === 'gold' ? positive(entry.arabicWeight) : 0;
     if (metal && metalAmount > 0) values.push([metal, metalAmount]);
     values.forEach(([dimension, amount]) => {
+      if (options.enableFinancialProjection && dimension === 'cash'
+        && ['customer_return', 'supplier_return', 'manufacturing'].includes(projectedCostResult?.classification ?? '')) return;
       const projectedCredit = options.enableFinancialProjection
         && dimension === 'cash'
-        && (entry.operationKind || '') === 'sale'
+        && resolveOperationKind(entry) === 'sale'
         && isInventoryAccount(creditAccount)
           ? virtualSalesRevenue
           : credit;

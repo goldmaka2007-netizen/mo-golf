@@ -9,6 +9,7 @@ import { FormInput } from '../ui/FormInput';
 import { buildGoldEquivalent21Audit, canCalculateGoldEquivalent21, inferGoldKaratFromMultiplier } from '../../lib/goldEquivalent';
 import { isGoldEquivalentEntry } from '../../utils/accountLogic';
 import { AccountSearchSelect } from '../ui/AccountSearchSelect';
+import { isMerchantReceiptEntry, resolveMerchantReceiptMetal } from '../../lib/merchantInvoiceValuation';
 
 interface EditingEntryModalProps {
   editingEntry: Partial<Entry> | null;
@@ -37,24 +38,30 @@ export const EditingEntryModal = ({
       let basePrice = 0;
       let mult = editingEntry.multiplier || 1;
       
-      const isGold = tx.includes('ذهب') || (editingEntry.debit || '').includes('ذهب') || (editingEntry.credit || '').includes('ذهب');
-      const isSilver = tx.includes('فضة') || (editingEntry.debit || '').includes('فضة') || (editingEntry.credit || '').includes('فضة');
+      const merchantMetal = resolveMerchantReceiptMetal(editingEntry as Entry, accountsDb);
+      const merchantReceipt = isMerchantReceiptEntry(editingEntry as Entry);
+      const isGold = merchantMetal === 'gold' || (!merchantMetal && (tx.includes('ذهب') || (editingEntry.debit || '').includes('ذهب') || (editingEntry.credit || '').includes('ذهب')));
+      const isSilver = merchantMetal === 'silver' || (!merchantMetal && (tx.includes('فضة') || (editingEntry.debit || '').includes('فضة') || (editingEntry.credit || '').includes('فضة')));
 
-      if (isGold) {
-        basePrice = goldPrice || 0;
-      } else if (isSilver) {
+      if (isSilver) {
         basePrice = silverPrice || 0;
         mult = 1;
+      } else if (isGold) {
+        basePrice = goldPrice || 0;
       }
       
       if (basePrice > 0) {
-        const karatPrice = Math.round(basePrice * mult);
+        const displayedPrice = merchantReceipt ? basePrice : Math.round(basePrice * mult);
         if (!editingEntry.marketPrice || editingEntry.marketPrice === goldPrice || editingEntry.marketPrice === silverPrice) {
-           setEditingEntry({ ...editingEntry, marketPrice: karatPrice });
+           setEditingEntry({
+             ...editingEntry,
+             marketPrice: displayedPrice,
+             invoiceOfficialPricePerGramEgp: merchantReceipt ? displayedPrice : editingEntry.invoiceOfficialPricePerGramEgp,
+           });
         }
       }
     }
-  }, [editingEntry?.karat, editingEntry?.multiplier, goldPrice, silverPrice]);
+  }, [editingEntry?.karat, editingEntry?.multiplier, editingEntry?.debit, editingEntry?.credit, goldPrice, silverPrice, accountsDb]);
   
   const normalize = normalizeNumerals;
 
@@ -238,7 +245,11 @@ export const EditingEntryModal = ({
               type="text"
               inputMode="numeric"
               value={editingEntry.marketPrice || ''}
-              onChangeValue={(v) => setEditingEntry({ ...editingEntry, marketPrice: parseFloat(normalize(v)) || undefined })}
+              onChangeValue={(v) => {
+                const price = parseFloat(normalize(v)) || undefined;
+                const merchantReceipt = isMerchantReceiptEntry(editingEntry as Entry);
+                setEditingEntry({ ...editingEntry, marketPrice: price, invoiceOfficialPricePerGramEgp: merchantReceipt ? price : editingEntry.invoiceOfficialPricePerGramEgp });
+              }}
               containerClassName={showWeightAndCount ? "col-span-2" : "col-span-2"}
               labelClassName="text-xs tracking-widest text-right w-full block"
               className="rounded-2xl p-4 text-base font-mono"

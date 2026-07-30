@@ -13,6 +13,7 @@ import {
   PackageOpen,
   RefreshCw,
   Scale,
+  Save,
   ShieldCheck,
   Sparkles,
   TrendingDown,
@@ -21,6 +22,7 @@ import {
 } from 'lucide-react';
 import { useShallow } from 'zustand/react/shallow';
 import type { LucideIcon } from 'lucide-react';
+import { doc, setDoc } from 'firebase/firestore';
 import { useAppStore } from '../../store';
 import { cn } from '../../lib/utils';
 import type {
@@ -30,6 +32,7 @@ import type {
   DashboardTone,
 } from '../../lib/dashboardSelector';
 import { useDashboardMetrics } from '../../hooks/useDashboardMetrics';
+import { auth, db } from '../../firebase';
 
 const toneStyles: Record<DashboardTone, string> = {
   positive: 'border-emerald-500/20 bg-emerald-500/[0.07] text-emerald-300',
@@ -185,11 +188,78 @@ const ActivityRow = ({ activity, onOpen }: {
 
 export const DashboardView = React.memo(({ refreshData }: { refreshData: () => void }) => {
   const data = useDashboardMetrics();
-  const { isUpdatingPrice, setEditingEntry, setView } = useAppStore(useShallow(state => ({
+  const {
+    isUpdatingPrice,
+    setEditingEntry,
+    setView,
+    goldPrice,
+    setGoldPrice,
+    goldSpread,
+    setGoldBuyPrice,
+    silverPrice,
+    setSilverPrice,
+    silverSpread,
+    setSilverBuyPrice,
+  } = useAppStore(useShallow(state => ({
     isUpdatingPrice: state.isUpdatingPrice,
     setEditingEntry: state.setEditingEntry,
     setView: state.setView,
+    goldPrice: state.goldPrice,
+    setGoldPrice: state.setGoldPrice,
+    goldSpread: state.goldSpread,
+    setGoldBuyPrice: state.setGoldBuyPrice,
+    silverPrice: state.silverPrice,
+    setSilverPrice: state.setSilverPrice,
+    silverSpread: state.silverSpread,
+    setSilverBuyPrice: state.setSilverBuyPrice,
   })));
+
+  const [goldPriceDraft, setGoldPriceDraft] = React.useState(String(goldPrice));
+  const [silverPriceDraft, setSilverPriceDraft] = React.useState(String(silverPrice));
+  const [priceSaveState, setPriceSaveState] = React.useState<'idle' | 'saving' | 'saved' | 'error'>('idle');
+  const [priceSaveMessage, setPriceSaveMessage] = React.useState('');
+
+  React.useEffect(() => setGoldPriceDraft(String(goldPrice)), [goldPrice]);
+  React.useEffect(() => setSilverPriceDraft(String(silverPrice)), [silverPrice]);
+
+  const saveOfficialPrices = async (event: React.FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    const nextGoldPrice = Number(goldPriceDraft);
+    const nextSilverPrice = Number(silverPriceDraft);
+    const user = auth.currentUser;
+
+    if (!user || !Number.isFinite(nextGoldPrice) || nextGoldPrice <= 0 || !Number.isFinite(nextSilverPrice) || nextSilverPrice <= 0) {
+      setPriceSaveState('error');
+      setPriceSaveMessage('أدخل سعر ذهب وفضة صحيحين أكبر من صفر.');
+      return;
+    }
+
+    const nextGoldBuyPrice = Math.max(0, nextGoldPrice - goldSpread);
+    const nextSilverBuyPrice = Math.max(0, nextSilverPrice - silverSpread);
+    setPriceSaveState('saving');
+    setPriceSaveMessage('');
+
+    try {
+      await setDoc(doc(db, 'settings', user.uid), {
+        goldPrice: nextGoldPrice,
+        goldBuyPrice: nextGoldBuyPrice,
+        goldSpread,
+        silverPrice: nextSilverPrice,
+        silverBuyPrice: nextSilverBuyPrice,
+        silverSpread,
+      }, { merge: true });
+      setGoldPrice(nextGoldPrice);
+      setGoldBuyPrice(nextGoldBuyPrice);
+      setSilverPrice(nextSilverPrice);
+      setSilverBuyPrice(nextSilverBuyPrice);
+      setPriceSaveState('saved');
+      setPriceSaveMessage('تم حفظ الأسعار واعتمادها في الفواتير والتقييمات.');
+    } catch (error) {
+      console.error('Failed to save official metal prices:', error);
+      setPriceSaveState('error');
+      setPriceSaveMessage('تعذر حفظ الأسعار. جرّب مرة أخرى.');
+    }
+  };
 
   const openActivity = (activity: DashboardActivity) => {
     if (activity.entry.id) {
@@ -226,6 +296,67 @@ export const DashboardView = React.memo(({ refreshData }: { refreshData: () => v
             قيم Book Value وCOGS والأرباح غير متاحة حتى يكتمل مصدر التكلفة بنجاح.
           </div>
         )}
+      </section>
+
+      <section className="space-y-3" aria-label="الأسعار الرسمية المعتمدة اليوم">
+        <SectionHeading title="الأسعار الرسمية المعتمدة اليوم" subtitle="هذه الأسعار هي المستخدمة في الفواتير والتقييمات" icon={Coins} />
+        <form onSubmit={saveOfficialPrices} className="rounded-[24px] border border-[#c9a84c]/25 bg-[#0d1017] p-4 shadow-[0_18px_44px_rgba(0,0,0,0.2)]">
+          <div className="grid grid-cols-2 gap-3">
+            <label className="block">
+              <span className="mb-2 block text-[11px] font-black text-[#c9a84c]">سعر الذهب عيار 21</span>
+              <div className="relative">
+                <input
+                  aria-label="سعر الذهب الرسمي عيار 21"
+                  type="number"
+                  inputMode="decimal"
+                  min="0.01"
+                  step="0.01"
+                  required
+                  value={goldPriceDraft}
+                  onChange={(event) => {
+                    setGoldPriceDraft(event.target.value);
+                    setPriceSaveState('idle');
+                  }}
+                  className="w-full rounded-2xl border border-[#c9a84c]/25 bg-[#080a0f] px-3 py-3 pl-12 text-center font-mono text-xl font-black tabular-nums text-[#c9a84c] outline-none focus:border-[#c9a84c]"
+                />
+                <span className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-[9px] font-black text-[#78736a]">ج.م</span>
+              </div>
+            </label>
+            <label className="block">
+              <span className="mb-2 block text-[11px] font-black text-slate-300">سعر جرام الفضة</span>
+              <div className="relative">
+                <input
+                  aria-label="سعر الفضة الرسمي"
+                  type="number"
+                  inputMode="decimal"
+                  min="0.01"
+                  step="0.01"
+                  required
+                  value={silverPriceDraft}
+                  onChange={(event) => {
+                    setSilverPriceDraft(event.target.value);
+                    setPriceSaveState('idle');
+                  }}
+                  className="w-full rounded-2xl border border-slate-300/20 bg-[#080a0f] px-3 py-3 pl-12 text-center font-mono text-xl font-black tabular-nums text-slate-200 outline-none focus:border-slate-300/50"
+                />
+                <span className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-[9px] font-black text-[#78736a]">ج.م</span>
+              </div>
+            </label>
+          </div>
+          <button
+            type="submit"
+            disabled={priceSaveState === 'saving'}
+            className="mt-4 flex min-h-12 w-full items-center justify-center gap-2 rounded-2xl bg-[#c9a84c] px-4 py-3 text-sm font-black text-[#080a0f] transition-transform active:scale-[0.99] disabled:opacity-60"
+          >
+            <Save className="h-4 w-4" aria-hidden="true" />
+            {priceSaveState === 'saving' ? 'جارٍ حفظ الأسعار...' : 'حفظ واعتماد الأسعار'}
+          </button>
+          {priceSaveMessage && (
+            <p role="status" className={cn('mt-3 text-center text-[11px] font-black', priceSaveState === 'error' ? 'text-red-300' : 'text-emerald-300')}>
+              {priceSaveMessage}
+            </p>
+          )}
+        </form>
       </section>
 
       <section className="space-y-3">

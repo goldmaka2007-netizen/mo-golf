@@ -3,11 +3,12 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { Plus, Trash2, Edit2, ChevronRight, ChevronDown, Package, Wallet, Scale, TrendingUp, TrendingDown, Users, Coins } from 'lucide-react';
 import { useAppStore } from '../../store';
 import { Account, OperationType, AccountNature } from '../../types';
-import { doc, collection, addDoc, updateDoc, deleteDoc, serverTimestamp } from 'firebase/firestore';
+import { doc, setDoc, updateDoc, deleteDoc, serverTimestamp } from 'firebase/firestore';
 import { db, handleFirestoreError } from '../../firebase';
 import { cn } from '../../lib/utils';
 import { getDynamicAccountNature } from '../../utils/accountLogic';
 import { FormInput } from '../ui/FormInput';
+import { generateId } from '../../utils/generateId';
 
 export const AccountsTreeView = React.memo(() => {
   const { accountsDb, user } = useAppStore();
@@ -90,7 +91,7 @@ export const AccountsTreeView = React.memo(() => {
       };
 
       if (isAddingNew) {
-        await addDoc(collection(db, 'accounts'), { ...data, createdAt: serverTimestamp() });
+        await setDoc(doc(db, 'accounts', generateId()), { ...data, createdAt: serverTimestamp() });
       } else {
         await updateDoc(doc(db, 'accounts', editingAcc.id), data);
       }

@@ -75,7 +75,7 @@ describe('Phase 5 component WAC engine', () => {
 
   it('uses full customer cash purchase as metal cost and keeps pools independent', () => {
     const timeline = rebuild([
-      entry({ id: 'purchase-a', seq: 1, tx: 'شراء ذهب', operationKind: 'purchase', debit: 'ذهب أ', debitAccountId: 'gold-a', credit: 'الخزنة', creditAccountId: 'cash', weight: '10', cash: '1000' }),
+      entry({ id: 'purchase-a', seq: 1, tx: 'شراء ذهب', operationKind: 'purchase', debit: 'ذهب أ', debitAccountId: 'gold-a', credit: 'الخزنة', creditAccountId: 'cash', weight: '10', cash: '1000', transactionGoldValueMinor: 100000 }),
       entry({ id: 'purchase-b', seq: 2, tx: 'شراء ذهب', operationKind: 'purchase', debit: 'ذهب ب', debitAccountId: 'gold-b', credit: 'الخزنة', creditAccountId: 'cash', weight: '10', cash: '2000' }),
     ]);
 
@@ -88,14 +88,14 @@ describe('Phase 5 component WAC engine', () => {
   it('adds merchant cash to workmanship only and weights it by physical grams', () => {
     const timeline = rebuild([
       entry({ id: 'opening', seq: 1, tx: 'قيد افتتاحي', operationKind: 'opening', debit: 'ذهب أ', debitAccountId: 'gold-a', credit: 'رأس المال', creditAccountId: 'equity', weight: '100' }),
-      entry({ id: 'merchant-receipt', seq: 2, date: '2026-01-02', tx: 'تاجر ذهب', debit: 'ذهب أ', debitAccountId: 'gold-a', credit: 'تاجر', creditAccountId: 'merchant', weight: '10', cash: '1000' }),
+      entry({ id: 'merchant-receipt', seq: 2, date: '2026-01-02', tx: 'تاجر ذهب', debit: 'ذهب أ', debitAccountId: 'gold-a', credit: 'تاجر', creditAccountId: 'merchant', weight: '10', cash: '1000', transactionGoldValueMinor: 100000 }),
     ]);
 
     expect(timeline.valid).toBe(true);
     expect(timeline.finalStates['gold-a']).toMatchObject({
       standardizedQuantityUnits: 11000,
       actualPhysicalWeightUnits: 11000,
-      remainingMetalCostMinor: 1000000,
+      remainingMetalCostMinor: 1100000,
       remainingWorkmanshipCostMinor: 100000,
     });
     expect(timeline.finalStates['gold-a'].workmanshipWacMinorPerPhysicalUnit).toBeCloseTo(100000 / 11000);
@@ -104,22 +104,22 @@ describe('Phase 5 component WAC engine', () => {
   it('releases metal plus workmanship COGS and calculates invoice profit', () => {
     const timeline = rebuild([
       entry({ id: 'opening', seq: 1, tx: 'قيد افتتاحي', operationKind: 'opening', debit: 'ذهب أ', debitAccountId: 'gold-a', credit: 'رأس المال', creditAccountId: 'equity', weight: '100' }),
-      entry({ id: 'merchant-receipt', seq: 2, date: '2026-01-02', tx: 'تاجر ذهب', debit: 'ذهب أ', debitAccountId: 'gold-a', credit: 'تاجر', creditAccountId: 'merchant', weight: '10', cash: '1000' }),
+      entry({ id: 'merchant-receipt', seq: 2, date: '2026-01-02', tx: 'تاجر ذهب', debit: 'ذهب أ', debitAccountId: 'gold-a', credit: 'تاجر', creditAccountId: 'merchant', weight: '10', cash: '1000', transactionGoldValueMinor: 100000 }),
       entry({ id: 'sale', seq: 3, date: '2026-01-03', tx: 'بيع ذهب', operationKind: 'sale', debit: 'الخزنة', debitAccountId: 'cash', credit: 'ذهب أ', creditAccountId: 'gold-a', weight: '11', cash: '2000' }),
     ]);
 
     expect(timeline.resultsByOperationId.sale).toMatchObject({
-      metalCogsMinor: 100000,
+      metalCogsMinor: 110000,
       workmanshipCogsMinor: 10000,
-      totalCogsMinor: 110000,
+      totalCogsMinor: 120000,
       saleAmountMinor: 200000,
-      profitMinor: 90000,
+      profitMinor: 80000,
     });
   });
 
   it('transfers exact component book cost without profit', () => {
     const timeline = rebuild([
-      entry({ id: 'purchase', seq: 1, tx: 'شراء ذهب', debit: 'ذهب أ', debitAccountId: 'gold-a', credit: 'الخزنة', creditAccountId: 'cash', weight: '10', cash: '1000' }),
+      entry({ id: 'purchase', seq: 1, tx: 'شراء ذهب', debit: 'ذهب أ', debitAccountId: 'gold-a', credit: 'الخزنة', creditAccountId: 'cash', weight: '10', cash: '1000', transactionGoldValueMinor: 100000 }),
       entry({ id: 'transfer', seq: 2, date: '2026-01-02', tx: 'تحويل', debit: 'ذهب ب', debitAccountId: 'gold-b', credit: 'ذهب أ', creditAccountId: 'gold-a', weight: '4' }),
     ]);
 
@@ -134,7 +134,7 @@ describe('Phase 5 component WAC engine', () => {
 
   it('tafyeet transfers cost and creates no gain, loss, or new cost', () => {
     const timeline = rebuild([
-      entry({ id: 'purchase', seq: 1, tx: 'شراء ذهب', debit: 'ذهب أ', debitAccountId: 'gold-a', credit: 'الخزنة', creditAccountId: 'cash', weight: '10', cash: '1000' }),
+      entry({ id: 'purchase', seq: 1, tx: 'شراء ذهب', debit: 'ذهب أ', debitAccountId: 'gold-a', credit: 'الخزنة', creditAccountId: 'cash', weight: '10', cash: '1000', transactionGoldValueMinor: 100000 }),
       entry({ id: 'tafyeet', seq: 2, date: '2026-01-02', tx: 'تيفيت', debit: 'ذهب ب', debitAccountId: 'gold-b', credit: 'ذهب أ', creditAccountId: 'gold-a', weight: '4', cash: '0' }),
     ]);
 
@@ -151,11 +151,17 @@ describe('Phase 5 component WAC engine', () => {
     const timeline = rebuild([
       entry({ id: 'opening', seq: 1, tx: 'قيد افتتاحي', debit: 'ذهب أ', debitAccountId: 'gold-a', credit: 'رأس المال', creditAccountId: 'equity', weight: '10' }),
       entry({ id: 'shortage', seq: 2, date: '2026-01-02', tx: 'تسوية', debit: 'نتيجة تسوية', debitAccountId: 'adjustment', credit: 'ذهب أ', creditAccountId: 'gold-a', weight: '1' }),
-      entry({ id: 'surplus', seq: 3, date: '2026-01-03', tx: 'تسوية', debit: 'ذهب أ', debitAccountId: 'gold-a', credit: 'نتيجة تسوية', creditAccountId: 'adjustment', weight: '1' }),
+      entry({ id: 'surplus', seq: 3, date: '2026-01-03', tx: 'تسوية', debit: 'ذهب أ', debitAccountId: 'gold-a', credit: 'نتيجة تسوية', creditAccountId: 'adjustment', weight: '1', costAssignmentStatus: 'approved', manualCostAssignmentMinor: 99999, costAssignmentApprovedAt: '2026-01-03T10:00:00Z', costAssignmentApprovedBy: 'auditor' }),
     ]);
 
     expect(timeline.resultsByOperationId.shortage.adjustmentLossMinor).toBe(10000);
-    expect(timeline.resultsByOperationId.surplus.adjustmentGainMinor).toBe(10000);
+    expect(timeline.resultsByOperationId.surplus).toMatchObject({
+      classification: 'surplus',
+      incomingTotalCostMinor: 10000,
+      adjustmentGainMinor: 10000,
+      wacBeforeMinorPerDisplayUnit: 10000,
+      wacAfterMinorPerDisplayUnit: 10000,
+    });
     expect(timeline.finalStates['gold-a'].remainingTotalCostMinor).toBe(100000);
   });
 
@@ -173,7 +179,7 @@ describe('Phase 5 component WAC engine', () => {
     const timeline = rebuild([
       entry({ id: 'opening', seq: 1, tx: 'قيد افتتاحي', debit: 'ملحق أ', debitAccountId: 'accessory-a', credit: 'رأس المال', creditAccountId: 'equity', count: '4' }),
       entry({ id: 'sale', seq: 2, date: '2026-01-02', tx: 'بيع ملحقات', debit: 'الخزنة', debitAccountId: 'cash', credit: 'ملحق أ', creditAccountId: 'accessory-a', count: '1', cash: '50' }),
-      entry({ id: 'surplus', seq: 3, date: '2026-01-03', tx: 'تسوية', debit: 'ملحق أ', debitAccountId: 'accessory-a', credit: 'نتيجة تسوية', creditAccountId: 'adjustment', count: '1' }),
+      entry({ id: 'surplus', seq: 3, date: '2026-01-03', tx: 'تسوية', debit: 'ملحق أ', debitAccountId: 'accessory-a', credit: 'نتيجة تسوية', creditAccountId: 'adjustment', count: '1', costAssignmentStatus: 'approved', manualCostAssignmentMinor: 99999, costAssignmentApprovedAt: '2026-01-03T10:00:00Z', costAssignmentApprovedBy: 'auditor' }),
       entry({ id: 'shortage', seq: 4, date: '2026-01-04', tx: 'تسوية', debit: 'نتيجة تسوية', debitAccountId: 'adjustment', credit: 'ملحق أ', creditAccountId: 'accessory-a', count: '1' }),
     ]);
 
@@ -248,7 +254,7 @@ describe('Phase 5 component WAC engine', () => {
 
   it('fails closed when merchant workmanship has zero physical weight', () => {
     const timeline = rebuild([
-      entry({ id: 'merchant', seq: 1, tx: 'تاجر ذهب', debit: 'ذهب أ', debitAccountId: 'gold-a', credit: 'تاجر', creditAccountId: 'merchant', weight: '0', cash: '1000' }),
+      entry({ id: 'merchant', seq: 1, tx: 'تاجر ذهب', debit: 'ذهب أ', debitAccountId: 'gold-a', credit: 'تاجر', creditAccountId: 'merchant', weight: '0', cash: '1000', transactionGoldValueMinor: 100000 }),
     ]);
     expect(timeline.valid).toBe(false);
     expect(timeline.diagnostics[0].code).toBe('merchant_workmanship_without_weight');
@@ -262,7 +268,7 @@ describe('Phase 5 component WAC engine', () => {
         ? { ...binding, taxonomyKey: 'gold.raw.scrap_foreign' }
         : binding);
     const timeline = rebuildInventoryCostTimeline([
-      entry({ id: 'source', seq: 1, tx: 'شراء ذهب', debit: 'ذهب أ', debitAccountId: 'gold-a', credit: 'الخزنة', creditAccountId: 'cash', weight: '10', cash: '1000' }),
+      entry({ id: 'source', seq: 1, tx: 'شراء ذهب', debit: 'ذهب أ', debitAccountId: 'gold-a', credit: 'الخزنة', creditAccountId: 'cash', weight: '10', cash: '1000', transactionGoldValueMinor: 100000 }),
       entry({ id: 'tafyeet', seq: 2, tx: 'تيفيت', debit: 'ذهب ب', debitAccountId: 'gold-b', credit: 'ذهب أ', creditAccountId: 'gold-a', weight: '1' }),
     ], crossKaratAccounts, config, { bindings: crossKaratBindings });
     expect(timeline.valid).toBe(false);
@@ -286,7 +292,7 @@ describe('Phase 5 component WAC engine', () => {
 
   it('is deterministic regardless of input array order', () => {
     const entries = [
-      entry({ id: 'purchase', seq: 1, tx: 'شراء فضة', debit: 'فضة أ', debitAccountId: 'silver-a', credit: 'الخزنة', creditAccountId: 'cash', weight: '10', cash: '1000' }),
+      entry({ id: 'purchase', seq: 1, tx: 'شراء فضة', debit: 'فضة أ', debitAccountId: 'silver-a', credit: 'الخزنة', creditAccountId: 'cash', weight: '10', cash: '1000', transactionGoldValueMinor: 100000 }),
       entry({ id: 'sale', seq: 2, tx: 'بيع فضة', debit: 'الخزنة', debitAccountId: 'cash', credit: 'فضة أ', creditAccountId: 'silver-a', weight: '2', cash: '300' }),
     ];
     const forward = rebuild(entries);

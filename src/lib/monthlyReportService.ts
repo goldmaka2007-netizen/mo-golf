@@ -426,10 +426,10 @@ export const buildMonthlyReport = (input: BuildMonthlyReportInput): MonthlyRepor
   const insights = buildMonthlyDecisionInsights({ current, previous, rolling3 });
   const healthStatus = deriveMonthlyHealthStatus(current, insights);
   const highlights = [
-    `المبيعات ${current.sales.toLocaleString('ar-EG')} ج.م خلال ${current.saleCount.toLocaleString('ar-EG')} عملية.`,
+    `المبيعات ${current.sales.toLocaleString('ar-EG', { maximumFractionDigits: 0 })} ج.م خلال ${current.saleCount.toLocaleString('ar-EG')} عملية.`,
     current.netOperatingProfit.value === null
       ? 'نتيجة التشغيل غير متاحة حتى يكتمل مصدر التكلفة.'
-      : `صافي نتيجة التشغيل ${current.netOperatingProfit.value.toLocaleString('ar-EG')} ج.م.`,
+      : `صافي نتيجة التشغيل ${current.netOperatingProfit.value.toLocaleString('ar-EG', { maximumFractionDigits: 0 })} ج.م.`,
     `صافي الذهب المملوك ${current.netOwnedGold21.toLocaleString('ar-EG', { maximumFractionDigits: 3 })} جم عيار 21.`,
   ];
 

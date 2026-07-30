@@ -3,6 +3,7 @@ import { createPortal } from 'react-dom';
 import { motion } from 'framer-motion';
 import { X, Printer, LayoutTemplate } from 'lucide-react';
 import { useAppStore } from '../../store';
+import { formatCashAmount } from '../../lib/accounting';
 
 interface FieldConfig {
   top: number; // in cm
@@ -148,7 +149,7 @@ export const InvoicePrintModal = () => {
 
         {settings.cash.show && printEntry.cash && parseFloat(printEntry.cash) > 0 && (
           <div style={{ position: 'absolute', top: `${settings.cash.top}cm`, right: `${settings.cash.right}cm`, fontSize: `${settings.cash.fontSize}px`, fontWeight: 'bold' }}>
-            {parseFloat(printEntry.cash).toLocaleString()} ج.م
+            {formatCashAmount(parseFloat(printEntry.cash))} ج.م
           </div>
         )}
 

@@ -77,6 +77,7 @@ try {
     settingsSnapshot.exists() && Array.isArray(settingsSnapshot.data().openingCostConfig)
       ? settingsSnapshot.data().openingCostConfig
       : [],
+    accounts,
   );
   const inputRevision = createCostInputRevision(entries, accounts, explicitOpeningConfig);
   const runtimeRun = executeCostCalculationRun({

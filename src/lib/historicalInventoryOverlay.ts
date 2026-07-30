@@ -6,6 +6,52 @@ import type {
 export const HISTORICAL_INVENTORY_OVERLAY_VERSION =
   'historical-inventory-reconciliation-v1' as const;
 
+export const HISTORICAL_MERCHANT_LIABILITY_OPENING_VERSION =
+  'historical-merchant-liability-opening-v1' as const;
+
+export interface HistoricalMerchantLiabilityOpeningDirective {
+  overlayId: string;
+  merchantAccountId: string;
+  merchantAccountIdAliases?: readonly string[];
+  metal: 'gold' | 'silver';
+  effectiveDate: string;
+  standardizedWeightUnits: number;
+  physicalWeightUnits: number;
+  bookValueMinor: number;
+  sourceReference: string;
+  ownerApprovalStatus: 'approved';
+  approvedAt: string;
+}
+
+export const APPROVED_HISTORICAL_MERCHANT_LIABILITY_OPENINGS:
+readonly HistoricalMerchantLiabilityOpeningDirective[] = [
+  {
+    overlayId: 'hmlo-20260101-elsafy-gold-e21-077',
+    merchantAccountId: '3zGclNk6qdAuNxM6y5iP',
+    merchantAccountIdAliases: ['phase5-non-inventory-40'],
+    metal: 'gold',
+    effectiveDate: '2026-01-01',
+    standardizedWeightUnits: 77,
+    physicalWeightUnits: 77,
+    bookValueMinor: 449_680,
+    sourceReference: 'Opening liability reconciliation: recorded 3.16g; required 3.93g; approved opening gold price 5,840 EGP/g.',
+    ownerApprovalStatus: 'approved',
+    approvedAt: '2026-07-29T16:10:00+03:00',
+  },
+  {
+    overlayId: 'hmlo-20260101-samir-silver-048',
+    merchantAccountId: '00kIdH1ctqdEsOisnG80',
+    merchantAccountIdAliases: ['phase5-non-inventory-43'],
+    metal: 'silver',
+    effectiveDate: '2026-01-01',
+    standardizedWeightUnits: 48,
+    physicalWeightUnits: 48,
+    bookValueMinor: 6_048,
+    sourceReference: 'Opening liability reconciliation: recorded 0.11g; required 0.59g; approved opening silver price 126 EGP/g.',
+    ownerApprovalStatus: 'approved',
+    approvedAt: '2026-07-29T16:10:00+03:00',
+  },
+] as const;
 export const APPROVED_HISTORICAL_INVENTORY_OVERLAY_DIRECTIVES:
 readonly HistoricalInventoryOverlayDirective[] = [
   {
@@ -50,6 +96,20 @@ readonly HistoricalInventoryOverlayDirective[] = [
     revokedAt: null,
     revocationReason: null,
   },
+  {
+    overlayId: 'hiro-20260410-scrap-arabic-e21-005',
+    stableInventoryAccountId: 'seed-account-d1216eb4076ccdf40e20',
+    effectiveDate: '2026-04-10',
+    quantityUnits: 5,
+    unitBasis: 'gold_equivalent21_centigram',
+    reasonCode: 'historical_inventory_reconciliation',
+    sourceDeficitOperationId: 'csvref-entry-7decedc1a2d80d7620897618e62f5e96',
+    ownerApprovalStatus: 'approved',
+    approvedAt: '2026-07-29T15:35:00+03:00',
+    supersedesOverlayId: null,
+    revokedAt: null,
+    revocationReason: null,
+  },
 ] as const;
 
 const stableStringify = (value: unknown): string => {
@@ -64,7 +124,7 @@ const stableStringify = (value: unknown): string => {
 const rotateRight = (value: number, amount: number): number =>
   (value >>> amount) | (value << (32 - amount));
 
-const auditHash = (value: unknown): string => {
+export const createDeterministicAuditHash = (value: unknown): string => {
   const bytes = new TextEncoder().encode(
     HISTORICAL_INVENTORY_OVERLAY_VERSION + ':' + stableStringify(value),
   );
@@ -124,7 +184,7 @@ export const sealAppliedHistoricalInventoryOverlay = (
   return {
     ...value,
     // Runtime generations change on recalculation; approved economics do not.
-    auditHash: auditHash(stableApprovedOverlay),
+    auditHash: createDeterministicAuditHash(stableApprovedOverlay),
   };
 };
 
@@ -145,4 +205,19 @@ export const approvedHistoricalInventoryOverlaysForAccounts = (
   return APPROVED_HISTORICAL_INVENTORY_OVERLAY_DIRECTIVES.filter(
     directive => accountIds.has(directive.stableInventoryAccountId),
   );
+};
+
+export const approvedHistoricalMerchantLiabilityOpeningsForAccounts = (
+  accounts: readonly { id?: string }[],
+): readonly HistoricalMerchantLiabilityOpeningDirective[] => {
+  const accountIds = new Set(accounts.map(account => account.id).filter(Boolean));
+  return APPROVED_HISTORICAL_MERCHANT_LIABILITY_OPENINGS.flatMap(directive => {
+    const resolvedMerchantAccountId = [
+      directive.merchantAccountId,
+      ...(directive.merchantAccountIdAliases ?? []),
+    ].find(accountId => accountIds.has(accountId));
+    return resolvedMerchantAccountId
+      ? [{ ...directive, merchantAccountId: resolvedMerchantAccountId }]
+      : [];
+  });
 };

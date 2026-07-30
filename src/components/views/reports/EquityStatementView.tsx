@@ -52,13 +52,13 @@ export const EquityStatementView = React.memo(({ entries }: { entries: Entry[] }
           <div className="space-y-2">
             <div className="flex justify-between text-base font-bold text-[#ddd8cc]">
               <span>إجمالي الإضافات المباشرة</span>
-              <span>{data.additions.total.toLocaleString(undefined, { minimumFractionDigits: activeTab === 'cash' ? 0 : 2, maximumFractionDigits: 2 })} {unit}</span>
+              <span>{data.additions.total.toLocaleString(undefined, { minimumFractionDigits: activeTab === 'cash' ? 0 : 2, maximumFractionDigits: activeTab === 'cash' ? 0 : 2 })} {unit}</span>
             </div>
             <div className="pr-4 space-y-1">
               {(Object.entries(data.additions.accounts) as [string, number][]).map(([acc, val]) => (
                 <div key={acc} className="flex justify-between text-sm text-[#5a5548]">
                   <span>{acc}</span>
-                  <span className="font-mono">{val.toLocaleString(undefined, { minimumFractionDigits: activeTab === 'cash' ? 0 : 2, maximumFractionDigits: 2 })} {unit}</span>
+                  <span className="font-mono">{val.toLocaleString(undefined, { minimumFractionDigits: activeTab === 'cash' ? 0 : 2, maximumFractionDigits: activeTab === 'cash' ? 0 : 2 })} {unit}</span>
                 </div>
               ))}
             </div>
@@ -74,13 +74,13 @@ export const EquityStatementView = React.memo(({ entries }: { entries: Entry[] }
           <div className="space-y-2">
             <div className="flex justify-between text-base font-bold text-[#ddd8cc]">
               <span>إجمالي التخفيضات المباشرة</span>
-              <span>{data.deductions.total.toLocaleString(undefined, { minimumFractionDigits: activeTab === 'cash' ? 0 : 2, maximumFractionDigits: 2 })} {unit}</span>
+              <span>{data.deductions.total.toLocaleString(undefined, { minimumFractionDigits: activeTab === 'cash' ? 0 : 2, maximumFractionDigits: activeTab === 'cash' ? 0 : 2 })} {unit}</span>
             </div>
             <div className="pr-4 space-y-1">
               {(Object.entries(data.deductions.accounts) as [string, number][]).map(([acc, val]) => (
                 <div key={acc} className="flex justify-between text-sm text-[#5a5548]">
                   <span>{acc}</span>
-                  <span className="font-mono">{val.toLocaleString(undefined, { minimumFractionDigits: activeTab === 'cash' ? 0 : 2, maximumFractionDigits: 2 })} {unit}</span>
+                  <span className="font-mono">{val.toLocaleString(undefined, { minimumFractionDigits: activeTab === 'cash' ? 0 : 2, maximumFractionDigits: activeTab === 'cash' ? 0 : 2 })} {unit}</span>
                 </div>
               ))}
             </div>
@@ -100,7 +100,7 @@ export const EquityStatementView = React.memo(({ entries }: { entries: Entry[] }
               <span className="text-sm text-[#5a5548]">المحسوب من الإيرادات والمصروفات والعمليات التجارية</span>
             </div>
             <span className={cn("text-3xl font-bold font-mono", data.netProfit >= 0 ? "text-[#6a9e6a]" : "text-[#9e6a6a]")}>
-              {data.netProfit >= 0 ? '+' : ''}{data.netProfit.toLocaleString(undefined, { minimumFractionDigits: activeTab === 'cash' ? 0 : 2, maximumFractionDigits: 2 })} {unit}
+              {data.netProfit >= 0 ? '+' : ''}{data.netProfit.toLocaleString(undefined, { minimumFractionDigits: activeTab === 'cash' ? 0 : 2, maximumFractionDigits: activeTab === 'cash' ? 0 : 2 })} {unit}
             </span>
           </div>
           <div className="text-sm text-[#5a5548] italic text-center">
@@ -115,7 +115,7 @@ export const EquityStatementView = React.memo(({ entries }: { entries: Entry[] }
             <span className="text-sm text-[#5a5548]">رأس المال + صافي الأرباح التشغيلية</span>
           </div>
           <span className={cn("text-4xl md:text-5xl font-bold font-mono", data.totalChange >= 0 ? accent : "text-[#9e6a6a]")}>
-            {data.totalChange.toLocaleString(undefined, { minimumFractionDigits: activeTab === 'cash' ? 0 : 2, maximumFractionDigits: 2 })} {unit}
+            {data.totalChange.toLocaleString(undefined, { minimumFractionDigits: activeTab === 'cash' ? 0 : 2, maximumFractionDigits: activeTab === 'cash' ? 0 : 2 })} {unit}
           </span>
         </div>
       </motion.div>

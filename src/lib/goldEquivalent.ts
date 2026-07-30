@@ -41,6 +41,7 @@ const normalizeWeightNumerals = (val: string): string => {
   res = res.replace(/\u066b/g, '.');
   res = res.replace(/,/g, '.');
   res = res.replace(/\u060c/g, '.');
+  res = res.replace(/^\./, '0.');
   return res;
 };
 

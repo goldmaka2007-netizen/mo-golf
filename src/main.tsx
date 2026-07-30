@@ -1,6 +1,7 @@
 import { reloadOnceForDynamicImportFailure } from './lib/chunkLoadRecovery';
+import { installDeployedVersionRefresh } from './lib/deployedVersionRefresh';
 
-const DEVELOPMENT_CACHE_EPOCH = '2026-07-25-opening-cost-schema-v2';
+const DEVELOPMENT_CACHE_EPOCH = '2026-07-29-invoice-save-guards-v3';
 
 // The LAN development build must never be held behind an old PWA shell.
 // This deliberately avoids IndexedDB: Firestore/Auth persistence is not
@@ -43,3 +44,4 @@ const rootElement = document.getElementById('root');
 if (!rootElement) throw new Error('Failed to find the root element');
 
 createRoot(rootElement).render(<App />);
+installDeployedVersionRefresh();
