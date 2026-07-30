@@ -19,7 +19,16 @@ describe('Daily journal selected-date entry shortcut', () => {
     expect(source).toContain("date: editingEntry.date || format(new Date(), 'yyyy-MM-dd')");
     expect(source).not.toContain('Always use today for shortcuts');
   });
+  it('keeps tafyeet as a one-to-one weight transfer with automatic carried cost', () => {
+    const source = readFileSync(new URL('../EntryForm.tsx', import.meta.url), 'utf8');
+
+    expect(source).not.toContain('وزن المنتج النهائي');
+    expect(source).not.toContain('تكلفة التحويل المباشرة');
+    expect(source).not.toContain("entry.operationKind = 'manufacturing'");
+    expect(source).not.toContain('entry.manufacturing =');
+  });
 });
+
 describe('Daily journal Excel export', () => {
   it('preserves sheets, columns, rows, Arabic text, dates, and numeric values through an xlsx round trip', async () => {
     const summary = [

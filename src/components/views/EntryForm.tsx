@@ -147,12 +147,7 @@ export const EntryForm = React.memo(() => {
     merchantGoldSettlementWeight: '',
     costAssignmentStatus: 'pending_cost_assignment' as 'pending_cost_assignment' | 'approved',
     manualCostAssignment: '',
-    reverseWorkmanshipOnReturn: false,
-    manufacturingOutputWeight: '',
-    directConversionCost: '',
-    normalLossStandardizedUnits: '',
-    abnormalLossStandardizedUnits: '',
-    abnormalLossCost: ''
+    reverseWorkmanshipOnReturn: false
   };
 
   const [formData, setFormData] = useState(initialFormState);
@@ -474,19 +469,6 @@ export const EntryForm = React.memo(() => {
         entry.costAssignmentApprovedBy = user?.uid || '';
       }
     }
-    if (formData.tx === 'تيفيت') {
-      const outputWeight = formData.manufacturingOutputWeight || formData.weight;
-      entry.operationKind = 'manufacturing';
-      entry.manufacturing = {
-        version: 'manufacturing-v1',
-        inputs: [{ inventoryAccountId: entry.creditAccountId, physicalWeight: formData.weight }],
-        outputs: [{ inventoryAccountId: entry.debitAccountId, physicalWeight: outputWeight, role: 'finished_good' }],
-        directConversionCostMinor: Math.round(Number(formData.directConversionCost || '0') * 100),
-        normalLossStandardizedUnits: Math.round(Number(formData.normalLossStandardizedUnits || '0') * 100),
-        abnormalLossStandardizedUnits: Math.round(Number(formData.abnormalLossStandardizedUnits || '0') * 100),
-        abnormalLossCostMinor: formData.abnormalLossCost ? Math.round(Number(formData.abnormalLossCost) * 100) : undefined,
-      };
-    }
 
     const numberingValidation = validateEntryNumberingPolicy(entry);
     if (!numberingValidation.valid) {
@@ -788,16 +770,6 @@ export const EntryForm = React.memo(() => {
         <div className="space-y-3 rounded-2xl border border-sky-500/30 bg-sky-500/10 p-3">
           <select value={formData.costAssignmentStatus} onChange={e => setFormData(p => ({ ...p, costAssignmentStatus: e.target.value as 'pending_cost_assignment' | 'approved' }))} className="w-full rounded-xl bg-[#0e1018] p-3 text-white"><option value="pending_cost_assignment">زيادة فعلية معلقة لحين تعيين التكلفة</option><option value="approved">تكلفة الزيادة معتمدة</option></select>
           {formData.costAssignmentStatus === 'approved' && <FormInput label="التكلفة الدفترية المعتمدة (ج.م)" type="text" inputMode="decimal" value={formData.manualCostAssignment} onChangeValue={v => setFormData(p => ({ ...p, manualCostAssignment: normalize(v) }))} />}
-        </div>
-      )}
-      {formData.tx === 'تيفيت' && (
-        <div className="grid gap-3 rounded-2xl border border-violet-500/30 bg-violet-500/10 p-3 sm:grid-cols-2">
-          <FormInput label="وزن المنتج النهائي" type="text" inputMode="decimal" value={formData.manufacturingOutputWeight} onChangeValue={v => setFormData(p => ({ ...p, manufacturingOutputWeight: normalize(v) }))} />
-          <FormInput label="تكلفة التحويل المباشرة (ج.م)" type="text" inputMode="decimal" value={formData.directConversionCost} onChangeValue={v => setFormData(p => ({ ...p, directConversionCost: normalize(v) }))} />
-          <FormInput label="الفاقد الطبيعي Standard-21" type="text" inputMode="decimal" value={formData.normalLossStandardizedUnits} onChangeValue={v => setFormData(p => ({ ...p, normalLossStandardizedUnits: normalize(v) }))} />
-          <FormInput label="الفاقد غير الطبيعي Standard-21" type="text" inputMode="decimal" value={formData.abnormalLossStandardizedUnits} onChangeValue={v => setFormData(p => ({ ...p, abnormalLossStandardizedUnits: normalize(v) }))} />
-          <FormInput label="تكلفة الفاقد غير الطبيعي (ج.م، اختياري)" type="text" inputMode="decimal" value={formData.abnormalLossCost} onChangeValue={v => setFormData(p => ({ ...p, abnormalLossCost: normalize(v) }))} />
-          <p className="text-xs text-violet-100 sm:col-span-2">يجب أن يتساوى Standard-21 للمدخلات مع المخرجات + الفاقد الطبيعي + الفاقد غير الطبيعي.</p>
         </div>
       )}
       <button onClick={() => setStep(3)} className="w-full bg-gradient-to-r from-[#c9a84c] to-[#9a7830] text-[#080a0f] font-bold py-4 rounded-2xl shadow-lg hover:shadow-[#c9a84c44] transition-all active:scale-95">التالي</button>
