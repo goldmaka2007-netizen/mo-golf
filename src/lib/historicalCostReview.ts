@@ -464,7 +464,7 @@ export const previewAutomaticInventorySurplusWac = (args: {
     ...engineOptions,
     historicalInventoryOverlayDirectives:
       engineOptions.historicalInventoryOverlayDirectives.filter(directive =>
-        throughTargetIds.has(directive.sourceDeficitOperationId)),
+        throughTargetIds.has(directive.originalOperationId)),
   };
   const timeline = rebuildInventoryCostTimeline(
     throughTargetEntries,
@@ -544,7 +544,7 @@ export const previewHistoricalCostOverlay = (args: {
       ...engineOptions,
       historicalInventoryOverlayDirectives:
         engineOptions.historicalInventoryOverlayDirectives.filter(directive =>
-          beforeIds.has(directive.sourceDeficitOperationId)),
+          beforeIds.has(directive.originalOperationId)),
     },
   );
   const scopedThroughTarget = rebuildInventoryCostTimeline(
@@ -555,7 +555,7 @@ export const previewHistoricalCostOverlay = (args: {
       ...engineOptions,
       historicalInventoryOverlayDirectives:
         engineOptions.historicalInventoryOverlayDirectives.filter(directive =>
-          throughTargetIds.has(directive.sourceDeficitOperationId)),
+          throughTargetIds.has(directive.originalOperationId)),
     },
   );
   const targetResult = scopedThroughTarget.resultsByOperationId[

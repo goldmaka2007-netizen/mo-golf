@@ -6,7 +6,10 @@ import {
   CURRENT_DATASET_INVENTORY_BINDINGS,
 } from '../inventoryCostCatalog';
 import { rebuildInventoryCostTimeline } from '../inventoryCostEngine';
-import { APPROVED_HISTORICAL_INVENTORY_OVERLAY_DIRECTIVES } from '../historicalInventoryOverlay';
+import {
+  APPROVED_HISTORICAL_INVENTORY_OVERLAY_DIRECTIVES,
+  approvedHistoricalInventoryOverlaysForAccounts,
+} from '../historicalInventoryOverlay';
 
 type CsvRow = Record<string, string>;
 
@@ -77,25 +80,29 @@ const accessoryOpeningCosts = Object.fromEntries(
 );
 
 describe('Phase 5 approved dataset regression', () => {
-  it('applies legacy same-day batches without mutation and exposes the next genuine day-end deficit', () => {
+  it('applies legacy same-day batches and resolves the first genuine deficit through its approved overlay', () => {
     const before = JSON.stringify(entries);
     const timeline = rebuildInventoryCostTimeline(entries, accounts, {
       gold21PriceByYearMinor: { '2026': 600000 },
       silverPriceByYearMinor: { '2026': 6000 },
       accessoryUnitCostByYearAndAccountMinor: { '2026': accessoryOpeningCosts },
+    }, {
+      historicalInventoryOverlayDirectives:
+        approvedHistoricalInventoryOverlaysForAccounts(accounts),
     });
 
     expect(entries).toHaveLength(2169);
     expect(JSON.stringify(entries)).toBe(before);
-    expect(timeline.valid).toBe(false);
-    expect(timeline.results).toEqual([]);
-    expect(timeline.finalStates).toEqual({});
-    expect(timeline.diagnostics).toEqual([{
-      code: 'insufficient_inventory',
-      message: 'Metal movement exceeds costed inventory: required standardized=6.61g, available=6.59g; required physical=6.61g, available=6.59g',
-      operationId: 'csvref-entry-8bac4f51c5f366affbcb8884610f549e',
-      inventoryAccountId: 'seed-account-d1216eb4076ccdf40e20',
-    }]);
+    // Overlay linkage fix — deficit resolved by approved historical overlay hiro-20260304-scrap-arabic-e21-002
+    expect(timeline.valid).toBe(true);
+    expect(timeline.diagnostics).toEqual([]);
+    expect(timeline.resultsByOperationId['csvref-entry-8bac4f51c5f366affbcb8884610f549e'])
+      .toMatchObject({ outgoingStandardizedQuantityUnits: 661 });
+    expect(timeline.historicalInventoryOverlays).toContainEqual(expect.objectContaining({
+      overlayId: 'hiro-20260304-scrap-arabic-e21-002',
+      originalOperationId: 'csvref-entry-8bac4f51c5f366affbcb8884610f549e',
+      quantityUnits: 2,
+    }));
     expect(timeline.orderingDiagnostics).toHaveLength(133);
     expect(timeline.orderingDiagnostics.filter(item => item.changed)).toHaveLength(95);
 
@@ -146,6 +153,83 @@ describe('Phase 5 approved dataset regression', () => {
         .reduce((sum, operationId) => sum + signedMovement(operationId), 0);
       expect(afterNet).toBeCloseTo(beforeNet, 8);
     }
+  });
+  it('selects all four approved overlays through historical account keys', () => {
+    const selected = approvedHistoricalInventoryOverlaysForAccounts([
+      { id: 'O5YOL6B9WF91qcskgfbr' },
+      { id: 'oQlWP1di0KCBunB7TnWb' },
+    ]);
+
+    expect(selected).toHaveLength(4);
+    expect(selected.map(item => item.overlayId).sort()).toEqual(
+      APPROVED_HISTORICAL_INVENTORY_OVERLAY_DIRECTIVES.map(item => item.overlayId).sort(),
+    );
+    expect(selected.every(item => item.historicalAccountKey === item.stableInventoryAccountId))
+      .toBe(true);
+  });
+
+  it('applies every approved overlay exactly once without duplicates', () => {
+    const timeline = rebuildInventoryCostTimeline(entries, accounts, {
+      gold21PriceByYearMinor: { '2026': 600000 },
+      silverPriceByYearMinor: { '2026': 6000 },
+      accessoryUnitCostByYearAndAccountMinor: { '2026': accessoryOpeningCosts },
+    }, {
+      historicalInventoryOverlayDirectives:
+        approvedHistoricalInventoryOverlaysForAccounts(accounts),
+    });
+    const appliedIds = timeline.historicalInventoryOverlays.map(item => item.overlayId);
+
+    expect(timeline.valid).toBe(true);
+    expect(appliedIds).toHaveLength(4);
+    expect(new Set(appliedIds).size).toBe(4);
+    expect(appliedIds.sort()).toEqual(
+      APPROVED_HISTORICAL_INVENTORY_OVERLAY_DIRECTIVES.map(item => item.overlayId).sort(),
+    );
+  });
+
+  it('keeps the approved overlay correction total at exactly 0.85g E21', () => {
+    const totalQuantityUnits = APPROVED_HISTORICAL_INVENTORY_OVERLAY_DIRECTIVES
+      .reduce((sum, item) => sum + item.quantityUnits, 0);
+
+    expect(APPROVED_HISTORICAL_INVENTORY_OVERLAY_DIRECTIVES).toHaveLength(4);
+    expect(totalQuantityUnits).toBe(85);
+    expect(totalQuantityUnits / 100).toBe(0.85);
+  });
+
+  it('keeps overlay results unchanged when future runtime IDs change but historical keys stay fixed', () => {
+    const replacements = new Map([
+      ['seed-account-d1216eb4076ccdf40e20', 'future-runtime-scrap-arabic'],
+      ['seed-account-391695330f1733e03bb0', 'future-runtime-gouache-arabic'],
+    ]);
+    const futureAccounts = accounts.map(account => {
+      const historicalAccountKey = account.id ?? '';
+      const runtimeId = replacements.get(historicalAccountKey);
+      return runtimeId ? { ...account, id: runtimeId, historicalAccountKey } : account;
+    });
+    const futureEntries = entries.map(entry => ({
+      ...entry,
+      debitAccountId: replacements.get(entry.debitAccountId ?? '') ?? entry.debitAccountId,
+      creditAccountId: replacements.get(entry.creditAccountId ?? '') ?? entry.creditAccountId,
+    }));
+    const openingConfig = {
+      gold21PriceByYearMinor: { '2026': 600000 },
+      silverPriceByYearMinor: { '2026': 6000 },
+      accessoryUnitCostByYearAndAccountMinor: { '2026': accessoryOpeningCosts },
+    };
+    const stableTimeline = rebuildInventoryCostTimeline(entries, accounts, openingConfig, {
+      historicalInventoryOverlayDirectives:
+        approvedHistoricalInventoryOverlaysForAccounts(accounts),
+    });
+    const futureTimeline = rebuildInventoryCostTimeline(futureEntries, futureAccounts, openingConfig, {
+      historicalInventoryOverlayDirectives:
+        approvedHistoricalInventoryOverlaysForAccounts(futureAccounts),
+    });
+    const withoutRuntimeId = ({ runtimeInventoryAccountId: _runtimeId, ...overlay }:
+      (typeof stableTimeline.historicalInventoryOverlays)[number]) => overlay;
+
+    expect(futureTimeline.valid).toBe(true);
+    expect(futureTimeline.historicalInventoryOverlays.map(withoutRuntimeId))
+      .toEqual(stableTimeline.historicalInventoryOverlays.map(withoutRuntimeId));
   });
   it('reconciles the M1390 deficit without mutating the 2,169 source records', () => {
     const before = JSON.stringify(entries);

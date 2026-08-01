@@ -197,13 +197,14 @@ export const executeCostCalculationRun = (args: {
       },
     };
   }
+  const historicalInventoryOverlayDirectives =
+    approvedHistoricalInventoryOverlaysForAccounts(prepared.accounts);
   const timeline = rebuildInventoryCostTimeline(
     prepared.entries,
     prepared.accounts,
     openingResolution.config,
     {
-      historicalInventoryOverlayDirectives:
-        approvedHistoricalInventoryOverlaysForAccounts(prepared.accounts),
+      historicalInventoryOverlayDirectives,
       historicalMerchantLiabilityOpeningDirectives:
         approvedHistoricalMerchantLiabilityOpeningsForAccounts(prepared.accounts),
       calculationGenerationId: args.generationId,

@@ -3,10 +3,10 @@
   "previousBaselineVersion": "phase5-cost-baseline-v1",
   "fixtureVersion": "phase5-cost-fixture-v2-sanitized",
   "datasetRecordCount": 2169,
-  "datasetFingerprint": "fnv1a-e1069f33",
+  "datasetFingerprint": "fnv1a-f47e909d",
   "sanitizedFixtureSha256": "ba1c1a6bba3a99ef66793c20b28f41d0c4da3ea1ed32ec7ec831783afb4be3fd",
-  "expectedResultFingerprint": "24da64d50ea5926bab24d5c348dcb90641f999e51ee97227cb82f9dc88f8fc2f",
-  "calculationRulesVersion": "makka-inventory-taxonomy-v1:phase5-wac-v1+historical-inventory-reconciliation-v1+historical-merchant-liability-opening-v1+historical-cost-review-v1",
+  "expectedResultFingerprint": "c62059728fe9c59298fced6fa07da4073943340538a7e7f46efaaae4ebcaf416",
+  "calculationRulesVersion": "makka-inventory-taxonomy-v1:phase5-wac-v1+historical-inventory-reconciliation-v2+historical-merchant-liability-opening-v1+historical-cost-review-v1",
   "approvedOverlayIds": [
     "hiro-20260304-scrap-arabic-e21-002",
     "hiro-20260320-scrap-arabic-e21-076",
@@ -14,10 +14,10 @@
     "hiro-20260410-scrap-arabic-e21-005"
   ],
   "approvedOverlayAuditHashes": {
-    "hiro-20260304-scrap-arabic-e21-002": "e1b47ca05c4ef76cbfe2b761e75010d4e547d6cc94c7953d2f2c1c4c2f70f789",
-    "hiro-20260320-scrap-arabic-e21-076": "0529e01827d2fa5ced1842d9d0af19045859c5015ddd0d289e24349a51fe399a",
-    "hiro-20260406-gouache-arabic-e21-002": "49f3e926f471d5b53e2bc0c9cbc6c24e3e571c0936579d89b1599ef26eb9d150",
-    "hiro-20260410-scrap-arabic-e21-005": "261352796229eb51923f9d32717bb0aae45280f5d8c2b690074c91243f9f2776"
+    "hiro-20260304-scrap-arabic-e21-002": "0491d073db1f041fdaf043385cbe9bb68ed3b0d3e3d08c85645511d63ebb0396",
+    "hiro-20260320-scrap-arabic-e21-076": "67a0a7c526487fa54c63d89f6dc0fe98e5d7c15e8b38cef11b1e47687bfcfd20",
+    "hiro-20260406-gouache-arabic-e21-002": "9c95882e169b33976dbfafea73273c4417cda514b7d7d5a9a751b0d63bc040f7",
+    "hiro-20260410-scrap-arabic-e21-005": "bfe62bbe44ae92b2713d9daf26342388cec8192cb054039e44fe31d2fec03255"
   },
   "expectedCogsMinor": 1190281363,
   "expectedGrossProfitMinor": 144032137,
@@ -286,8 +286,8 @@
     "wacMinorPerScaledUnitTolerance": 0.000001
   },
   "generatedAt": "2026-07-24T00:00:00+03:00",
-  "changeId": "merchant-opening-and-surplus-20260729",
-  "updateReason": "Owner-approved merchant opening liability reconciliation and nearest prior carrying-cost assignments for two historical surpluses",
+  "changeId": "overlay-runtime-compatibility-2026-08-01",
+  "updateReason": "Overlay linkage fix: immutable historical keys with runtime-to-legacy compatibility mapping",
   "explanatoryNote": "The fixture and representational fingerprints changed because identifiers and labels were sanitized. COGS, Gross Profit, balances, diagnostics, deficits, and approved overlays are identical to v1.",
   "transitionProof": {
     "recordCountEqual": true,

@@ -1067,9 +1067,11 @@ const applyHistoricalOverlayDirective = (
   state: InventoryCostState,
   calculationGenerationId: number,
 ): AppliedHistoricalInventoryOverlay => {
+  const runtimeInventoryAccountId = directive.runtimeInventoryAccountId
+    ?? directive.stableInventoryAccountId;
   if (directive.effectiveDate !== entry.date
-    || directive.sourceDeficitOperationId !== getPhase5OperationId(entry)
-    || directive.stableInventoryAccountId !== account.inventoryAccountId) {
+    || directive.originalOperationId !== getPhase5OperationId(entry)
+    || runtimeInventoryAccountId !== account.inventoryAccountId) {
     fail('invalid_historical_overlay', `Overlay ${directive.overlayId} does not match its source deficit operation`, entry, account.inventoryAccountId);
   }
   if (directive.unitBasis !== account.unitBasis) {
@@ -1196,10 +1198,10 @@ export const rebuildInventoryCostTimeline = (
         fail('invalid_historical_overlay', `Approved overlay ${directive.overlayId} is missing approvedAt`);
       }
       if (isHistoricalOverlayActive(directive, options.allowPendingFinalApprovalForSimulation === true)) {
-        if (sourceOperationIds.has(directive.sourceDeficitOperationId)) {
-          fail('invalid_historical_overlay', `Multiple active overlays target ${directive.sourceDeficitOperationId}`);
+        if (sourceOperationIds.has(directive.originalOperationId)) {
+          fail('invalid_historical_overlay', `Multiple active overlays target ${directive.originalOperationId}`);
         }
-        sourceOperationIds.add(directive.sourceDeficitOperationId);
+        sourceOperationIds.add(directive.originalOperationId);
       }
     }
     const activeOverlayBySourceOperationId = new Map(
@@ -1208,7 +1210,7 @@ export const rebuildInventoryCostTimeline = (
           directive,
           options.allowPendingFinalApprovalForSimulation === true,
         ))
-        .map(directive => [directive.sourceDeficitOperationId, directive]),
+        .map(directive => [directive.originalOperationId, directive]),
     );
 
     validateOrdering(entries);
@@ -1264,9 +1266,11 @@ export const rebuildInventoryCostTimeline = (
       const sourceOperationId = getPhase5OperationId(entry);
       const overlayDirective = activeOverlayBySourceOperationId.get(sourceOperationId);
       if (overlayDirective) {
-        const overlayAccount = catalog.byAccountId.get(overlayDirective.stableInventoryAccountId);
-        if (!overlayAccount || entry.creditAccountId !== overlayDirective.stableInventoryAccountId) {
-          fail('invalid_historical_overlay', `Overlay ${overlayDirective.overlayId} does not target an outgoing movement from its inventory account`, entry, overlayDirective.stableInventoryAccountId);
+        const runtimeInventoryAccountId = overlayDirective.runtimeInventoryAccountId
+          ?? overlayDirective.stableInventoryAccountId;
+        const overlayAccount = catalog.byAccountId.get(runtimeInventoryAccountId);
+        if (!overlayAccount || entry.creditAccountId !== runtimeInventoryAccountId) {
+          fail('invalid_historical_overlay', `Overlay ${overlayDirective.overlayId} does not target an outgoing movement from its inventory account`, entry, runtimeInventoryAccountId);
         }
         historicalInventoryOverlays.push(applyHistoricalOverlayDirective(
           overlayDirective,

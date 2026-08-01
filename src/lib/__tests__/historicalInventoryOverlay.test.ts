@@ -31,7 +31,8 @@ const deficitSale = entry({
   weight: '10.02', arabicWeight: '10.02', cash: '1200',
 });
 const directive: HistoricalInventoryOverlayDirective = {
-  overlayId: 'overlay-1', stableInventoryAccountId: 'gold-a', effectiveDate: '2026-01-02',
+  overlayId: 'overlay-1', historicalAccountKey: 'gold-a', originalOperationId: 'deficit-sale',
+  stableInventoryAccountId: 'gold-a', effectiveDate: '2026-01-02',
   quantityUnits: 2, unitBasis: 'gold_equivalent21_centigram',
   reasonCode: 'historical_inventory_reconciliation', sourceDeficitOperationId: 'deficit-sale',
   ownerApprovalStatus: 'pending_final_approval', approvedAt: null, supersedesOverlayId: null,

@@ -4,7 +4,7 @@ import type {
 } from './inventoryCostTypes';
 
 export const HISTORICAL_INVENTORY_OVERLAY_VERSION =
-  'historical-inventory-reconciliation-v1' as const;
+  'historical-inventory-reconciliation-v2' as const;
 
 export const HISTORICAL_MERCHANT_LIABILITY_OPENING_VERSION =
   'historical-merchant-liability-opening-v1' as const;
@@ -56,6 +56,8 @@ export const APPROVED_HISTORICAL_INVENTORY_OVERLAY_DIRECTIVES:
 readonly HistoricalInventoryOverlayDirective[] = [
   {
     overlayId: 'hiro-20260304-scrap-arabic-e21-002',
+    historicalAccountKey: 'seed-account-d1216eb4076ccdf40e20',
+    originalOperationId: 'csvref-entry-8bac4f51c5f366affbcb8884610f549e',
     stableInventoryAccountId: 'seed-account-d1216eb4076ccdf40e20',
     effectiveDate: '2026-03-04',
     quantityUnits: 2,
@@ -70,6 +72,8 @@ readonly HistoricalInventoryOverlayDirective[] = [
   },
   {
     overlayId: 'hiro-20260320-scrap-arabic-e21-076',
+    historicalAccountKey: 'seed-account-d1216eb4076ccdf40e20',
+    originalOperationId: 'csvref-entry-0d4c9ee1f0f2eae2af57a503a0c3dce8',
     stableInventoryAccountId: 'seed-account-d1216eb4076ccdf40e20',
     effectiveDate: '2026-03-20',
     quantityUnits: 76,
@@ -84,6 +88,8 @@ readonly HistoricalInventoryOverlayDirective[] = [
   },
   {
     overlayId: 'hiro-20260406-gouache-arabic-e21-002',
+    historicalAccountKey: 'seed-account-391695330f1733e03bb0',
+    originalOperationId: 'csvref-entry-1a614dcb5f2ffe9369daa03453366393',
     stableInventoryAccountId: 'seed-account-391695330f1733e03bb0',
     effectiveDate: '2026-04-06',
     quantityUnits: 2,
@@ -98,6 +104,8 @@ readonly HistoricalInventoryOverlayDirective[] = [
   },
   {
     overlayId: 'hiro-20260410-scrap-arabic-e21-005',
+    historicalAccountKey: 'seed-account-d1216eb4076ccdf40e20',
+    originalOperationId: 'csvref-entry-7decedc1a2d80d7620897618e62f5e96',
     stableInventoryAccountId: 'seed-account-d1216eb4076ccdf40e20',
     effectiveDate: '2026-04-10',
     quantityUnits: 5,
@@ -179,6 +187,7 @@ export const sealAppliedHistoricalInventoryOverlay = (
 ): AppliedHistoricalInventoryOverlay => {
   const {
     calculationGenerationId: _runtimeGeneration,
+    runtimeInventoryAccountId: _runtimeAccountId,
     ...stableApprovedOverlay
   } = value;
   return {
@@ -198,13 +207,38 @@ export const isHistoricalOverlayActive = (
     || (allowPendingFinalApproval && directive.ownerApprovalStatus === 'pending_final_approval');
 };
 
+const LEGACY_HISTORICAL_ACCOUNT_KEY_BY_RUNTIME_ACCOUNT_ID = new Map<string, string>([
+  ['O5YOL6B9WF91qcskgfbr', 'seed-account-d1216eb4076ccdf40e20'],
+  ['oQlWP1di0KCBunB7TnWb', 'seed-account-391695330f1733e03bb0'],
+  ['seed-account-d1216eb4076ccdf40e20', 'seed-account-d1216eb4076ccdf40e20'],
+  ['seed-account-391695330f1733e03bb0', 'seed-account-391695330f1733e03bb0'],
+]);
+
+const resolveHistoricalAccountKeyForOverlayLookup = (
+  account: { id?: string; historicalAccountKey?: string },
+): string | undefined => account.historicalAccountKey
+  ?? (account.id
+    ? LEGACY_HISTORICAL_ACCOUNT_KEY_BY_RUNTIME_ACCOUNT_ID.get(account.id)
+    : undefined);
+
 export const approvedHistoricalInventoryOverlaysForAccounts = (
-  accounts: readonly { id?: string }[],
+  accounts: readonly { id?: string; historicalAccountKey?: string }[],
 ): readonly HistoricalInventoryOverlayDirective[] => {
-  const accountIds = new Set(accounts.map(account => account.id).filter(Boolean));
-  return APPROVED_HISTORICAL_INVENTORY_OVERLAY_DIRECTIVES.filter(
-    directive => accountIds.has(directive.stableInventoryAccountId),
-  );
+  const selectedByOverlayId = new Map<string, HistoricalInventoryOverlayDirective>();
+  for (const account of accounts) {
+    if (!account.id) continue;
+    const historicalAccountKey = resolveHistoricalAccountKeyForOverlayLookup(account);
+    if (!historicalAccountKey) continue;
+    for (const directive of APPROVED_HISTORICAL_INVENTORY_OVERLAY_DIRECTIVES) {
+      if (directive.historicalAccountKey !== historicalAccountKey
+        || selectedByOverlayId.has(directive.overlayId)) continue;
+      selectedByOverlayId.set(directive.overlayId, {
+        ...directive,
+        runtimeInventoryAccountId: account.id,
+      });
+    }
+  }
+  return [...selectedByOverlayId.values()];
 };
 
 export const approvedHistoricalMerchantLiabilityOpeningsForAccounts = (

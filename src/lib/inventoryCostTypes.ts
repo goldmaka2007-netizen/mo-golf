@@ -205,7 +205,13 @@ export type HistoricalOverlayOwnerApprovalStatus =
 
 export interface HistoricalInventoryOverlayDirective {
   overlayId: string;
+  /** Immutable historical identity; never derived from the current resolver. */
+  historicalAccountKey: string;
+  /** Immutable source operation identity from the historical import. */
+  originalOperationId: string;
   stableInventoryAccountId: string;
+  /** Runtime-only target resolved by the compatibility lookup adapter. */
+  runtimeInventoryAccountId?: string;
   effectiveDate: string;
   quantityUnits: number;
   unitBasis: InventoryCostUnitBasis;
