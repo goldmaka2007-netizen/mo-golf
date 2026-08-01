@@ -1,4 +1,4 @@
-﻿import { Account, AnnualOpeningCostConfig, CanonicalAccountDefinition, Entry, InventoryCheck } from '../types';
+import { Account, AnnualOpeningCostConfig, CanonicalAccountDefinition, Entry, InventoryCheck } from '../types';
 import { normalizeNumerals } from './accounting';
 import { buildGoldEquivalent21Audit, canCalculateGoldEquivalent21, inferGoldKaratFromMultiplier } from './goldEquivalent';
 import { resolveEntryIdentity } from './entryIdentity';
@@ -74,18 +74,11 @@ const multiplierForKarat = (karat: number | undefined): number => {
   return 1;
 };
 
-const resolveAdjustmentSideAccount = (accounts: Account[], metal: 'gold' | 'silver', direction: 'shortage' | 'surplus'): string => {
+const resolveAdjustmentSideAccount = (accounts: Account[], metal: 'gold' | 'silver', direction: 'shortage' | 'surplus'): Account | undefined => {
   const targetId = metal === 'gold'
     ? (direction === 'shortage' ? 'gold-shortage' : 'gold-surplus')
     : (direction === 'shortage' ? 'silver-shortage' : 'silver-surplus');
-  const byId = accounts.find(account => account.id === targetId);
-  if (byId) return byId.name;
-
-  const targets = direction === 'shortage'
-    ? (metal === 'gold' ? ['\u0639\u062c\u0632-\u0627\u0644\u0630\u0647\u0628', 'عجز-الذهب'] : ['\u0639\u062c\u0632-\u0627\u0644\u0641\u0636\u0629', 'عجز-الفضة'])
-    : (metal === 'gold' ? ['\u0632\u064a\u0627\u062f\u0629-\u0627\u0644\u0630\u0647\u0628', 'زيادة-الذهب'] : ['\u0632\u064a\u0627\u062f\u0629-\u0627\u0644\u0641\u0636\u0629', 'زيادة-الفضة']);
-  const byName = accounts.find(account => targets.includes(account.name));
-  return accountName(byName, targets[0]);
+  return accounts.find(account => account.id === targetId);
 };
 export const buildInventoryAdjustmentDraftEntry = (args: {
   check: InventoryCheck;
@@ -120,8 +113,11 @@ export const buildInventoryAdjustmentDraftEntry = (args: {
     ? resolveAdjustmentSideAccount(accountsDb, 'gold', direction)
     : resolveAdjustmentSideAccount(accountsDb, metal!, direction);
 
-  const debit = direction === 'shortage' ? counterpart : inventoryAccount.name;
-  const credit = direction === 'shortage' ? inventoryAccount.name : counterpart;
+  if (!inventoryAccount.id || !counterpart?.id) return { ok: false, message: 'تسوية الجرد تتطلب accountId تشغيليًا صريحًا للطرفين.' };
+  const debit = direction === 'shortage' ? counterpart.name : inventoryAccount.name;
+  const debitAccountId = direction === 'shortage' ? counterpart.id : inventoryAccount.id;
+  const credit = direction === 'shortage' ? inventoryAccount.name : counterpart.name;
+  const creditAccountId = direction === 'shortage' ? inventoryAccount.id : counterpart.id;
   const karat = metal === 'gold' ? accountKarat(inventoryAccount) : undefined;
   const date = check.date || new Date().toISOString().slice(0, 10);
   const year = date.slice(0, 4);
@@ -133,7 +129,9 @@ export const buildInventoryAdjustmentDraftEntry = (args: {
     tx: '\u062a\u0633\u0648\u064a\u0629',
     operationKind: 'adjustment',
     debit,
+    debitAccountId,
     credit,
+    creditAccountId,
     date,
     cash: '0',
     weight: isAccessory ? countDiffMagnitude.toFixed(0) : weightDiffMagnitude.toFixed(2),

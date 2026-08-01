@@ -41,16 +41,50 @@ service cloud.firestore {
     }
 
     match /accounts/{accountId} {
-      allow read: if ownsExisting();
-      allow create: if ownsIncoming();
-      allow update: if ownsExisting() && ownsIncoming() && preservesOwner();
+      function hasValidCanonicalBacklink(data) {
+        let canonicalId = data.get('canonicalAccountId', null);
+        let canonical = canonicalId is string
+          ? getAfter(/databases/$(database)/documents/canonicalAccounts/$(canonicalId)).data
+          : null;
+        return canonicalId == null || (
+          canonicalId.size() > 0
+          && canonical.userId == data.userId
+          && canonical.legacyAccountId == accountId
+          && canonical.approvalStatus == 'approved'
+        );
+      }
+
+      allow get: if isAuthenticated() && (
+        !exists(/databases/$(database)/documents/accounts/$(accountId)) || ownsExisting()
+      );
+      allow list: if ownsExisting();
+      allow create: if ownsIncoming() && hasValidCanonicalBacklink(request.resource.data);
+      allow update: if ownsExisting() && ownsIncoming() && preservesOwner()
+        && hasValidCanonicalBacklink(request.resource.data);
       allow delete: if ownsExisting();
     }
 
     match /canonicalAccounts/{accountId} {
-      allow read: if ownsExisting();
-      allow create: if ownsIncoming();
-      allow update: if ownsExisting() && ownsIncoming() && preservesOwner();
+      function hasValidOperationalLink(data) {
+        let legacyId = data.get('legacyAccountId', null);
+        let legacy = legacyId is string
+          ? getAfter(/databases/$(database)/documents/accounts/$(legacyId)).data
+          : null;
+        return data.get('approvalStatus', 'draft') != 'approved' || (
+          legacyId is string
+          && legacyId.size() > 0
+          && legacy.userId == data.userId
+          && legacy.canonicalAccountId == accountId
+        );
+      }
+
+      allow get: if isAuthenticated() && (
+        !exists(/databases/$(database)/documents/canonicalAccounts/$(accountId)) || ownsExisting()
+      );
+      allow list: if ownsExisting();
+      allow create: if ownsIncoming() && hasValidOperationalLink(request.resource.data);
+      allow update: if ownsExisting() && ownsIncoming() && preservesOwner()
+        && hasValidOperationalLink(request.resource.data);
       allow delete: if false;
     }
 

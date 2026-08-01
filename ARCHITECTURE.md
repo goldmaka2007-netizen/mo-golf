@@ -451,6 +451,8 @@ flowchart LR
 | `schema_versions` | Control | Server فقط | حالة Bootstrap/Migration |
 | `_connection_tests` | Diagnostic | مقيد | اختبار اتصال مؤقت |
 
+قرار الربط التشغيلي: يظل `accounts` المصدر الوحيد للحفظ، ولا يصبح `canonicalAccounts` تشغيليًا إلا بعد Publish ذري يثبت `legacyAccountId` و`canonicalAccountId` في الاتجاهين.
+
 ### 7.3 `entries/{entryId}`
 
 ```json

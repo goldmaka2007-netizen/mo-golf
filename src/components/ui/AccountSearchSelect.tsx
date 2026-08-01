@@ -2,6 +2,7 @@ import React from 'react';
 import { cn } from '../../lib/utils';
 
 export interface AccountOption {
+  id?: string;
   c: string;
   k?: number | null;
   m?: number;
@@ -12,7 +13,7 @@ interface Props {
   theme: 'debit' | 'credit';
   value: string;
   options: string[] | AccountOption[]; 
-  onSelect: (name: string, karat?: number | null, multiplier?: number) => void;
+  onSelect: (name: string, karat?: number | null, multiplier?: number, accountId?: string) => void;
   inputRef?: React.RefObject<HTMLInputElement>;
 }
 
@@ -61,12 +62,13 @@ export const AccountSearchSelect = ({ label, theme, value, options, onSelect, in
                 const itemName = typeof opt === 'string' ? opt : opt.c;
                 const itemKarat = typeof opt === 'string' ? undefined : opt.k;
                 const itemMult = typeof opt === 'string' ? undefined : opt.m;
+                const itemId = typeof opt === 'string' ? undefined : opt.id;
                 return (
                   <button 
-                    key={itemName} 
+                    key={itemId ?? itemName}
                     type="button"
                     onClick={() => { 
-                      onSelect(itemName, itemKarat, itemMult);
+                      onSelect(itemName, itemKarat, itemMult, itemId);
                       setSearch(''); 
                     }} 
                     className={cn("w-full p-2 text-right text-[10px] text-[#ddd8cc] block border-b border-[#1a1e2a] last:border-0 transition-all", themeColors.hoverBg, themeColors.hoverText)}

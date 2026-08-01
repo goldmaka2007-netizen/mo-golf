@@ -16,7 +16,7 @@
         "test:golden": "vitest run src/lib/__tests__/phase5GoldenDataset.test.ts",
         "test:golden:prerequisites": "vitest run src/lib/__tests__/inventoryCostPhase5.test.ts src/lib/__tests__/historicalInventoryOverlay.test.ts src/lib/__tests__/costRecalculationPhase5.test.ts src/lib/__tests__/costIntegrity.test.ts",
         "golden:generate": "tsx scripts/generate-phase5-golden-baseline.ts",
-        "test:firestore-rules": "firebase emulators:exec --only firestore \"vitest run src/lib/__tests__/firestoreHistoricalCost.rules.test.ts\""
+        "test:firestore-rules": "firebase emulators:exec --only firestore \"vitest run src/lib/__tests__/firestoreHistoricalCost.rules.test.ts src/lib/__tests__/canonicalAccountPublishing.firestore.test.ts\""
     },
     "dependencies": {
         "@tailwindcss/vite": "^4.1.14",

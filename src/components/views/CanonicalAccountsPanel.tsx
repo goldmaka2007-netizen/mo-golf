@@ -5,6 +5,7 @@ import { db } from '../../firebase';
 import { useAppStore } from '../../store';
 import { AccountTrackingDimension, CanonicalAccountDefinition, CanonicalAccountType, CanonicalMainGroup } from '../../types';
 import { buildAccountRegistry, canApproveRegistry, discoverAccounts, validateCanonicalAccount } from '../../lib/accountRegistry';
+import { publishCanonicalAccount } from '../../lib/canonicalAccountPublishing';
 import { buildMigrationPatch, planAccountIdMigration } from '../../lib/accountMigration';
 import { buildParityReport } from '../../lib/shadowAccounting';
 import { cn } from '../../lib/utils';
@@ -44,9 +45,10 @@ export const CanonicalAccountsPanel = React.memo(() => {
         classificationEvidence: [...definition.classificationEvidence, { source: 'manual', rule: reason, value: user.uid }],
         audit: { ...definition.audit, updatedBy: user.uid, lastReason: reason },
       };
-      await setDoc(doc(db, 'canonicalAccounts', next.id), clean(next));
-      await setDoc(doc(db, 'audit_logs', generateId()), clean({ userId: user.uid, action: 'canonical_account_approved', accountId: next.id, reason, beforeVersion: definition.version, afterVersion: next.version, createdAt: timestamp }));
-      setMessage(`تم اعتماد ${next.displayName}.`);
+      const result = await publishCanonicalAccount({
+        db, definition: next, userId: user.uid, reason, operationalAccounts: accountsDb,
+      });
+      setMessage(`تم اعتماد ${next.displayName} وربطه بالحساب التشغيلي ${result.legacyAccountId}.`);
     } catch (error) { setMessage(error instanceof Error ? error.message : 'تعذر حفظ الحساب.'); }
     finally { setBusy(false); }
   };

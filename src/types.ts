@@ -177,6 +177,7 @@ export interface OperationRule {
 
 export interface Account {
   id?: string;
+  canonicalAccountId?: string;
   name: string;
   mainType: string;
   subType: string;
@@ -217,6 +218,8 @@ export interface CanonicalAccountDefinition {
   id: string;
   entityId: string;
   sourceAccountId?: string;
+  /** Operational accounts/{id}; required before the definition is operational. */
+  legacyAccountId?: string;
   userId?: string;
   canonicalName: string;
   displayName: string;

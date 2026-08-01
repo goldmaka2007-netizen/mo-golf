@@ -33,6 +33,7 @@ import { buildAccountRegistry } from '../../lib/accountRegistry';
 import { buildCanonicalPosting } from '../../lib/postingMatrix';
 import { calculateMerchantInvoiceMetalValueMinor, isMerchantReceiptEntry, resolveMerchantReceiptMetal } from '../../lib/merchantInvoiceValuation';
 import { prepareRuntimeCostAccountInputs } from '../../lib/runtimeCostAccountResolver';
+import { buildOperationalAccountOptions } from '../../lib/operationalAccounts';
 
 export const normalizeAccessoryEntryPayload = <T extends { weight?: string; count?: string }>(entry: T, isAccessory: boolean): T => (
   isAccessory ? { ...entry, weight: entry.weight || '0', count: '0' } : entry
@@ -128,6 +129,8 @@ export const EntryForm = React.memo(() => {
     tx: '',
     debit: '',
     credit: '',
+    debitAccountId: '',
+    creditAccountId: '',
     date: format(new Date(), 'yyyy-MM-dd'),
     cash: '',
     weight: '',
@@ -155,6 +158,8 @@ export const EntryForm = React.memo(() => {
     tx: formData.tx,
     debit: formData.debit,
     credit: formData.credit,
+    debitAccountId: formData.debitAccountId,
+    creditAccountId: formData.creditAccountId,
     date: formData.date,
     cash: formData.cash,
     weight: formData.weight,
@@ -308,61 +313,25 @@ export const EntryForm = React.memo(() => {
   const filteredRules = useMemo(() => allRules.filter(r => r.t === formData.tx), [formData.tx, allRules]);
   
   const debits = useMemo(() => {
-    const list = Array.from(new Set(filteredRules.map(r => r.d)));
-    if (list.length > 0) return sortByUsage(list, i => i);
-    
-    // Combine all sources and remove string duplicates
-    const all = [
-      ...accounts.assets, 
-      ...accounts.liabilities, 
-      ...accounts.equity, 
-      ...accounts.revenue, 
-      ...accounts.expenses, 
-      ...accountsDb.map(a => a.name)
-    ];
-    const uniqueAll = Array.from(new Set(all.filter(Boolean)));
-    return sortByUsage(uniqueAll, i => i);
-  }, [filteredRules, accountsDb, accounts, usageStats]);
+    const ruleNames = new Set<string>(filteredRules.map(rule => String(rule.d)));
+    return sortByUsage(buildOperationalAccountOptions(accountsDb, ruleNames), item => item.id);
+  }, [filteredRules, accountsDb, usageStats]);
 
   const credits = useMemo(() => {
-    // Get list from rules and ensure unique account names
-    const ruleList = filteredRules
-      .filter(r => r.d === formData.debit)
-      .map(r => ({ c: r.c, k: r.k, m: r.m }));
-    
-    const uniqueRuleList: typeof ruleList = [];
-    const seenNames = new Set();
-    
-    ruleList.forEach(item => {
-      if (!seenNames.has(item.c)) {
-        seenNames.add(item.c);
-        uniqueRuleList.push(item);
-      }
-    });
-
-    if (uniqueRuleList.length > 0) return sortByUsage(uniqueRuleList, i => i.c);
-    
-    // Fallback: Combine all sources and ensure unique objects based on name
-    const all = [
-      ...accounts.assets, 
-      ...accounts.liabilities, 
-      ...accounts.equity, 
-      ...accounts.revenue, 
-      ...accounts.expenses, 
-      ...accountsDb.map(a => a.name)
-    ];
-    
-    const uniqueAllNames = Array.from(new Set(all.filter(Boolean)));
-    const fallbackList = uniqueAllNames.map(a => ({ c: a, k: null as number | null, m: 1 }));
-    
-    return sortByUsage(fallbackList, i => i.c);
-  }, [formData.debit, filteredRules, accountsDb, accounts, usageStats]);
+    const rules = filteredRules.filter(rule => rule.d === formData.debit);
+    const ruleByName = new Map<string, { k?: number | null; m?: number }>();
+    rules.forEach(rule => ruleByName.set(String(rule.c), { k: rule.k, m: rule.m }));
+    return sortByUsage(buildOperationalAccountOptions(accountsDb, ruleByName.keys()).map(account => {
+      const rule = ruleByName.get(account.c);
+      return { ...account, k: rule?.k ?? null, m: rule?.m ?? 1 };
+    }), item => item.id);
+  }, [formData.debit, filteredRules, accountsDb, usageStats]);
 
   useEffect(() => {
-    if (debits.length === 1 && formData.debit !== debits[0]) setFormData(prev => ({ ...prev, debit: debits[0], credit: '' }));
-    if (formData.debit && credits.length === 1 && formData.credit !== credits[0].c) {
+    if (debits.length === 1 && formData.debitAccountId !== debits[0].id) setFormData(prev => ({ ...prev, debit: debits[0].c, debitAccountId: debits[0].id || '', credit: '', creditAccountId: '' }));
+    if (formData.debitAccountId && credits.length === 1 && formData.creditAccountId !== credits[0].id) {
       const c = credits[0];
-      setFormData(prev => ({ ...prev, credit: c.c, karat: c.k ?? prev.karat, multiplier: c.m || prev.multiplier, arabicWeight: calculateArabicWeight(prev.weight, c.m || 1, c.k ?? prev.karat) }));
+      setFormData(prev => ({ ...prev, credit: c.c, creditAccountId: c.id || '', karat: c.k ?? prev.karat, multiplier: c.m || prev.multiplier, arabicWeight: calculateArabicWeight(prev.weight, c.m || 1, c.k ?? prev.karat) }));
     }
   }, [formData.tx, formData.debit, debits, credits]);
 
@@ -398,6 +367,8 @@ export const EntryForm = React.memo(() => {
       tx: formData.tx || '',
       debit: formData.debit || '',
       credit: formData.credit || '',
+      debitAccountId: formData.debitAccountId || '',
+      creditAccountId: formData.creditAccountId || '',
       date: formData.date || format(new Date(), 'yyyy-MM-dd'),
       cash: formData.cash || '0',
       weight: formData.weight || '0',
@@ -419,6 +390,7 @@ export const EntryForm = React.memo(() => {
       return;
     }
     Object.assign(entry, identity.value);
+
     if (formData.tx.includes('مرتجع')) {
       entry.operationKind = formData.returnKind;
       entry.originalOperationId = formData.originalOperationId.trim();
@@ -662,8 +634,8 @@ export const EntryForm = React.memo(() => {
           label="المدين"
           theme="debit"
           value={formData.debit}
-          options={debits as string[]}
-          onSelect={(val) => setFormData(p => ({ ...p, debit: val, credit: '' }))}
+          options={debits}
+          onSelect={(val, _karat, _mult, accountId) => setFormData(p => ({ ...p, debit: val, debitAccountId: accountId || '', credit: '', creditAccountId: '' }))}
           inputRef={debitSearchRef}
         />
         <AccountSearchSelect 
@@ -671,10 +643,10 @@ export const EntryForm = React.memo(() => {
           theme="credit"
           value={formData.credit}
           options={credits as any}
-          onSelect={(val, karat, mult) => {
+          onSelect={(val, karat, mult, accountId) => {
             const activeMult = mult || 1;
             setFormData(p => ({ 
-              ...p, credit: val, karat: karat || p.karat, multiplier: activeMult, arabicWeight: calculateArabicWeight(p.weight, activeMult, karat || p.karat)
+              ...p, credit: val, creditAccountId: accountId || '', karat: karat || p.karat, multiplier: activeMult, arabicWeight: calculateArabicWeight(p.weight, activeMult, karat || p.karat)
             }));
           }}
           inputRef={creditSearchRef}

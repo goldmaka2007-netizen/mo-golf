@@ -95,19 +95,10 @@ export const EditingEntryModal = ({
     };
   }, [editingEntry.tx]);
 
-  const allAccountNames = React.useMemo(() => {
-    const all = [
-      ...(editingEntry.debit ? [editingEntry.debit] : []),
-      ...(editingEntry.credit ? [editingEntry.credit] : []),
-      ...accountsDb.map(a => a.name),
-      ...accounts.assets, 
-      ...accounts.liabilities, 
-      ...accounts.equity,
-      ...accounts.revenue,
-      ...accounts.expenses
-    ];
-    return Array.from(new Set(all.filter(Boolean))).sort((a, b) => a.localeCompare(b, 'ar'));
-  }, [editingEntry.debit, editingEntry.credit, accountsDb, accounts]);
+  const operationalAccountOptions = React.useMemo(() => accountsDb
+    .filter(account => account.id && account.isActive !== false)
+    .map(account => ({ id: account.id, c: account.name }))
+    .sort((left, right) => left.c.localeCompare(right.c, 'ar')), [accountsDb]);
 
   return (
     <div className="fixed inset-0 bg-black/95 z-[100] flex items-center justify-center p-4 backdrop-blur-md">
@@ -150,15 +141,15 @@ export const EditingEntryModal = ({
               label="المدين"
               theme="debit"
               value={editingEntry.debit || ''}
-              options={allAccountNames}
-              onSelect={(val) => setEditingEntry({ ...editingEntry, debit: val })}
+              options={operationalAccountOptions}
+              onSelect={(val, _karat, _mult, accountId) => setEditingEntry({ ...editingEntry, debit: val, debitAccountId: accountId })}
             />
             <AccountSearchSelect 
               label="الدائن"
               theme="credit"
               value={editingEntry.credit || ''}
-              options={allAccountNames}
-              onSelect={(val) => setEditingEntry({ ...editingEntry, credit: val })}
+              options={operationalAccountOptions}
+              onSelect={(val, _karat, _mult, accountId) => setEditingEntry({ ...editingEntry, credit: val, creditAccountId: accountId })}
             />
           </div>
 
