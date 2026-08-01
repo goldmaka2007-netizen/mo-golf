@@ -491,6 +491,7 @@ export const EntryForm = React.memo(() => {
       const openingConfig = buildOpeningCostConfig(openingCostConfig, accountsDb);
       const costValidation = rebuildInventoryCostTimeline(costInputs.entries, costInputs.accounts, openingConfig, {
         historicalInventoryOverlayDirectives: approvedHistoricalInventoryOverlaysForAccounts(costInputs.accounts),
+        saveValidationOperationId: pendingEntry.id,
       });
       if (!costValidation.valid) {
         const diagnostic = costValidation.diagnostics[0];

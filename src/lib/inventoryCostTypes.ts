@@ -2,7 +2,8 @@ import type { Entry } from '../types';
 
 export const INVENTORY_COST_CALCULATION_VERSION = 'phase5-wac-v1' as const;
 
-export type InventoryCostTaxonomyKey =
+export type InventoryCostTaxonomyKey = string;
+export type LegacyInventoryCostTaxonomyKey =
   | 'gold.product.ring_women'
   | 'gold.product.ring_children'
   | 'gold.product.earring_women'
@@ -57,7 +58,16 @@ export interface InventoryRuntimeBinding {
 export interface ResolvedInventoryAccount extends InventoryTaxonomyDefinition {
   inventoryAccountId: string;
   displayName: string;
+  dimension: 'weight' | 'quantity';
+  costingMethod: 'wac' | 'fixed-opening-cost';
 }
+
+export type InventoryAccountResolution =
+  | { status: 'eligible'; accountId: string; dimension: 'weight' | 'quantity'; costingMethod: 'wac' | 'fixed-opening-cost'; account: ResolvedInventoryAccount }
+  | { status: 'not-inventory' }
+  | { status: 'invalid'; reason: 'missing_inventory_type' | 'unsupported_dimension' | 'unsupported_costing_method' | 'missing_cost_basis' };
+
+export type InventoryValuationStatus = 'empty-uninitialized' | 'ready' | 'missing-cost-basis' | 'invalid-configuration';
 
 export interface InventoryCostState {
   inventoryAccountId: string;
@@ -65,6 +75,9 @@ export interface InventoryCostState {
   displayName: string;
   kind: InventoryCostKind;
   unitBasis: InventoryCostUnitBasis;
+  dimension: 'weight' | 'quantity';
+  costingMethod: 'wac' | 'fixed-opening-cost';
+  valuationStatus: InventoryValuationStatus;
   standardizedQuantityUnits: number;
   actualPhysicalWeightUnits: number;
   accessoryQuantityUnits: number;
@@ -103,6 +116,11 @@ export type InventoryCostDiagnosticCode =
   | 'missing_karat_conversion'
   | 'missing_opening_cost'
   | 'missing_wac'
+  | 'missing_cost_basis'
+  | 'inventory_cost_basis_required'
+  | 'missing_inventory_type'
+  | 'unsupported_dimension'
+  | 'unsupported_costing_method'
   | 'stale_generation'
   | 'tafyeet_quantity_mismatch'
   | 'transfer_quantity_mismatch'
@@ -267,6 +285,9 @@ export interface InventoryCostTimeline {
   merchantGoldLiabilities: Record<string, MerchantGoldLiabilityState>;
   unresolvedCostData: InventoryCostUnresolvedItem[];
   costDataComplete: boolean;
+  completeness?: 'complete' | 'partial';
+  excludedAccounts?: Array<{ accountId: string; reason: 'missing_inventory_type' | 'unsupported_dimension' | 'unsupported_costing_method' | 'missing_cost_basis' }>;
+  accountValuations?: Record<string, { accountId: string; quantity: number; bookValue: number; averageCost: number | null; valuationStatus: InventoryValuationStatus }>;
   excludedHistoricalOperationIds?: string[];
 }
 

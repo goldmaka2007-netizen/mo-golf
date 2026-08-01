@@ -187,6 +187,9 @@ export interface Account {
   karat?: '18' | '21' | '24' | 'silver' | null;
   metal?: 'gold' | 'silver' | null;
   is_inventory?: boolean;
+  inventoryKind?: 'gold' | 'silver' | 'accessory';
+  measurementDimension?: 'weight' | 'quantity';
+  costingMethod?: 'wac' | 'fixed-opening-cost';
   quantityStep?: number | string;
   isActive?: boolean;
 }

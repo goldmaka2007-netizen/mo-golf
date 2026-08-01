@@ -7,7 +7,6 @@ import {
 import { normalizeNumerals } from './accounting';
 import {
   buildInventoryRuntimeCatalog,
-  CURRENT_DATASET_INVENTORY_BINDINGS,
   INVENTORY_COST_TAXONOMY_VERSION,
   type InventoryRuntimeCatalog,
 } from './inventoryCostCatalog';
@@ -230,6 +229,9 @@ const emptyState = (account: ResolvedInventoryAccount): InventoryCostState => ({
   displayName: account.displayName,
   kind: account.kind,
   unitBasis: account.unitBasis,
+  dimension: account.dimension,
+  costingMethod: account.costingMethod,
+  valuationStatus: 'empty-uninitialized',
   standardizedQuantityUnits: 0,
   actualPhysicalWeightUnits: 0,
   accessoryQuantityUnits: 0,
@@ -254,6 +256,10 @@ const emptyState = (account: ResolvedInventoryAccount): InventoryCostState => ({
 });
 
 const updateDerivedState = (state: InventoryCostState): void => {
+  const primaryQuantity = state.kind === 'accessory' ? state.accessoryQuantityUnits : state.standardizedQuantityUnits;
+  state.valuationStatus = primaryQuantity === 0
+    ? (state.lastProcessedOperationId ? 'ready' : 'empty-uninitialized')
+    : state.hasReliableCostBasis ? 'ready' : 'missing-cost-basis';
   state.remainingTotalCostMinor = state.remainingMetalCostMinor
     + state.remainingWorkmanshipCostMinor
     + state.remainingAccessoryCostMinor;
@@ -293,6 +299,7 @@ const updateDerivedState = (state: InventoryCostState): void => {
 };
 
 const assertStateInvariant = (state: InventoryCostState, entry: Entry): void => {
+  const primaryQuantity = state.kind === 'accessory' ? state.accessoryQuantityUnits : state.standardizedQuantityUnits;
   const integers = [
     state.standardizedQuantityUnits, state.actualPhysicalWeightUnits, state.accessoryQuantityUnits,
     state.remainingMetalCostMinor, state.remainingWorkmanshipCostMinor,
@@ -306,8 +313,6 @@ const assertStateInvariant = (state: InventoryCostState, entry: Entry): void => 
   if (components !== state.remainingTotalCostMinor) {
     fail('cost_invariant_failed', 'Inventory total cost does not equal its cost components', entry, state.inventoryAccountId);
   }
-  const primaryQuantity = state.kind === 'accessory'
-    ? state.accessoryQuantityUnits : state.standardizedQuantityUnits;
   if (primaryQuantity === 0 && state.remainingTotalCostMinor !== 0) {
     fail('cost_invariant_failed', 'Zero inventory cannot retain rounding residual cost', entry, state.inventoryAccountId);
   }
@@ -454,6 +459,8 @@ const addIncoming = (
 ): void => {
   const primaryQuantity = state.kind === 'accessory' ? quantity.accessoryUnits : quantity.standardizedUnits;
   if (primaryQuantity <= 0) fail('invalid_quantity', 'Incoming inventory quantity must be positive', entry, state.inventoryAccountId);
+  const quantityBefore = state.kind === 'accessory' ? state.accessoryQuantityUnits : state.standardizedQuantityUnits;
+  const hadMissingCostBasis = quantityBefore > 0 && !state.hasReliableCostBasis;
   state.standardizedQuantityUnits += quantity.standardizedUnits;
   state.actualPhysicalWeightUnits += quantity.physicalUnits;
   state.accessoryQuantityUnits += quantity.accessoryUnits;
@@ -470,7 +477,7 @@ const addIncoming = (
   ]) {
     if (!Number.isSafeInteger(value) || value < 0) fail('invalid_amount', 'Inventory cost state overflow', entry, state.inventoryAccountId);
   }
-  state.hasReliableCostBasis = true;
+  state.hasReliableCostBasis = !hadMissingCostBasis;
   state.lastProcessedOperationId = getPhase5OperationId(entry);
   updateDerivedState(state);
   assertStateInvariant(state, entry);
@@ -488,7 +495,10 @@ const calculateRemoval = (
   quantity: MovementQuantity,
   entry: Entry,
 ): RemovedCost => {
-  if (!state.hasReliableCostBasis) fail('missing_wac', 'Inventory account has no reliable WAC', entry, state.inventoryAccountId);
+  const availablePrimary = state.kind === 'accessory' ? state.accessoryQuantityUnits : state.standardizedQuantityUnits;
+  if (availablePrimary > 0 && !state.hasReliableCostBasis) {
+    fail('inventory_cost_basis_required', 'Inventory account has positive quantity but no cost basis', entry, state.inventoryAccountId);
+  }
   if (state.kind === 'accessory') {
     if (quantity.accessoryUnits <= 0) fail('invalid_quantity', 'Accessory outgoing quantity must be positive', entry, state.inventoryAccountId);
     if (quantity.accessoryUnits > state.accessoryQuantityUnits
@@ -1111,6 +1121,7 @@ export interface RebuildInventoryCostOptions {
   historicalMerchantLiabilityOpeningDirectives?: readonly HistoricalMerchantLiabilityOpeningDirective[];
   allowPendingFinalApprovalForSimulation?: boolean;
   calculationGenerationId?: number;
+  saveValidationOperationId?: string;
 }
 
 export const rebuildInventoryCostTimeline = (
@@ -1130,10 +1141,7 @@ export const rebuildInventoryCostTimeline = (
     merchantAccountId, standardizedWeightUnits: 0, physicalWeightUnits: 0,
     bookValueMinor: 0, unresolvedWeightUnits: 0,
   };
-  const catalog = buildInventoryRuntimeCatalog(
-    accounts,
-    options.bindings ?? CURRENT_DATASET_INVENTORY_BINDINGS,
-  );
+  const catalog = buildInventoryRuntimeCatalog(accounts);
   if (catalog.errors.length > 0) {
     diagnostics.push(...catalog.errors.map(message => ({
       code: message.startsWith('Unknown inventory accountId')
@@ -1156,9 +1164,13 @@ export const rebuildInventoryCostTimeline = (
       merchantGoldLiabilities,
       unresolvedCostData,
       costDataComplete: false,
+      completeness: 'partial',
+      excludedAccounts: [],
+      accountValuations: {},
     };
   }
 
+  const excludedAccountReasons = new Map(catalog.invalidAccounts);
   const states: Record<string, InventoryCostState> = {};
   for (const account of catalog.byAccountId.values()) {
     states[account.inventoryAccountId] = emptyState(account);
@@ -1265,6 +1277,17 @@ export const rebuildInventoryCostTimeline = (
         ));
       }
 
+      const debitAccountForIsolation = entry.debitAccountId ? accountsById.get(entry.debitAccountId) : accountsByName.get(entry.debit);
+      const creditAccountForIsolation = entry.creditAccountId ? accountsById.get(entry.creditAccountId) : accountsByName.get(entry.credit);
+      const isolatedInvalidAccount = [debitAccountForIsolation, creditAccountForIsolation].find(account =>
+        account?.is_inventory && catalog.invalidAccounts.has(account.id ?? account.name));
+      if (isolatedInvalidAccount) {
+        const reason = catalog.invalidAccounts.get(isolatedInvalidAccount.id ?? isolatedInvalidAccount.name)!;
+        if (options.saveValidationOperationId === getPhase5OperationId(entry)) {
+          fail(reason, 'Inventory account configuration is invalid: ' + reason, entry, isolatedInvalidAccount.id);
+        }
+        continue;
+      }
       const debitInventory = resolveInventorySide(entry, 'debit', catalog);
       const creditInventory = resolveInventorySide(entry, 'credit', catalog);
       const debitLooksInventory = sideLooksLikeInventory(entry, 'debit', accountsByName);
@@ -1593,10 +1616,23 @@ export const rebuildInventoryCostTimeline = (
         let workmanshipCost = 0;
         let accessoryCost = 0;
         if (classification === 'opening') {
-          const costs = openingCosts(entry, debitInventory, quantity, openingConfig);
-          metalCost = costs.metal;
-          workmanshipCost = costs.workmanship;
-          accessoryCost = costs.accessory;
+          try {
+            const costs = openingCosts(entry, debitInventory, quantity, openingConfig);
+            metalCost = costs.metal;
+            workmanshipCost = costs.workmanship;
+            accessoryCost = costs.accessory;
+          } catch (error) {
+            if (!(error instanceof CostEngineError) || error.diagnostic.code !== 'missing_opening_cost') throw error;
+            state.standardizedQuantityUnits += quantity.standardizedUnits;
+            state.actualPhysicalWeightUnits += quantity.physicalUnits;
+            state.accessoryQuantityUnits += quantity.accessoryUnits;
+            state.hasReliableCostBasis = false;
+            state.lastProcessedOperationId = getPhase5OperationId(entry);
+            updateDerivedState(state);
+            excludedAccountReasons.set(debitInventory.inventoryAccountId, 'missing_cost_basis');
+            results.push(blankResult(entry, classification));
+            continue;
+          }
         } else if (classification === 'customer_purchase') {
           const amount = parseMoneyMinor(entry.cash, entry, false);
           if (debitInventory.kind === 'accessory') accessoryCost = amount;
@@ -2042,6 +2078,21 @@ export const rebuildInventoryCostTimeline = (
   }
 
   const valid = diagnostics.length === 0;
+  const excludedAccounts = [...excludedAccountReasons].map(([accountId, reason]) => ({ accountId, reason }));
+  const accountValuations = Object.fromEntries([
+    ...Object.values(states).map(state => {
+      const quantityUnits = state.kind === 'accessory' ? state.accessoryQuantityUnits : state.standardizedQuantityUnits;
+      const scale = state.kind === 'accessory' ? ACCESSORY_SCALE : GRAM_SCALE;
+      return [state.inventoryAccountId, {
+        accountId: state.inventoryAccountId,
+        quantity: quantityUnits / scale,
+        bookValue: state.remainingTotalCostMinor / 100,
+        averageCost: state.totalWacMinorPerDisplayUnit === null ? null : state.totalWacMinorPerDisplayUnit / 100,
+        valuationStatus: state.valuationStatus,
+      }];
+    }),
+    ...[...catalog.invalidAccounts.keys()].map(accountId => [accountId, { accountId, quantity: 0, bookValue: 0, averageCost: null, valuationStatus: 'invalid-configuration' as const }]),
+  ]);
   return {
     calculationVersion: INVENTORY_COST_CALCULATION_VERSION,
     orderedOperationIds: ordered.map(getPhase5OperationId),
@@ -2055,6 +2106,9 @@ export const rebuildInventoryCostTimeline = (
     merchantGoldLiabilities: valid ? merchantGoldLiabilities : {},
     unresolvedCostData,
     costDataComplete: valid && unresolvedCostData.length === 0,
+    completeness: excludedAccounts.length === 0 ? 'complete' : 'partial',
+    excludedAccounts,
+    accountValuations: valid ? accountValuations : {},
   };
 };
 

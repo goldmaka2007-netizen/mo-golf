@@ -18,3 +18,8 @@ View your app in AI Studio: https://ai.studio/apps/031a525c-7a85-4304-b0ca-6d60b
 2. Set the `GEMINI_API_KEY` in [.env.local](.env.local) to your Gemini API key
 3. Run the app:
    `npm run dev`
+
+
+## Inventory valuation decision
+
+Inventory accounts are discovered dynamically from accounts metadata; missing cost basis or invalid metadata is isolated per account and reported with partial completeness.

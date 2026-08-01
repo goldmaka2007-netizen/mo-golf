@@ -1,4 +1,4 @@
-﻿import { describe, expect, it } from 'vitest';
+import { describe, expect, it } from 'vitest';
 import type { Account, AnnualOpeningCostConfig, Entry } from '../../types';
 import { SEED_ACCOUNTS } from '../../migrationData';
 import { executeCostCalculationRun, createCostInputRevision } from '../costRecalculation';
@@ -129,7 +129,7 @@ describe('opening cost settings integration', () => {
     expect(result.timeline?.finalStates[siliconeId].remainingAccessoryCostMinor).toBe(4500);
   });
 
-  it('maps Firestore account document ids in saved settings to stable seed inventory ids before recalculation', () => {
+  it('uses actual Firestore account document ids from accounts before recalculation', () => {
     const runtimeAccounts: Account[] = SEED_ACCOUNTS
       .filter(account => account.is_inventory)
       .map((account, index) => ({
@@ -158,10 +158,9 @@ describe('opening cost settings integration', () => {
 
     const openingConfig = buildOpeningCostConfig(firestoreDocument.openingCostConfig, runtimeAccounts);
 
-    expect(openingConfig.accessoryUnitCostByYearAndAccountMinor?.['2026']?.[medicalId]).toBe(500);
-    expect(openingConfig.accessoryUnitCostByYearAndAccountMinor?.['2026']?.[tungstenId]).toBe(7000);
-    expect(openingConfig.accessoryUnitCostByYearAndAccountMinor?.['2026']?.[siliconeId]).toBe(1500);
-    expect(openingConfig.accessoryUnitCostByYearAndAccountMinor?.['2026']?.htmUArWB0J6l9WiZRplj).toBeUndefined();
+    expect(openingConfig.accessoryUnitCostByYearAndAccountMinor?.['2026']?.htmUArWB0J6l9WiZRplj).toBe(500);
+    expect(openingConfig.accessoryUnitCostByYearAndAccountMinor?.['2026']?.PpmQLB2mGjcuPGRiwHQN).toBe(7000);
+    expect(openingConfig.accessoryUnitCostByYearAndAccountMinor?.['2026']?.NJ5SdpStbaXLfGDdwQOO).toBe(1500);
 
     const prepared = resolveRuntimeCostAccountInputs(entries, runtimeAccounts);
     expect(prepared.errors).toEqual([]);
@@ -174,6 +173,6 @@ describe('opening cost settings integration', () => {
     );
 
     expect(timeline.valid).toBe(true);
-    expect(timeline.finalStates[medicalId].remainingAccessoryCostMinor).toBe(1000);
+    expect(timeline.finalStates.htmUArWB0J6l9WiZRplj.remainingAccessoryCostMinor).toBe(1000);
   });
 });

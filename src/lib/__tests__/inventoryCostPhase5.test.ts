@@ -238,18 +238,18 @@ describe('Phase 5 component WAC engine', () => {
     expect(opening.count).toBe('0');
   });
 
-  it('fails closed for missing opening cost and unknown inventory IDs', () => {
+  it('isolates missing opening cost and dynamically accepts arbitrary inventory IDs', () => {
     const missing = rebuild([
       entry({ id: 'opening', seq: 1, tx: 'قيد افتتاحي', debit: 'ذهب أ', debitAccountId: 'gold-a', credit: 'رأس المال', creditAccountId: 'equity', weight: '1' }),
     ], {});
-    expect(missing.valid).toBe(false);
-    expect(missing.results).toEqual([]);
-    expect(missing.diagnostics[0].code).toBe('missing_opening_cost');
+    expect(missing.valid).toBe(true);
+    expect(missing.completeness).toBe('partial');
+    expect(missing.excludedAccounts).toContainEqual({ accountId: 'gold-a', reason: 'missing_cost_basis' });
 
     const unknownAccounts = accounts.map(account => account.id === 'gold-a' ? { ...account, id: 'unknown-gold' } : account);
     const unknown = rebuildInventoryCostTimeline([], unknownAccounts, config, { bindings });
-    expect(unknown.valid).toBe(false);
-    expect(unknown.diagnostics.some(item => item.code === 'unknown_inventory_account')).toBe(true);
+    expect(unknown.valid).toBe(true);
+    expect(unknown.diagnostics.some(item => item.code === 'unknown_inventory_account')).toBe(false);
   });
 
   it('fails closed when merchant workmanship has zero physical weight', () => {

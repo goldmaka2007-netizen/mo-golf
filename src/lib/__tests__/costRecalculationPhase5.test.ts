@@ -90,7 +90,7 @@ describe('Phase 5 recalculation coordinator', () => {
     if ('diagnostic' in result) expect(result.diagnostic.code).toBe('stale_generation');
   });
 
-  it('keeps writes and reports locked after failed recomputation', () => {
+  it('keeps the run available with partial account-level completeness', () => {
     const inputRevision = createCostInputRevision([entry({})], accounts, {});
     const failed = executeCostCalculationRun({
       generationId: 1,
@@ -99,10 +99,11 @@ describe('Phase 5 recalculation coordinator', () => {
       accounts,
       openingConfig: {},
     });
-    expect(failed.status).toBe('failed');
-    expect(failed.error?.code).toBe('missing_opening_cost');
-    expect(areOperationWritesLocked(failed)).toBe(true);
-    expect(isCostReportAvailable(failed, inputRevision)).toBe(false);
+    expect(failed.status).toBe('valid');
+    expect(failed.timeline?.completeness).toBe('partial');
+    expect(failed.timeline?.excludedAccounts).toContainEqual({ accountId: goldId, reason: 'missing_cost_basis' });
+    expect(areOperationWritesLocked(failed)).toBe(false);
+    expect(isCostReportAvailable(failed, inputRevision)).toBe(true);
   });
 
   it('uses migrated seed accessory accountId for opening unit cost lookup', () => {
@@ -125,7 +126,7 @@ describe('Phase 5 recalculation coordinator', () => {
     expect(valid.timeline?.finalStates[accessoryId].remainingAccessoryCostMinor).toBe(1500);
   });
 
-  it('shows accessory account name and id when opening unit cost is missing for positive quantity', () => {
+  it('reports the accessory account explicitly when opening cost basis is missing', () => {
     const entries = [
       entry({ id: 'seed-accessory-opening', debit: 'حلق طبي', debitAccountId: accessoryId, weight: '0', count: '3', karat: undefined, arabicWeight: '0' }),
     ];
@@ -138,10 +139,10 @@ describe('Phase 5 recalculation coordinator', () => {
       openingConfig: {},
     });
 
-    expect(failed.status).toBe('failed');
-    expect(failed.error?.code).toBe('missing_opening_cost');
-    expect(failed.error?.message).toContain(accounts[1].name);
-    expect(failed.error?.message).toContain(accessoryId);
+    expect(failed.status).toBe('valid');
+    expect(failed.timeline?.completeness).toBe('partial');
+    expect(failed.timeline?.excludedAccounts).toContainEqual({ accountId: accessoryId, reason: 'missing_cost_basis' });
+    expect(failed.timeline?.accountValuations?.[accessoryId]).toMatchObject({ quantity: 3, averageCost: null, valuationStatus: 'missing-cost-basis' });
   });
   it('exposes reports only for the exact current valid input revision', () => {
     const openingConfig = {

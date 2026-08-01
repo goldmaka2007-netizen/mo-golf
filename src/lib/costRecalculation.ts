@@ -8,10 +8,6 @@ import {
   HISTORICAL_MERCHANT_LIABILITY_OPENING_VERSION,
 } from './historicalInventoryOverlay';
 import {
-  CURRENT_DATASET_INVENTORY_BINDINGS,
-  INVENTORY_COST_TAXONOMY,
-} from './inventoryCostCatalog';
-import {
   compareEntriesForPhase5Cost,
   getPhase5OperationId,
   PHASE5_COST_CATALOG_VERSION,
@@ -54,13 +50,6 @@ const hashString = (value: string): string => {
   return `fnv1a-${(hash >>> 0).toString(16).padStart(8, '0')}`;
 };
 
-const kindByBoundAccountId = new Map(
-  CURRENT_DATASET_INVENTORY_BINDINGS.map(binding => {
-    const definition = INVENTORY_COST_TAXONOMY.find(item => item.taxonomyKey === binding.taxonomyKey);
-    return [binding.inventoryAccountId, definition?.kind] as const;
-  }),
-);
-
 
 const comparableTimestamp = (value: any): string => {
   if (!value) return '';
@@ -71,13 +60,11 @@ const comparableTimestamp = (value: any): string => {
   return '';
 };
 
-const entryCostFingerprint = (entry: Entry) => {
-  const inventoryAccountId = kindByBoundAccountId.has(entry.debitAccountId || '')
-    ? entry.debitAccountId
-    : kindByBoundAccountId.has(entry.creditAccountId || '')
-      ? entry.creditAccountId
-      : undefined;
-  const inventoryKind = inventoryAccountId ? kindByBoundAccountId.get(inventoryAccountId) : undefined;
+const entryCostFingerprint = (entry: Entry, accounts: readonly Account[] = []) => {
+  const accountsById = new Map(accounts.filter(account => account.id).map(account => [account.id!, account]));
+  const inventoryAccount = accountsById.get(entry.debitAccountId || '') ?? accountsById.get(entry.creditAccountId || '');
+  const inferredAccessory = entry.karat === undefined && Number(entry.arabicWeight ?? 0) === 0 && Number(entry.count ?? 0) > 0;
+  const inventoryKind = inventoryAccount?.inventoryKind ?? (inventoryAccount?.type === 'accessory' || (!inventoryAccount && inferredAccessory) ? 'accessory' : inventoryAccount?.metal);
   return {
     id: getPhase5OperationId(entry),
     date: entry.date,
@@ -154,7 +141,7 @@ export const createCostInputRevision = (
     historicalMerchantLiabilityOpenings: APPROVED_HISTORICAL_MERCHANT_LIABILITY_OPENINGS,
     historicalCostReviewOverlays: effectiveApprovedHistoricalCostOverlays([...APPROVED_SYSTEM_HISTORICAL_COST_OVERLAYS, ...historicalCostReviewOverlays]),
   },
-  entries: [...prepared.entries].sort(compareEntriesForPhase5Cost).map(entryCostFingerprint),
+  entries: [...prepared.entries].sort(compareEntriesForPhase5Cost).map(entry => entryCostFingerprint(entry, prepared.accounts)),
   accounts: [...prepared.accounts].sort((left, right) => String(left.id).localeCompare(String(right.id))).map(accountCostFingerprint),
   resolverErrors: prepared.errors,
 }));

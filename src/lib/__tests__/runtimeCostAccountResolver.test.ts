@@ -7,92 +7,40 @@ import {
   resolveRuntimeCostAccountInputs,
   RUNTIME_COST_ACCOUNT_RESOLVER_VERSION,
 } from '../runtimeCostAccountResolver';
-import { loadPhase5GoldenDataset } from '../../test-fixtures/phase5GoldenDataset';
 
-const legacyBandAccount: Account = {
-  id: '09qdBCNEiu9JxX4N6JnK',
-  userId: 'runtime-test',
-  name: 'دبلة فضة',
-  mainType: 'اصول',
-  subType: 'مخزون فضة',
-  balanceNature: 'جرام فضة',
-  type: 'silver',
-  is_inventory: true,
-  karat: null,
-  metal: 'silver',
+const inventory: Account = {
+  id: 'runtime-inventory-random', userId: 'runtime-test', name: 'runtime inventory',
+  mainType: 'assets', subType: 'inventory', balanceNature: 'piece',
+  is_inventory: true, inventoryKind: 'accessory', measurementDimension: 'quantity',
+  costingMethod: 'fixed-opening-cost',
 };
 
 describe('runtime cost account resolver', () => {
-  it('resolves the evidenced Firestore id without mutating source records', () => {
-    const { accounts: stableAccounts } = loadPhase5GoldenDataset();
-    const accounts = stableAccounts.map(account =>
-      account.id === 'seed-account-585a165916de021adb5a'
-        ? legacyBandAccount
-        : account);
-    const sourceEntry: Entry = {
-      id: 'runtime-entry-1',
-      date: '2026-01-01',
-      tx: 'قيد افتتاحي',
-      debit: 'دبلة فضة',
-      credit: 'acct_non_inventory_001',
-      cash: '0',
-      weight: '701.52',
-      arabicWeight: '701.52',
-      count: '187',
-      imported: true,
-      notes: '',
-      userId: 'runtime-test',
-    };
-    const resolution = resolveRuntimeCostAccountInputs([sourceEntry], accounts);
-
+  it('uses the actual accounts id without rewriting source records', () => {
+    const sourceEntry = { id: 'runtime-entry-1', date: '2026-01-01', tx: 'purchase', debit: inventory.name, credit: 'cash', cash: '100', weight: '0', count: '1', notes: '', userId: 'runtime-test' } as Entry;
+    const resolution = resolveRuntimeCostAccountInputs([sourceEntry], [inventory]);
     expect(resolution.errors).toEqual([]);
-    expect(resolution.entries[0].debitAccountId)
-      .toBe('seed-account-585a165916de021adb5a');
-    expect(resolution.accounts.find(account =>
-      account.name === 'دبلة فضة')?.id)
-      .toBe('seed-account-585a165916de021adb5a');
+    expect(resolution.entries[0].debitAccountId).toBe(inventory.id);
+    expect(resolution.accounts[0].id).toBe(inventory.id);
     expect(sourceEntry.debitAccountId).toBeUndefined();
-    expect(legacyBandAccount.id).toBe('09qdBCNEiu9JxX4N6JnK');
   });
 
-  it('prepares legacy Firestore inventory ids before save-time cost validation', () => {
-    const { accounts: stableAccounts } = loadPhase5GoldenDataset();
-    const accounts = stableAccounts.map(account =>
-      account.id === 'seed-account-585a165916de021adb5a'
-        ? legacyBandAccount
-        : account);
-    const prepared = prepareRuntimeCostAccountInputs([], accounts);
-
+  it('prepares arbitrary inventory ids for save-time validation', () => {
+    const prepared = prepareRuntimeCostAccountInputs([], [inventory]);
     expect(prepared.errors).toEqual([]);
-    expect(prepared.accounts.find(account => account.name === legacyBandAccount.name)?.id)
-      .toBe('seed-account-585a165916de021adb5a');
+    expect(prepared.accounts[0].id).toBe('runtime-inventory-random');
   });
 
-
-  it('fails closed when inventory metadata conflicts with the stable catalog', () => {
-    const { accounts: stableAccounts } = loadPhase5GoldenDataset();
-    const accounts = stableAccounts.map(account =>
-      account.id === 'seed-account-585a165916de021adb5a'
-        ? { ...legacyBandAccount, metal: 'gold' as const }
-        : account);
-    const resolution = resolveRuntimeCostAccountInputs([], accounts);
-    expect(resolution.errors).toContain(
-      'Inventory metadata mismatch for legacy accountId: 09qdBCNEiu9JxX4N6JnK',
-    );
+  it('does not use names as a metadata allowlist', () => {
+    const arbitrary = { ...inventory, id: 'another-random-id', name: 'another random name' };
+    expect(resolveRuntimeCostAccountInputs([], [arbitrary]).errors).toEqual([]);
   });
 
-  it('keeps an immutable alias audit note for the reported account', () => {
-    expect(APPROVED_RUNTIME_INVENTORY_ACCOUNT_ALIAS_AUDIT).toContainEqual(
-      expect.objectContaining({
-        legacyAccountId: '09qdBCNEiu9JxX4N6JnK',
-        resolvedStableAccountId: 'seed-account-585a165916de021adb5a',
-        resolvedAccountName: 'دبلة فضة',
-        resolverVersion: RUNTIME_COST_ACCOUNT_RESOLVER_VERSION,
-      }),
-    );
+  it('keeps the legacy alias allowlist empty', () => {
+    expect(RUNTIME_COST_ACCOUNT_RESOLVER_VERSION).toBe('runtime-account-metadata-v2');
+    expect(APPROVED_RUNTIME_INVENTORY_ACCOUNT_ALIAS_AUDIT).toEqual([]);
   });
 });
-
 describe('sanitized Phase 5 fixture boundaries', () => {
   it('does not import migration data or raw CSV files', () => {
     const loader = readFileSync(
