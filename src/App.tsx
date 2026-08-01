@@ -225,6 +225,9 @@ export default function App() {
       if (isGoldEquivalentEntry(rawData, accountsDb) && canCalculateGoldEquivalent21(rawData.weight || '', calculationKarat)) {
         const goldAudit = buildGoldEquivalent21Audit(rawData.weight || '', calculationKarat, rawData.arabicWeight);
         if (goldAudit) {
+          // Keep the legacy posting field in sync because the ledger and
+          // statements still consume arabicWeight for gold movements.
+          rawData.arabicWeight = goldAudit.snapshot.equivalent21;
           rawData.goldEquivalent21Snapshot = goldAudit.snapshot;
           if (goldAudit.legacyComparison) rawData.goldEquivalent21LegacyComparison = goldAudit.legacyComparison;
         }

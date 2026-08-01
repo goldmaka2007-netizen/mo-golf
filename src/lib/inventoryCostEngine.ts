@@ -1981,8 +1981,7 @@ export const rebuildInventoryCostTimeline = (
         const merchantAccountId = entry.debitAccountId;
         if (!merchantAccountId) fail('missing_inventory_account_id', 'Merchant delivery requires merchant accountId', entry);
         const liability = merchantState(merchantAccountId);
-        if (quantity.standardizedUnits > liability.standardizedWeightUnits) {
-          if (!isLegacyEntry(entry)) fail('insufficient_inventory', 'Merchant delivery exceeds merchant liability weight', entry);
+        if (isLegacyEntry(entry) && quantity.standardizedUnits > liability.standardizedWeightUnits) {
           const gap = quantity.standardizedUnits - liability.standardizedWeightUnits;
           liability.standardizedWeightUnits += gap;
           liability.physicalWeightUnits += Math.max(0, quantity.physicalUnits - liability.physicalWeightUnits);
@@ -1994,14 +1993,40 @@ export const rebuildInventoryCostTimeline = (
             requiredCorrection: 'أدخل رصيد التزام التاجر الافتتاحي وقيمته الدفترية قبل التسوية.',
           });
         }
-        const liabilityDecrease = liability.standardizedWeightUnits === quantity.standardizedUnits
-          ? liability.bookValueMinor
-          : proportionalCost(liability.bookValueMinor, quantity.standardizedUnits, liability.standardizedWeightUnits, entry, 'merchant liability settlement');
+        const settledLiabilityWeight = Math.min(
+          quantity.standardizedUnits,
+          Math.max(0, liability.standardizedWeightUnits),
+        );
+        const settledLiabilityBookValue = settledLiabilityWeight === 0
+          ? 0
+          : settledLiabilityWeight === liability.standardizedWeightUnits
+            ? liability.bookValueMinor
+            : proportionalCost(
+              liability.bookValueMinor,
+              settledLiabilityWeight,
+              liability.standardizedWeightUnits,
+              entry,
+              'merchant liability settlement',
+            );
+        const merchantReceivableWeight = quantity.standardizedUnits - settledLiabilityWeight;
+        const merchantReceivableBookValue = merchantReceivableWeight === 0
+          ? 0
+          : proportionalCost(
+            removed.metalCostMinor,
+            merchantReceivableWeight,
+            quantity.standardizedUnits,
+            entry,
+            'merchant metal receivable',
+          );
+        const liabilityDecrease = settledLiabilityBookValue + merchantReceivableBookValue;
         applyRemoval(state, quantity, removed, entry);
         liability.standardizedWeightUnits -= quantity.standardizedUnits;
-        liability.physicalWeightUnits = Math.max(0, liability.physicalWeightUnits - quantity.physicalUnits);
+        liability.physicalWeightUnits -= quantity.physicalUnits;
         liability.bookValueMinor -= liabilityDecrease;
-        liability.unresolvedWeightUnits = Math.max(0, liability.unresolvedWeightUnits - quantity.standardizedUnits);
+        liability.unresolvedWeightUnits = Math.max(
+          0,
+          liability.unresolvedWeightUnits - settledLiabilityWeight,
+        );
         const settlementDifference = liabilityDecrease - removed.totalCostMinor;
         const result = blankResult(entry, classification);
         Object.assign(result, {

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { normalizeAccessoryEntryPayload } from '../EntryForm';
+import { normalizeAccessoryEntryPayload, shouldShowWeightAndCount } from '../EntryForm';
 import { formatLedgerAmount } from '../../../lib/ledgerReport';
 
 describe('accessory entry presentation', () => {
@@ -12,5 +12,11 @@ describe('accessory entry presentation', () => {
 
   it('shows accessory quantity as pieces', () => {
     expect(formatLedgerAmount(5, 'quantity')).toBe('5 قطعة');
+  });
+});
+describe('merchant settlement presentation', () => {
+  it('hides weight for a cash/workmanship settlement and keeps it for a metal settlement', () => {
+    expect(shouldShowWeightAndCount('حساب تاجر ذهب', false, true)).toBe(false);
+    expect(shouldShowWeightAndCount('حساب تاجر ذهب', false, false)).toBe(true);
   });
 });

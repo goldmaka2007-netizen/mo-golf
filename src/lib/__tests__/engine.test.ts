@@ -706,6 +706,20 @@ describe('gold equivalent-21 calculation engine', () => {
     expect(audit?.legacyComparison).toMatchObject({ legacyValue: '8.99', calculatedValue: '9.00', mismatch: true });
   });
 
+  it('calculates the corrected 21K value used to synchronize edited journal entries', () => {
+    const audit = buildGoldEquivalent21Audit('57.90', 21, '57.91');
+    expect(audit?.snapshot).toMatchObject({
+      physicalWeight: '57.90',
+      equivalent21: '57.90',
+      equivalent21Units: 5790,
+    });
+    expect(audit?.legacyComparison).toMatchObject({
+      legacyValue: '57.91',
+      calculatedValue: '57.90',
+      difference: '-0.01',
+      mismatch: true,
+    });
+  });
   it('uses legacy arabicWeight fallback for old records without snapshot, karat, or reliable multiplier', () => {
     const oldEntry = entry({ debit: 'gold18-product', credit: 'cash', weight: '10.00', arabicWeight: '8.50', multiplier: undefined, karat: undefined });
     expect(getMetricValue(oldEntry, 'gold', accounts)).toBe(8.5);

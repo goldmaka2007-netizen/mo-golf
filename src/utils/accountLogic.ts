@@ -56,7 +56,22 @@ export const getDynamicAccountNature = (accountName: string, accountsDb: Account
     return inferNatureFromLegacyLabels(found);
 };
 
+const resolveEntryAccount = (accountId: string | undefined, accountName: string | undefined, accountsDb: Account[]) =>
+    accountsDb.find(account => (accountId && account.id === accountId) || account.name === accountName);
+
+/** Merchant cash/workmanship payments are cash-ledger movements, not metal movements. */
+export const isCashOnlyMerchantSettlementEntry = (entry: Partial<Entry>, accountsDb: Account[] = []): boolean => {
+    const isMerchantSettlement = entry.operationKind === 'merchant_settlement'
+        || entry.tx === 'حساب تاجر ذهب'
+        || entry.tx === 'حساب تاجر فضة';
+    if (!isMerchantSettlement) return false;
+    const debit = resolveEntryAccount(entry.debitAccountId, entry.debit, accountsDb);
+    const credit = resolveEntryAccount(entry.creditAccountId, entry.credit, accountsDb);
+    const sides = [debit, credit];
+    return sides.some(account => account?.type === 'merchant') && sides.some(account => account?.type === 'cash');
+};
 export const isGoldEquivalentEntry = (entry: Partial<Entry>, accountsDb: Account[] = []): boolean => {
+    if (isCashOnlyMerchantSettlementEntry(entry, accountsDb)) return false;
     const debitNature = getDynamicAccountNature(entry.debit || '', accountsDb);
     const creditNature = getDynamicAccountNature(entry.credit || '', accountsDb);
     const hasGoldAcc = [AccountNature.GOLD, AccountNature.MIXED_GOLD].includes(debitNature) || [AccountNature.GOLD, AccountNature.MIXED_GOLD].includes(creditNature);

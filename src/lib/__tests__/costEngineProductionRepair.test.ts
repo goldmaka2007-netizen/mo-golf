@@ -102,6 +102,59 @@ describe('production Cost Engine repair', () => {
     expect(timeline.merchantGoldLiabilities.merchant.standardizedWeightUnits).toBe(100);
   });
 
+  it('allows merchant gold balances to become negative and offsets them with later receipts', () => {
+    const timeline = run([
+      purchase('merchant-negative-base', '2', '200'),
+      make({
+        id: 'merchant-credit-1', date: '2026-01-02', tx: '\u062a\u0627\u062c\u0631 \u0630\u0647\u0628',
+        debit: 'Ø°Ù‡Ø¨ 21', debitAccountId: 'g21', credit: 'ØªØ§Ø¬Ø±',
+        creditAccountId: 'merchant', weight: '1', arabicWeight: '1',
+        transactionGoldValueMinor: 10_000, workmanshipCostMinor: 0,
+      }),
+      make({
+        id: 'merchant-over-delivery', date: '2026-01-03', tx: '\u062d\u0633\u0627\u0628 \u062a\u0627\u062c\u0631 \u0630\u0647\u0628',
+        debit: 'ØªØ§Ø¬Ø±', debitAccountId: 'merchant', credit: 'Ø°Ù‡Ø¨ 21',
+        creditAccountId: 'g21', weight: '1.45', arabicWeight: '1.45',
+      }),
+      make({
+        id: 'merchant-offset-1', date: '2026-01-04', tx: '\u062a\u0627\u062c\u0631 \u0630\u0647\u0628',
+        debit: 'Ø°Ù‡Ø¨ 21', debitAccountId: 'g21', credit: 'ØªØ§Ø¬Ø±',
+        creditAccountId: 'merchant', weight: '0.20', arabicWeight: '0.20',
+        transactionGoldValueMinor: 2_000, workmanshipCostMinor: 0,
+      }),
+      make({
+        id: 'merchant-offset-2', date: '2026-01-05', tx: '\u062a\u0627\u062c\u0631 \u0630\u0647\u0628',
+        debit: 'Ø°Ù‡Ø¨ 21', debitAccountId: 'g21', credit: 'ØªØ§Ø¬Ø±',
+        creditAccountId: 'merchant', weight: '0.25', arabicWeight: '0.25',
+        transactionGoldValueMinor: 2_500, workmanshipCostMinor: 0,
+      }),
+    ]);
+
+    expect(timeline.valid).toBe(true);
+    expect(timeline.resultsByOperationId['merchant-over-delivery']).toMatchObject({
+      classification: 'merchant_delivery',
+      outgoingStandardizedQuantityUnits: 145,
+      merchantLiabilityDecreaseMinor: 14_500,
+      merchantSettlementGainMinor: 0,
+      merchantSettlementLossMinor: 0,
+    });
+    expect(timeline.merchantGoldLiabilities.merchant).toMatchObject({
+      standardizedWeightUnits: 0,
+      physicalWeightUnits: 0,
+      bookValueMinor: 0,
+    });
+
+    const overDeliveryOnly = run(timeline.results
+      .filter(result => result.operationId !== 'merchant-offset-1' && result.operationId !== 'merchant-offset-2')
+      .map(result => result.entry));
+    expect(overDeliveryOnly.valid).toBe(true);
+    expect(overDeliveryOnly.merchantGoldLiabilities.merchant).toMatchObject({
+      standardizedWeightUnits: -45,
+      physicalWeightUnits: -45,
+      bookValueMinor: -4_500,
+    });
+  });
+
   it('restores customer returns at original sale cost after later purchases and prevents over-return', () => {
     const originalPurchase = purchase('return-buy', '10', '1000');
     const originalSale = sale('return-sale', '4', '800', '2026-01-02');

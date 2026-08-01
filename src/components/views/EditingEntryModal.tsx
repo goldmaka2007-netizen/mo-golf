@@ -79,6 +79,7 @@ export const EditingEntryModal = ({
     if (!audit) return next;
     return {
       ...next,
+      arabicWeight: audit.snapshot.equivalent21,
       goldEquivalent21Snapshot: audit.snapshot,
       goldEquivalent21LegacyComparison: audit.legacyComparison || undefined,
     };

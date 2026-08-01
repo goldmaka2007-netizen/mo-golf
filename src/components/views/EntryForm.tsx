@@ -23,7 +23,7 @@ import { buildOpeningCostConfig } from '../../lib/openingCostConfig';
 import { rebuildInventoryCostTimeline } from '../../lib/inventoryCostEngine';
 import { approvedHistoricalInventoryOverlaysForAccounts } from '../../lib/historicalInventoryOverlay';
 import { areOperationWritesLocked } from '../../lib/costRecalculation';
-import { isGoldEquivalentEntry } from '../../utils/accountLogic';
+import { isCashOnlyMerchantSettlementEntry, isGoldEquivalentEntry } from '../../utils/accountLogic';
 import { AccountSearchSelect } from '../ui/AccountSearchSelect';
 import { resolveEntryIdentity } from '../../lib/entryIdentity';
 import { validateEntryNumberingPolicy } from '../../lib/entryValidation';
@@ -37,6 +37,11 @@ import { buildOperationalAccountOptions } from '../../lib/operationalAccounts';
 
 export const normalizeAccessoryEntryPayload = <T extends { weight?: string; count?: string }>(entry: T, isAccessory: boolean): T => (
   isAccessory ? { ...entry, weight: entry.weight || '0', count: '0' } : entry
+);
+export const shouldShowWeightAndCount = (tx: string, isAccessory: boolean, isCashOnlyMerchantSettlement: boolean): boolean => (
+  !isCashOnlyMerchantSettlement
+  && !/ايراد|تصليح|قبض|دفع|مصاريف|مصروفات|م ت|م ا ع|مسحوبات|سحب|ايداع|إيداع|سلفة|مرتب|ايجار|شراء اصل/.test(tx)
+  && !isAccessory
 );
 
 export const EntryForm = React.memo(() => {
@@ -390,7 +395,13 @@ export const EntryForm = React.memo(() => {
       return;
     }
     Object.assign(entry, identity.value);
-
+    if (isCashOnlyMerchantSettlementEntry(entry, accountsDb)) {
+      // Cash/workmanship settlement affects the merchant cash sub-ledger and till only.
+      entry.weight = '0';
+      entry.arabicWeight = '0';
+      entry.count = '0';
+      delete entry.merchantGoldWeight;
+    }
     if (formData.tx.includes('مرتجع')) {
       entry.operationKind = formData.returnKind;
       entry.originalOperationId = formData.originalOperationId.trim();
@@ -586,14 +597,18 @@ export const EntryForm = React.memo(() => {
     const txStr = formData.tx || '';
     const accs = accountCategories?.assets?.["مخزون ملحقات اضافية"] || [];
     const isAcc = accs.includes(formData.debit) || accs.includes(formData.credit);
-    
+    const isCashOnlyMerchantSettlement = isCashOnlyMerchantSettlementEntry({
+      tx: txStr,
+      debit: formData.debit,
+      credit: formData.credit,
+    }, accountsDb);
     return {
       showClientInfo: /بيع|شراء|مبيعات|مشتريات|مرتجع/.test(txStr),
-      showWeightAndCount: !/ايراد|تصليح|قبض|دفع|مصاريف|مصروفات|م ت|م ا ع|مسحوبات|سحب|ايداع|إيداع|سلفة|مرتب|ايجار|شراء اصل/.test(txStr) && !isAcc,
+      showWeightAndCount: shouldShowWeightAndCount(txStr, isAcc, isCashOnlyMerchantSettlement),
       showCash: !/تيفيت|تحويل/.test(txStr),
       isAccessory: isAcc
     };
-  }, [formData.tx, formData.debit, formData.credit, accountCategories]);
+  }, [formData.tx, formData.debit, formData.credit, accountCategories, accountsDb]);
 
   // Handle weight/count sync for accessories
   useEffect(() => {
