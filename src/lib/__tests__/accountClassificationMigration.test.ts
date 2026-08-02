@@ -30,7 +30,61 @@ describe('account classification migration', () => {
     expect(report.conflicts).toBe(0);
     expect(report.skipped).toBe(0);
     expect(report.ready).toBe(0);
-    expect(report.alreadyCurrent).toBe(12);
+    expect(report.alreadyCurrent).toBe(16);
+
+    const classified = new Map(accounts.map(account => [account.name, account]));
+    expect(classified.get('\u0627\u0644\u0645\u0633\u062d\u0648\u0628\u0627\u062a')).toMatchObject({
+      canonicalMainType: 'equity',
+      canonicalSubType: 'withdrawals',
+      metal: null,
+      is_inventory: false,
+    });
+    expect(classified.get('\u0627\u0644\u0627\u0631\u0628\u0627\u062d \u0648 \u0627\u0644\u062e\u0633\u0627\u064a\u0631 2024')).toMatchObject({
+      canonicalMainType: 'equity',
+      canonicalSubType: 'retained_earnings',
+      metal: null,
+      is_inventory: false,
+    });
+    expect(classified.get('\u0627\u0644\u0627\u0631\u0628\u0627\u062d \u0648 \u0627\u0644\u062e\u0633\u0627\u064a\u0631 2024 \u0630\u0647\u0628')).toMatchObject({
+      canonicalMainType: 'equity',
+      canonicalSubType: 'retained_earnings',
+      metal: 'gold',
+      is_inventory: false,
+    });
+    expect(classified.get('\u0627\u0644\u0627\u0631\u0628\u0627\u062d \u0648 \u0627\u0644\u062e\u0633\u0627\u064a\u0631 2024 \u0641\u0636\u0629')).toMatchObject({
+      canonicalMainType: 'equity',
+      canonicalSubType: 'retained_earnings',
+      metal: 'silver',
+      is_inventory: false,
+    });
+  });
+
+  it('plans an explicit before and after for legacy retained earnings gold', () => {
+    const account = baseAccount({
+      name: '\u0627\u0644\u0627\u0631\u0628\u0627\u062d \u0648 \u0627\u0644\u062e\u0633\u0627\u064a\u0631 2024 \u0630\u0647\u0628',
+      mainType: '\u062d\u0642\u0648\u0642 \u0645\u0644\u0643\u064a\u0629',
+      subType: '\u0627\u0644\u0627\u0631\u0628\u0627\u062d \u0648 \u0627\u0644\u062e\u0633\u0627\u064a\u0631',
+      metal: null,
+      is_inventory: false,
+    });
+
+    const report = planAccountClassificationMigration([account]);
+
+    expect(report.items[0]).toMatchObject({
+      before: {
+        canonicalMainType: undefined,
+        canonicalSubType: undefined,
+        metal: null,
+        is_inventory: false,
+      },
+      after: {
+        canonicalMainType: 'equity',
+        canonicalSubType: 'retained_earnings',
+        metal: 'gold',
+        is_inventory: false,
+      },
+      status: 'ready',
+    });
   });
 
   it('is dry-run by default and records before, after, id, name, and reason', async () => {
