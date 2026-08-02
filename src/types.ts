@@ -138,6 +138,8 @@ export type CanonicalAccountSubType =
   | 'merchant_silver'
   | 'other_due'
   | 'capital'
+  | 'withdrawals'
+  | 'retained_earnings'
   | 'revenue'
   | 'expense'
   | 'unclassified';

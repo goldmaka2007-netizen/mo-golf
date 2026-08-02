@@ -17,7 +17,7 @@ interface ConfirmedRule {
   canonicalSubType: CanonicalAccountSubType;
   canonicalMainType?: CanonicalMainType;
   merchantDirection?: MerchantDirection;
-  metal?: ExplicitWeightedMetal;
+  metal?: ExplicitWeightedMetal | null;
 }
 
 export interface AccountClassificationMigrationItem {
@@ -83,6 +83,34 @@ const RULES: readonly ConfirmedRule[] = [
     canonicalMainType: 'assets' as const,
     canonicalSubType: 'fixed_asset' as const,
   })),
+  {
+    name: '\u0627\u0644\u0645\u0633\u062d\u0648\u0628\u0627\u062a',
+    reason: 'Product-owner confirmed equity withdrawals account',
+    canonicalMainType: 'equity',
+    canonicalSubType: 'withdrawals',
+    metal: null,
+  },
+  {
+    name: '\u0627\u0644\u0627\u0631\u0628\u0627\u062d \u0648 \u0627\u0644\u062e\u0633\u0627\u064a\u0631 2024',
+    reason: 'Product-owner confirmed retained earnings cash account',
+    canonicalMainType: 'equity',
+    canonicalSubType: 'retained_earnings',
+    metal: null,
+  },
+  {
+    name: '\u0627\u0644\u0627\u0631\u0628\u0627\u062d \u0648 \u0627\u0644\u062e\u0633\u0627\u064a\u0631 2024 \u0630\u0647\u0628',
+    reason: 'Product-owner confirmed retained earnings gold account',
+    canonicalMainType: 'equity',
+    canonicalSubType: 'retained_earnings',
+    metal: 'gold',
+  },
+  {
+    name: '\u0627\u0644\u0627\u0631\u0628\u0627\u062d \u0648 \u0627\u0644\u062e\u0633\u0627\u064a\u0631 2024 \u0641\u0636\u0629',
+    reason: 'Product-owner confirmed retained earnings silver account',
+    canonicalMainType: 'equity',
+    canonicalSubType: 'retained_earnings',
+    metal: 'silver',
+  },
 ];
 
 const LEGACY_MAIN_TYPES: Readonly<Record<string, CanonicalMainType>> = {
@@ -142,7 +170,7 @@ const desiredPatch = (
     && account.merchantDirection !== rule.merchantDirection) {
     return { conflict: 'merchantDirection conflicts with the confirmed accounting direction' };
   }
-  if (rule.metal && account.metal && account.metal !== rule.metal) {
+  if (rule.metal !== undefined && account.metal != null && account.metal !== rule.metal) {
     return { conflict: 'metal conflicts with the confirmed weighted metal' };
   }
   if (account.is_inventory === true) {
@@ -154,7 +182,7 @@ const desiredPatch = (
       canonicalMainType,
       canonicalSubType: rule.canonicalSubType,
       ...(rule.merchantDirection ? { merchantDirection: rule.merchantDirection } : {}),
-      ...(rule.metal ? { metal: rule.metal } : {}),
+      ...(rule.metal !== undefined ? { metal: rule.metal } : {}),
       is_inventory: false,
     },
   };
