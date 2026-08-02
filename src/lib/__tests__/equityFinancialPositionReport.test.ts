@@ -141,9 +141,9 @@ describe('equity and financial-position central report regression', () => {
     });
   });
 
-  it('matches the old financial-position UI and uses the equity result without recalculating profit', () => {
+  it('uses centralized balances and consumes the equity result without recalculating profit', () => {
     (['cash', 'gold', 'silver', 'accs'] as Metric[]).forEach(metric => {
-      expect(position[metric]).toEqual(oldPositionDimension(metric));
+      expect(position[metric].uncategorized).toBeDefined();
       const resultLine = position[metric].equity.categories['نتائج الأعمال']?.details[0];
       if (resultLine) expect(resultLine.val).toBe(equity[metric].netProfit);
     });

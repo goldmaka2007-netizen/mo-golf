@@ -1,3 +1,5 @@
+import type { Account } from './types';
+
 export const SEED_ACCOUNTS = [
   { name: "الخزنة", mainType: "اصول", subType: "النقدية بالخزنة", balanceNature: "جنية مصري", type: 'cash', is_inventory: false, karat: null, metal: null },
   { name: "خاتم حريمي", mainType: "اصول", subType: "مخزون ذهب", balanceNature: "جرام ذهب", type: 'gold_product', is_inventory: true, karat: '18', metal: 'gold' },
@@ -32,26 +34,26 @@ export const SEED_ACCOUNTS = [
   { name: "دبلة تنجستين", mainType: "اصول", subType: "مخزون ملحقات اضافية", balanceNature: "قطعة", type: 'accessory', is_inventory: true, karat: null, metal: null },
   { name: "حلق طبي", mainType: "اصول", subType: "مخزون ملحقات اضافية", balanceNature: "قطعة", type: 'accessory', is_inventory: true, karat: null, metal: null },
   { name: "سيليكون", mainType: "اصول", subType: "مخزون ملحقات اضافية", balanceNature: "قطعة", type: 'accessory', is_inventory: true, karat: null, metal: null },
-  { name: "مكنة عد نقدية", mainType: "اصول", subType: "اصول ثابتة", balanceNature: "جنية مصري", type: 'other', is_inventory: false, karat: null, metal: null },
-  { name: "لابتوب", mainType: "اصول", subType: "اصول ثابتة", balanceNature: "جنية مصري", type: 'other', is_inventory: false, karat: null, metal: null },
-  { name: "تليفون ارضي", mainType: "اصول", subType: "اصول ثابتة", balanceNature: "جنية مصري", type: 'other', is_inventory: false, karat: null, metal: null },
-  { name: "شروق حبشي", mainType: "اصول", subType: "ذمم مدينة", balanceNature: "جنية مصري", type: 'other', is_inventory: false, karat: null, metal: null },
-  { name: "علا حسن", mainType: "اصول", subType: "ذمم مدينة", balanceNature: "جنية مصري", type: 'other', is_inventory: false, karat: null, metal: null },
-  { name: "محمد السيد", mainType: "خصوم", subType: "تجار ذهب", balanceNature: "جرام ذهب", type: 'merchant', is_inventory: false, karat: null, metal: 'gold' },
-  { name: "الصافي", mainType: "خصوم", subType: "تجار ذهب", balanceNature: "جرام ذهب", type: 'merchant', is_inventory: false, karat: null, metal: 'gold' },
-  { name: "علاء صالح", mainType: "خصوم", subType: "تجار ذهب", balanceNature: "جرام ذهب", type: 'merchant', is_inventory: false, karat: null, metal: 'gold' },
-  { name: "خالد حميدو", mainType: "خصوم", subType: "تجار ذهب", balanceNature: "جرام ذهب", type: 'merchant', is_inventory: false, karat: null, metal: 'gold' },
-  { name: "سمير ناشد", mainType: "خصوم", subType: "تجار فضة", balanceNature: "جرام فضة", type: 'merchant', is_inventory: false, karat: null, metal: 'silver' },
-  { name: "الاء ياسر", mainType: "خصوم", subType: "ذمم دائنة", balanceNature: "جرام ذهب", type: 'other', is_inventory: false, karat: null, metal: null },
-  { name: "دينا", mainType: "خصوم", subType: "ذمم دائنة", balanceNature: "جنية مصري", type: 'other', is_inventory: false, karat: null, metal: null },
+  { name: "مكنة عد نقدية", mainType: "اصول", subType: "اصول ثابتة", canonicalMainType: 'assets', canonicalSubType: 'fixed_asset', balanceNature: "جنية مصري", type: 'other', is_inventory: false, karat: null, metal: null },
+  { name: "لابتوب", mainType: "اصول", subType: "اصول ثابتة", canonicalMainType: 'assets', canonicalSubType: 'fixed_asset', balanceNature: "جنية مصري", type: 'other', is_inventory: false, karat: null, metal: null },
+  { name: "تليفون ارضي", mainType: "اصول", subType: "اصول ثابتة", canonicalMainType: 'assets', canonicalSubType: 'fixed_asset', balanceNature: "جنية مصري", type: 'other', is_inventory: false, karat: null, metal: null },
+  { name: "شروق حبشي", mainType: "اصول", subType: "ذمم مدينة", canonicalMainType: 'assets', canonicalSubType: 'customer', balanceNature: "جنية مصري", type: 'other', is_inventory: false, karat: null, metal: null },
+  { name: "علا حسن", mainType: "اصول", subType: "ذمم مدينة", canonicalMainType: 'assets', canonicalSubType: 'customer', balanceNature: "جنية مصري", type: 'other', is_inventory: false, karat: null, metal: null },
+  { name: "محمد السيد", mainType: "خصوم", subType: "تجار ذهب", canonicalMainType: 'liabilities', canonicalSubType: 'merchant_gold', merchantDirection: 'payable', balanceNature: "جرام ذهب", type: 'merchant', is_inventory: false, karat: null, metal: 'gold' },
+  { name: "الصافي", mainType: "خصوم", subType: "تجار ذهب", canonicalMainType: 'liabilities', canonicalSubType: 'merchant_gold', merchantDirection: 'payable', balanceNature: "جرام ذهب", type: 'merchant', is_inventory: false, karat: null, metal: 'gold' },
+  { name: "علاء صالح", mainType: "خصوم", subType: "تجار ذهب", canonicalMainType: 'liabilities', canonicalSubType: 'merchant_gold', merchantDirection: 'payable', balanceNature: "جرام ذهب", type: 'merchant', is_inventory: false, karat: null, metal: 'gold' },
+  { name: "خالد حميدو", mainType: "خصوم", subType: "تجار ذهب", canonicalMainType: 'liabilities', canonicalSubType: 'merchant_gold', merchantDirection: 'payable', balanceNature: "جرام ذهب", type: 'merchant', is_inventory: false, karat: null, metal: 'gold' },
+  { name: "سمير ناشد", mainType: "خصوم", subType: "تجار فضة", canonicalMainType: 'liabilities', canonicalSubType: 'merchant_silver', merchantDirection: 'payable', balanceNature: "جرام فضة", type: 'merchant', is_inventory: false, karat: null, metal: 'silver' },
+  { name: "الاء ياسر", mainType: "خصوم", subType: "ذمم دائنة", canonicalMainType: 'liabilities', canonicalSubType: 'other_due', merchantDirection: 'payable', balanceNature: "جرام ذهب", type: 'other', is_inventory: false, karat: null, metal: 'gold' },
+  { name: "دينا", mainType: "خصوم", subType: "ذمم دائنة", canonicalMainType: 'liabilities', canonicalSubType: 'customer', balanceNature: "جنية مصري", type: 'other', is_inventory: false, karat: null, metal: null },
   { name: "راس المال ذهب", mainType: "حقوق ملكية", subType: "راس المال", balanceNature: "جرام ذهب", type: 'other', is_inventory: false, karat: null, metal: null },
   { name: "راس المال فضة", mainType: "حقوق ملكية", subType: "راس المال", balanceNature: "جرام فضة", type: 'other', is_inventory: false, karat: null, metal: 'silver' },
   { name: "راس المال ملحقات", mainType: "حقوق ملكية", subType: "راس المال", balanceNature: "قطعة", type: 'other', is_inventory: false, karat: null, metal: null },
   { name: "راس المال نقدا", mainType: "حقوق ملكية", subType: "راس المال", balanceNature: "جنية مصري", type: 'other', is_inventory: false, karat: null, metal: null },
-  { name: "المسحوبات", mainType: "حقوق ملكية", subType: "مسحوبات", balanceNature: "جنية مصري", type: 'other', is_inventory: false, karat: null, metal: null },
-  { name: "الارباح و الخساير 2024", mainType: "حقوق ملكية", subType: "الارباح و الخساير", balanceNature: "جنية مصري", type: 'other', is_inventory: false, karat: null, metal: null },
-  { name: "الارباح و الخساير 2024 ذهب", mainType: "حقوق ملكية", subType: "الارباح و الخساير", balanceNature: "جرام ذهب", type: 'other', is_inventory: false, karat: null, metal: null },
-  { name: "الارباح و الخساير 2024 فضة", mainType: "حقوق ملكية", subType: "الارباح و الخساير", balanceNature: "جرام فضة", type: 'other', is_inventory: false, karat: null, metal: 'silver' },
+  { name: "المسحوبات", mainType: "حقوق ملكية", subType: "مسحوبات", canonicalMainType: 'equity', canonicalSubType: 'withdrawals', balanceNature: "جنية مصري", type: 'other', is_inventory: false, karat: null, metal: null },
+  { name: "الارباح و الخساير 2024", mainType: "حقوق ملكية", subType: "الارباح و الخساير", canonicalMainType: 'equity', canonicalSubType: 'retained_earnings', balanceNature: "جنية مصري", type: 'other', is_inventory: false, karat: null, metal: null },
+  { name: "الارباح و الخساير 2024 ذهب", mainType: "حقوق ملكية", subType: "الارباح و الخساير", canonicalMainType: 'equity', canonicalSubType: 'retained_earnings', balanceNature: "جرام ذهب", type: 'other', is_inventory: false, karat: null, metal: 'gold' },
+  { name: "الارباح و الخساير 2024 فضة", mainType: "حقوق ملكية", subType: "الارباح و الخساير", canonicalMainType: 'equity', canonicalSubType: 'retained_earnings', balanceNature: "جرام فضة", type: 'other', is_inventory: false, karat: null, metal: 'silver' },
   { name: "تصليح", mainType: "ايرادات", subType: "ايرادات اخري", balanceNature: "جنية مصري", type: 'other', is_inventory: false, karat: null, metal: null },
   { name: "زيادة-الخزنة", mainType: "ايرادات", subType: "تسوية", balanceNature: "جنية مصري", type: 'other', is_inventory: false, karat: null, metal: null },
   { name: "زيادة-الذهب", mainType: "ايرادات", subType: "تسوية", balanceNature: "جرام ذهب", type: 'other', is_inventory: false, karat: null, metal: null },
@@ -73,7 +75,7 @@ export const SEED_ACCOUNTS = [
   { name: "عجز-الخزنة", mainType: "مصروفات", subType: "مصاريف ادارية عمومية", balanceNature: "جنية مصري", type: 'other', is_inventory: false, karat: null, metal: null },
   { name: "عجز-الذهب", mainType: "مصروفات", subType: "مصاريف ادارية عمومية", balanceNature: "جرام ذهب", type: 'other', is_inventory: false, karat: null, metal: null },
   { name: "نثريات", mainType: "مصروفات", subType: "مصاريف ادارية عمومية", balanceNature: "جنية مصري", type: 'other', is_inventory: false, karat: null, metal: null }
-];
+] satisfies Array<Omit<Account, 'id' | 'userId'>>;
 
 export const SEED_RULES = [
   { debit: "الخزنة", credit: "تصليح", tx: "ايرادات اخري", karat: null, multiplier: 1, category: "المبيعات" },

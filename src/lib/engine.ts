@@ -1,4 +1,13 @@
-import { Entry, Account, AccountingOperationKind, AccountNature } from '../types';
+import {
+  Entry,
+  Account,
+  AccountingOperationKind,
+  AccountNature,
+  type CanonicalAccountSubType,
+  type CanonicalMainType,
+  type ExplicitWeightedMetal,
+  type MerchantDirection,
+} from '../types';
 import { OPERATION_RULES } from '../constants';
 import { parseWeight, normalizeNumerals } from './accounting';
 import { canCalculateGoldEquivalent21, calculateGoldEquivalent21 } from './goldEquivalent';
@@ -264,6 +273,429 @@ export function processInventory(entries: Entry[], accountsDb: Account[]): Inven
 
 export const calculateGoldOwnershipPosition = (entries: Entry[], accountsDb: Account[]): GoldOwnershipPosition =>
   processInventory(entries, accountsDb).goldPosition;
+
+export interface AccountBalanceResult {
+  accountId: string;
+  accountName: string;
+  cashBalance: number;
+  goldActualBalance: number;
+  goldE21Balance: number;
+  silverBalance: number;
+  quantityBalance: number;
+  mainType: CanonicalMainType | 'unclassified';
+  subType: CanonicalAccountSubType;
+  isMerchant: boolean;
+  merchantDirection?: MerchantDirection;
+  metal?: ExplicitWeightedMetal | null;
+}
+
+export interface LegacyMatchWarning {
+  entryId: string;
+  side: 'debit' | 'credit';
+  legacyName: string;
+  accountId: string;
+  accountName: string;
+  reason: 'missing_account_id_unique_name_match';
+}
+
+export interface AccountClassificationWarning {
+  accountId: string;
+  accountName: string;
+  code:
+    | 'missing_canonical_classification'
+    | 'classification_conflict'
+    | 'unknown_account_id'
+    | 'unknown_legacy_name'
+    | 'ambiguous_legacy_name';
+  message: string;
+}
+
+export interface ComputeAccountBalancesResult {
+  balances: Map<string, AccountBalanceResult>;
+  legacyNameMatchedEntries: LegacyMatchWarning[];
+  unclassifiedAccounts: AccountClassificationWarning[];
+  classificationConflicts: AccountClassificationWarning[];
+}
+
+interface NormalizedBalanceClassification {
+  mainType: CanonicalMainType | 'unclassified';
+  subType: CanonicalAccountSubType;
+  isMerchant: boolean;
+  merchantDirection?: MerchantDirection;
+  metal?: ExplicitWeightedMetal | null;
+  conflict?: string;
+  unclassifiedReason?: string;
+}
+
+const normalizeStoredMainType = (value?: string): CanonicalMainType | undefined => {
+  const normalized = String(value ?? '').trim().toLowerCase();
+  const values: Record<string, CanonicalMainType> = {
+    asset: 'assets',
+    assets: 'assets',
+    liability: 'liabilities',
+    liabilities: 'liabilities',
+    equity: 'equity',
+    revenue: 'revenue',
+    income: 'revenue',
+    expense: 'expense',
+    expenses: 'expense',
+    '\u0627\u0635\u0648\u0644': 'assets',
+    '\u062e\u0635\u0648\u0645': 'liabilities',
+    '\u062d\u0642\u0648\u0642 \u0645\u0644\u0643\u064a\u0629': 'equity',
+    '\u0627\u064a\u0631\u0627\u062f\u0627\u062a': 'revenue',
+    '\u0645\u0635\u0631\u0648\u0641\u0627\u062a': 'expense',
+  };
+  return values[normalized];
+};
+
+const inferStructuralSubType = (
+  account: Account,
+  normalizedMainType?: CanonicalMainType,
+): CanonicalAccountSubType | undefined => {
+  if (account.is_inventory) {
+    if (account.type === 'accessory') return 'inventory_accessory';
+    if (account.metal === 'gold') return 'inventory_gold';
+    if (account.metal === 'silver') return 'inventory_silver';
+  }
+  if (account.type === 'cash') return 'cash';
+  if (account.type === 'merchant' && account.metal === 'gold') return 'merchant_gold';
+  if (account.type === 'merchant' && account.metal === 'silver') return 'merchant_silver';
+  if (account.subType === '\u0627\u0635\u0648\u0644 \u062b\u0627\u0628\u062a\u0629') return 'fixed_asset';
+  if (account.subType === '\u0631\u0627\u0633 \u0627\u0644\u0645\u0627\u0644') return 'capital';
+  if (account.type === 'other'
+    && ['\u0630\u0645\u0645 \u0645\u062f\u064a\u0646\u0629', '\u0630\u0645\u0645 \u062f\u0627\u0626\u0646\u0629'].includes(account.subType)
+    && !account.metal) return 'customer';
+  if (normalizedMainType === 'revenue') return 'revenue';
+  if (normalizedMainType === 'expense') return 'expense';
+  return undefined;
+};
+
+const expectedMainType = (
+  subType: CanonicalAccountSubType,
+  direction?: MerchantDirection,
+): CanonicalMainType | undefined => {
+  if (direction === 'payable') return 'liabilities';
+  if (direction === 'receivable') return 'assets';
+  if (['inventory_gold', 'inventory_silver', 'inventory_accessory', 'cash', 'fixed_asset'].includes(subType)) return 'assets';
+  if (subType === 'capital') return 'equity';
+  if (subType === 'revenue') return 'revenue';
+  if (subType === 'expense') return 'expense';
+  return undefined;
+};
+
+const normalizeBalanceClassification = (account: Account): NormalizedBalanceClassification => {
+  const storedMainType = account.canonicalMainType ?? normalizeStoredMainType(account.mainType);
+  const subType = account.canonicalSubType ?? inferStructuralSubType(account, storedMainType);
+  if (!subType || subType === 'unclassified') {
+    return {
+      mainType: 'unclassified',
+      subType: 'unclassified',
+      isMerchant: false,
+      metal: account.metal,
+      unclassifiedReason: 'Canonical subtype is missing and cannot be derived from structural fields',
+    };
+  }
+
+  const isMerchant = subType === 'merchant_gold' || subType === 'merchant_silver';
+  const isWeightedDue = isMerchant || subType === 'other_due';
+  const merchantDirection = account.merchantDirection
+    ?? (isWeightedDue && storedMainType === 'liabilities' ? 'payable' : undefined)
+    ?? (isWeightedDue && storedMainType === 'assets' ? 'receivable' : undefined);
+  const structuralMetal: ExplicitWeightedMetal | null | undefined =
+    ['merchant_gold', 'inventory_gold'].includes(subType) ? 'gold'
+      : ['merchant_silver', 'inventory_silver'].includes(subType) ? 'silver'
+        : account.metal;
+  const inferredMainType = expectedMainType(subType, merchantDirection);
+  const mainType = storedMainType ?? inferredMainType;
+
+  if (isWeightedDue && account.is_inventory === true) {
+    return {
+      mainType: 'unclassified',
+      subType: 'unclassified',
+      isMerchant: false,
+      metal: structuralMetal,
+      conflict: 'Merchant and other_due accounts cannot be inventory',
+    };
+  }
+  if (isWeightedDue && !merchantDirection) {
+    return {
+      mainType: 'unclassified',
+      subType: 'unclassified',
+      isMerchant: false,
+      metal: structuralMetal,
+      unclassifiedReason: 'Weighted due account is missing merchantDirection',
+    };
+  }
+  if (account.metal && structuralMetal && account.metal !== structuralMetal) {
+    return {
+      mainType: 'unclassified',
+      subType: 'unclassified',
+      isMerchant: false,
+      metal: account.metal,
+      conflict: 'Canonical subtype conflicts with structural metal',
+    };
+  }
+  if (storedMainType && inferredMainType && storedMainType !== inferredMainType) {
+    return {
+      mainType: 'unclassified',
+      subType: 'unclassified',
+      isMerchant: false,
+      merchantDirection,
+      metal: structuralMetal,
+      conflict: 'canonicalMainType conflicts with merchantDirection or canonical subtype',
+    };
+  }
+  if (!mainType) {
+    return {
+      mainType: 'unclassified',
+      subType: 'unclassified',
+      isMerchant: false,
+      merchantDirection,
+      metal: structuralMetal,
+      unclassifiedReason: 'Canonical main type is missing and cannot be derived safely',
+    };
+  }
+
+  return {
+    mainType,
+    subType,
+    isMerchant,
+    merchantDirection,
+    metal: structuralMetal,
+  };
+};
+
+const balanceAccountId = (account: Account): string =>
+  account.id ?? account.canonicalAccountId ?? `legacy-account:${account.name}`;
+
+const emptyAccountBalance = (
+  accountId: string,
+  accountName: string,
+  classification: NormalizedBalanceClassification,
+): AccountBalanceResult => ({
+  accountId,
+  accountName,
+  cashBalance: 0,
+  goldActualBalance: 0,
+  goldE21Balance: 0,
+  silverBalance: 0,
+  quantityBalance: 0,
+  mainType: classification.mainType,
+  subType: classification.subType,
+  isMerchant: classification.isMerchant,
+  merchantDirection: classification.merchantDirection,
+  metal: classification.metal,
+});
+
+const isIncludedBalanceEntry = (entry: Entry): boolean => {
+  const raw = entry as Entry & Record<string, unknown>;
+  if (raw.isDeleted === true || raw.deleted === true || raw.isVoided === true || raw.voided === true
+    || raw.isReversed === true || raw.reversed === true) return false;
+  return !['voided', 'deleted', 'reversed', 'excluded', 'invalid']
+    .includes(String(raw.status ?? '').toLowerCase());
+};
+
+const naturalDebitSign = (mainType: CanonicalMainType | 'unclassified'): 1 | -1 =>
+  ['liabilities', 'equity', 'revenue'].includes(mainType) ? -1 : 1;
+
+const explicitEntryMetal = (entry: Entry): ExplicitWeightedMetal | undefined => {
+  const raw = entry as Entry & Record<string, unknown>;
+  const metal = String(raw.metal ?? raw.metalType ?? raw.weightMetal ?? '').toLowerCase();
+  if (metal === 'gold' || metal === 'silver') return metal;
+  if (String(entry.karat ?? '').toLowerCase() === 'silver') return 'silver';
+  if (entry.karat === 18 || entry.karat === 21 || entry.karat === 24) return 'gold';
+  return undefined;
+};
+
+export function computeAccountBalances(
+  entries: Entry[],
+  accounts: Account[],
+): ComputeAccountBalancesResult {
+  const balances = new Map<string, AccountBalanceResult>();
+  const legacyNameMatchedEntries: LegacyMatchWarning[] = [];
+  const unclassifiedAccounts: AccountClassificationWarning[] = [];
+  const classificationConflicts: AccountClassificationWarning[] = [];
+  const warningKeys = new Set<string>();
+  const byId = new Map(accounts.filter(account => account.id).map(account => [account.id as string, account]));
+  const byName = new Map<string, Account[]>();
+
+  const pushClassificationWarning = (
+    target: AccountClassificationWarning[],
+    warning: AccountClassificationWarning,
+  ): void => {
+    const key = `${warning.code}:${warning.accountId}`;
+    if (warningKeys.has(key)) return;
+    warningKeys.add(key);
+    target.push(warning);
+  };
+
+  for (const account of accounts) {
+    const named = byName.get(account.name) ?? [];
+    named.push(account);
+    byName.set(account.name, named);
+
+    const accountId = balanceAccountId(account);
+    const classification = normalizeBalanceClassification(account);
+    balances.set(accountId, emptyAccountBalance(accountId, account.name, classification));
+
+    if (classification.conflict) {
+      pushClassificationWarning(classificationConflicts, {
+        accountId,
+        accountName: account.name,
+        code: 'classification_conflict',
+        message: classification.conflict,
+      });
+    } else if (classification.unclassifiedReason) {
+      pushClassificationWarning(unclassifiedAccounts, {
+        accountId,
+        accountName: account.name,
+        code: 'missing_canonical_classification',
+        message: classification.unclassifiedReason,
+      });
+    }
+  }
+
+  const ensureUnknownBalance = (
+    accountId: string,
+    accountName: string,
+    code: AccountClassificationWarning['code'],
+    message: string,
+  ): AccountBalanceResult => {
+    const existing = balances.get(accountId);
+    if (existing) return existing;
+    const result = emptyAccountBalance(accountId, accountName, {
+      mainType: 'unclassified',
+      subType: 'unclassified',
+      isMerchant: false,
+      unclassifiedReason: message,
+    });
+    balances.set(accountId, result);
+    pushClassificationWarning(unclassifiedAccounts, {
+      accountId,
+      accountName,
+      code,
+      message,
+    });
+    return result;
+  };
+
+  const validEntries = entries.filter(isIncludedBalanceEntry);
+
+  for (const account of accounts.filter(account => account.is_inventory)) {
+    const accountId = balanceAccountId(account);
+    const result = balances.get(accountId);
+    if (!result || result.mainType === 'unclassified') continue;
+    const inventoryEntries = validEntries.filter(entry => {
+      const debitMatches = entry.debitAccountId
+        ? entry.debitAccountId === account.id
+        : entry.debit === account.name && (byName.get(entry.debit)?.length ?? 0) === 1;
+      const creditMatches = entry.creditAccountId
+        ? entry.creditAccountId === account.id
+        : entry.credit === account.name && (byName.get(entry.credit)?.length ?? 0) === 1;
+      return debitMatches || creditMatches;
+    });
+    const snapshot = processInventory(inventoryEntries, [account]).snapshots[account.name];
+    if (!snapshot) continue;
+    if (account.type === 'accessory') {
+      result.quantityBalance = snapshot.count;
+    } else if (account.metal === 'silver') {
+      result.silverBalance = snapshot.weight;
+    } else if (account.metal === 'gold') {
+      result.goldActualBalance = snapshot.weight;
+      result.goldE21Balance = snapshot.arabicWeight;
+    }
+  }
+
+  const resolveSide = (
+    entry: Entry,
+    side: 'debit' | 'credit',
+  ): { account?: Account; balance: AccountBalanceResult } => {
+    const id = side === 'debit' ? entry.debitAccountId : entry.creditAccountId;
+    const name = side === 'debit' ? entry.debit : entry.credit;
+    if (id) {
+      const account = byId.get(id);
+      if (account) return { account, balance: balances.get(balanceAccountId(account))! };
+      return {
+        balance: ensureUnknownBalance(
+          id,
+          name || `Unknown account ${id}`,
+          'unknown_account_id',
+          'Entry references an account ID that is absent from the account master',
+        ),
+      };
+    }
+
+    const candidates = byName.get(name) ?? [];
+    if (candidates.length === 1) {
+      const account = candidates[0];
+      legacyNameMatchedEntries.push({
+        entryId: entry.id ?? String(entry.seq ?? 'unknown-entry'),
+        side,
+        legacyName: name,
+        accountId: balanceAccountId(account),
+        accountName: account.name,
+        reason: 'missing_account_id_unique_name_match',
+      });
+      return { account, balance: balances.get(balanceAccountId(account))! };
+    }
+
+    const accountId = `legacy-name:${name || '(blank)'}`;
+    return {
+      balance: ensureUnknownBalance(
+        accountId,
+        name || '(blank account name)',
+        candidates.length > 1 ? 'ambiguous_legacy_name' : 'unknown_legacy_name',
+        candidates.length > 1
+          ? 'Legacy account name matches more than one account; no guess was made'
+          : 'Legacy account name is absent from the account master',
+      ),
+    };
+  };
+
+  for (const entry of validEntries) {
+    const cash = parseCash(entry);
+    const weight = parseWeight(entry.weight);
+    const count = parseFloat(normalizeNumerals(String(entry.count ?? '0'))) || 0;
+    if (cash === 0 && weight === 0 && count === 0) continue;
+
+    const debit = resolveSide(entry, 'debit');
+    const credit = resolveSide(entry, 'credit');
+    const movementMetal = explicitEntryMetal(entry);
+
+    const apply = (
+      resolved: { account?: Account; balance: AccountBalanceResult },
+      side: 'debit' | 'credit',
+    ): void => {
+      const { account, balance } = resolved;
+      const debitSign = naturalDebitSign(balance.mainType);
+      const sign = side === 'debit' ? debitSign : -debitSign;
+      if (cash !== 0) balance.cashBalance += cash * sign;
+      if (account?.is_inventory) return;
+
+      const metal = balance.metal ?? movementMetal;
+      if (!balance.metal && metal) balance.metal = metal;
+      if (weight !== 0 && metal === 'gold') {
+        balance.goldActualBalance += weight * sign;
+        balance.goldE21Balance += getEntryArabicWeight(entry, account) * sign;
+      } else if (weight !== 0 && metal === 'silver') {
+        balance.silverBalance += weight * sign;
+      }
+      if (count !== 0 && account?.measurementDimension === 'quantity') {
+        balance.quantityBalance += count * sign;
+      }
+    };
+
+    apply(debit, 'debit');
+    apply(credit, 'credit');
+  }
+
+  return {
+    balances,
+    legacyNameMatchedEntries,
+    unclassifiedAccounts,
+    classificationConflicts,
+  };
+}
 
 export interface CostBasisEngine {
   getCost: (accNameOrId: string) => number;

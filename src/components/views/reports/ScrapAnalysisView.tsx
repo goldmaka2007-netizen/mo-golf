@@ -1,16 +1,43 @@
 import React, { useMemo, useState } from 'react';
 import { format, parseISO } from 'date-fns';
 import { ar } from 'date-fns/locale';
-import { Entry, AccountNature } from '../../../types';
+import { Entry } from '../../../types';
 import { RefreshCw, ArrowDownRight, ArrowUpRight, Filter, Box, Calendar } from 'lucide-react';
 import { cn } from '../../../lib/utils';
-import { getMetricActualValue, getDynamicAccountNature } from '../../../utils/accountLogic';
 import { useAppStore } from '../../../store';
+import {
+  buildScrapAnalysisModel,
+  type WeightedPartyBalance,
+} from '../../../lib/scrapAnalysis';
 
 interface Props {
   entries: Entry[];
   allEntries?: Entry[];
 }
+
+const WeightedBalanceSection = ({ title, balances }: {
+  title: string;
+  balances: WeightedPartyBalance[];
+}) => (
+  <section className="bg-[#0e1018] border border-[#1a1e2a] rounded-2xl p-5">
+    <h3 className="text-lg font-bold text-[#f8fafc] mb-4">{title}</h3>
+    <div className="space-y-3">
+      {balances.length === 0 && <div className="text-sm text-[#8a8578]">{'\u0644\u0627 \u062a\u0648\u062c\u062f \u0623\u0631\u0635\u062f\u0629'}</div>}
+      {balances.map(balance => (
+        <div key={balance.accountId} className="rounded-xl bg-[#1a1e2a]/50 p-3">
+          <div className="flex justify-between gap-2">
+            <strong className="text-[#f8fafc]">{balance.name}</strong>
+            <span className="text-xs text-[#c9a84c]">{balance.direction} - {balance.directionDescription}</span>
+          </div>
+          <div className="mt-2 grid grid-cols-2 gap-2 text-sm text-[#8a8578]">
+            <span>{balance.metal === 'gold' ? '\u0630\u0647\u0628' : '\u0641\u0636\u0629'}: <b className="font-mono text-[#f8fafc]">{balance.actualBalance.toFixed(3)} {'\u062c\u0645'}</b></span>
+            {balance.metal === 'gold' && <span>{'\u0645\u0643\u0627\u0641\u0626 21'}: <b className="font-mono text-[#f8fafc]">{balance.goldE21Balance.toFixed(3)} {'\u062c\u0645'}</b></span>}
+          </div>
+        </div>
+      ))}
+    </div>
+  </section>
+);
 
 export const ScrapAnalysisView: React.FC<Props> = ({ entries, allEntries }) => {
   const { accountsDb } = useAppStore();
@@ -31,90 +58,12 @@ export const ScrapAnalysisView: React.FC<Props> = ({ entries, allEntries }) => {
     return Array.from(months).sort((a, b) => b.localeCompare(a));
   }, [baseEntries]);
 
-  // Filter entries to analyze for IN/OUT within the selected period
-  const dataToAnalyze = useMemo(() => {
-    if (selectedMonth === 'all') return baseEntries;
-    return baseEntries.filter(e => e.date && e.date.startsWith(selectedMonth));
-  }, [baseEntries, selectedMonth]);
-
-  const analysis = useMemo(() => {
-    let purchased = 0;
-    
-    let toTifit = 0;
-    let toMerchants = 0;
-    let soldAsScrap = 0;
-    let othersOut = 0;
-    let othersIn = 0;
-
-    const tifitDetails: Record<string, number> = {};
-
-    dataToAnalyze.forEach(e => {
-      const debitNature = getDynamicAccountNature(e.debit, accountsDb);
-      const creditNature = getDynamicAccountNature(e.credit, accountsDb);
-      
-      const isScrapDebit = (e.debit.includes('كسر') || e.debit.includes('سكراب')) && !e.debit.includes('فضة') && (debitNature === AccountNature.GOLD || debitNature === AccountNature.MIXED_GOLD);
-      const isScrapCredit = (e.credit.includes('كسر') || e.credit.includes('سكراب')) && !e.credit.includes('فضة') && (creditNature === AccountNature.GOLD || creditNature === AccountNature.MIXED_GOLD);
-
-      const isKarat18 = e.debit.includes('١٨') || e.credit.includes('١٨') || e.debit.includes('18') || e.credit.includes('18') || e.tx.includes('١٨') || e.tx.includes('18') || e.debit.includes('افرنجي') || e.credit.includes('افرنجي');
-      const isKarat21 = e.debit.includes('٢١') || e.credit.includes('21') || e.debit.includes('عربي') || e.credit.includes('عربي');
-
-      if (karatFilter === '18' && !isKarat18) return;
-      if (karatFilter === '21' && !isKarat21) return;
-
-      const w = getMetricActualValue(e, 'gold', accountsDb);
-      if (w === 0) return;
-
-      if (isScrapDebit) {
-        if (e.tx === 'شراء ذهب') {
-          purchased += w;
-        } else if (e.tx === 'قيد افتتاحي') {
-          purchased += w; // count opening as incoming for the balance
-        } else {
-          othersIn += w;
-        }
-      }
-
-      if (isScrapCredit) {
-        if (e.tx === 'تيفيت' || e.tx === 'تحويل') {
-          toTifit += w;
-          // Record the product name that received this scrap
-          if (e.debit && e.debit !== 'كسر عربي' && e.debit !== 'كسر افرنجي') {
-            tifitDetails[e.debit] = (tifitDetails[e.debit] || 0) + w;
-          }
-        } else if (e.tx === 'حساب تاجر ذهب') {
-          toMerchants += w;
-        } else if (e.tx === 'بيع ذهب') {
-          soldAsScrap += w;
-        } else {
-          othersOut += w;
-        }
-      }
-    });
-
-    const totalIn = purchased + othersIn;
-    const totalOut = toTifit + toMerchants + soldAsScrap + othersOut;
-    const currentBalance = totalIn - totalOut;
-
-    // Convert tifitDetails to array and sort by weight descending
-    const tifitList = Object.entries(tifitDetails)
-      .map(([name, weight]) => ({ name, weight }))
-      .sort((a, b) => b.weight - a.weight);
-
-    return {
-      purchased,
-      othersIn,
-      totalIn,
-      
-      toTifit,
-      toMerchants,
-      soldAsScrap,
-      othersOut,
-      totalOut,
-      
-      currentBalance,
-      tifitList
-    };
-  }, [dataToAnalyze, karatFilter]);
+  const model = useMemo(
+    () => buildScrapAnalysisModel(baseEntries, accountsDb, selectedMonth, karatFilter),
+    [baseEntries, accountsDb, selectedMonth, karatFilter],
+  );
+  const analysis = model.movement;
+  const centralLegacyFallbacks = model.weightedParties.legacyNameMatchedEntries;
 
   return (
     <div className="space-y-6 dir-rtl pb-20">
@@ -180,6 +129,27 @@ export const ScrapAnalysisView: React.FC<Props> = ({ entries, allEntries }) => {
             );
           })}
         </div>
+      )}
+
+      <div className="grid grid-cols-1 xl:grid-cols-2 gap-4">
+        <WeightedBalanceSection title={'\u0623\u0631\u0635\u062f\u0629 \u0627\u0644\u062a\u062c\u0627\u0631 \u0627\u0644\u062d\u0627\u0644\u064a\u0629'} balances={model.weightedParties.merchants} />
+        <WeightedBalanceSection title={'\u0630\u0645\u0645 \u0648\u0632\u0646\u064a\u0629 \u0623\u062e\u0631\u0649'} balances={model.weightedParties.otherDues} />
+      </div>
+
+      {(analysis.legacyFallbacks.length > 0 || centralLegacyFallbacks.length > 0) && (
+        <section className="rounded-2xl border border-amber-500/30 bg-amber-500/5 p-4">
+          <h3 className="font-bold text-amber-300">{'\u062a\u062d\u0630\u064a\u0631 Legacy fallback \u0645\u062c\u0645\u0639'}</h3>
+          {analysis.legacyFallbacks.map((warning, index) => (
+            <div className="text-xs text-amber-100/80" key={'scrap-' + warning.entryId + index}>
+              {warning.entryId} - {warning.missingField} - {warning.reason} - {warning.classification}
+            </div>
+          ))}
+          {centralLegacyFallbacks.map((warning, index) => (
+            <div className="text-xs text-amber-100/80" key={'balance-' + warning.entryId + index}>
+              {warning.entryId} - {warning.side}AccountId - {warning.reason} - account:{warning.accountId}
+            </div>
+          ))}
+        </section>
       )}
 
       <div className="bg-[#1a1e2a]/50 border border-[#1a1e2a] rounded-2xl p-4 text-center text-[#f8fafc] font-bold text-lg max-w-4xl mx-auto shadow-sm">
@@ -313,4 +283,3 @@ export const ScrapAnalysisView: React.FC<Props> = ({ entries, allEntries }) => {
     </div>
   );
 };
-
