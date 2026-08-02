@@ -1,6 +1,6 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { Account, Entry } from '../../types';
-import { buildLedgerAccountSelection, buildLedgerCsv, buildLedgerReport, filterLedgerRows, formatBalance, formatLedgerAmount, getAvailableDimensions, getVisibleOperationNumber } from '../ledgerReport';
+import { buildLedgerAccountSelection, buildLedgerCsv, buildLedgerReport, filterLedgerRows, formatBalance, formatLedgerAmount, getAvailableDimensions, getLedgerAccountGroupId, getUnclassifiedLedgerAccounts, getVisibleOperationNumber, LEDGER_ACCOUNT_GROUPS, warnUnclassifiedLedgerAccounts } from '../ledgerReport';
 
 const accounts: Account[] = [
   { id: 'cash', name: 'الخزنة', mainType: 'asset', subType: 'cash', balanceNature: 'cash', type: 'cash', userId: 'u' },
@@ -131,5 +131,126 @@ describe('ledger opening-balance presentation', () => {
     const report = buildLedgerReport([openingCash, cashMove], accounts, accounts[0], 'cash', '2026-01-01', '2026-01-31');
     const csv = buildLedgerCsv({ accountName: accounts[0].name, dimension: 'cash', startDate: '2026-01-01', endDate: '2026-01-31', report, rows: report.rows, goldDisplayMode: 'equivalent21' });
     expect(csv).toContain('رصيد أول المدة'); expect(csv).toContain('100 جنيه'); expect(csv).not.toContain('open-1');
+  });
+});
+
+describe('historical ledger structural account tree', () => {
+  const structural = (id: string, name: string, canonicalSubType?: Account['canonicalSubType'], overrides: Partial<Account> = {}): Account => ({
+    id,
+    name,
+    mainType: 'legacy',
+    subType: 'legacy',
+    canonicalSubType,
+    balanceNature: 'cash',
+    type: 'other',
+    userId: 'u',
+    is_inventory: false,
+    metal: null,
+    ...overrides,
+  });
+
+  const namedAccounts: Account[] = [
+    structural('alaa', '\u0627\u0644\u0627\u0621 \u064a\u0627\u0633\u0631', 'other_due', { canonicalMainType: 'liabilities', metal: 'gold' }),
+    structural('dina', '\u062f\u064a\u0646\u0627', 'customer'),
+    structural('ola', '\u0639\u0644\u0627 \u062d\u0633\u0646', 'customer'),
+    structural('shorouk', '\u0634\u0631\u0648\u0642 \u062d\u0628\u0634\u064a', 'customer'),
+    structural('laptop', '\u0644\u0627\u0628\u062a\u0648\u0628', 'fixed_asset'),
+    structural('phone', '\u062a\u0644\u064a\u0641\u0648\u0646 \u0627\u0631\u0636\u064a', 'fixed_asset'),
+    structural('counter', '\u0645\u0643\u0646\u0629 \u0639\u062f \u0646\u0642\u062f\u064a\u0629', 'fixed_asset'),
+    ...['\u062e\u0627\u0644\u062f \u062d\u0645\u064a\u062f\u0648', '\u0645\u062d\u0645\u062f \u0627\u0644\u0633\u064a\u062f', '\u0639\u0644\u0627\u0621 \u0635\u0627\u0644\u062d', '\u0627\u0644\u0635\u0627\u0641\u064a']
+      .map((name, index) => structural(`gold-merchant-${index}`, name, 'merchant_gold', { type: 'merchant', metal: 'gold' })),
+    structural('silver-merchant', '\u0633\u0645\u064a\u0631 \u0646\u0627\u0634\u062f', 'merchant_silver', { type: 'merchant', metal: 'silver' }),
+  ];
+
+  it('routes every canonical subtype to its explicit group', () => {
+    const cases: Array<[Account['canonicalSubType'], ReturnType<typeof getLedgerAccountGroupId>, Partial<Account>?]> = [
+      ['cash', 'cash', { type: 'cash' }],
+      ['inventory_gold', 'inventory_gold', { is_inventory: true, metal: 'gold' }],
+      ['inventory_silver', 'inventory_silver', { is_inventory: true, metal: 'silver' }],
+      ['inventory_accessory', 'inventory_accessory', { is_inventory: true, type: 'accessory' }],
+      ['merchant_gold', 'merchant_gold'],
+      ['merchant_silver', 'merchant_silver'],
+      ['customer', 'customer'],
+      ['fixed_asset', 'fixed_asset'],
+      ['other_due', 'other_due'],
+      ['capital', 'equity'],
+      ['withdrawals', 'equity'],
+      ['retained_earnings', 'equity'],
+      ['revenue', 'revenue'],
+      ['expense', 'expense'],
+      ['unclassified', 'unclassified'],
+    ];
+    cases.forEach(([subType, expected, overrides], index) => {
+      expect(getLedgerAccountGroupId(structural(`case-${index}`, `case-${index}`, subType, overrides))).toBe(expected);
+    });
+  });
+
+  it('keeps confirmed dues, customers, and fixed assets out of every inventory and merchant group', () => {
+    const selection = buildLedgerAccountSelection(namedAccounts);
+    const groupByAccount = new Map(selection.flatMap(group => group.accounts.map(item => [item.account.id, group.id])));
+
+    expect(groupByAccount.get('alaa')).toBe('other_due');
+    ['dina', 'ola', 'shorouk'].forEach(id => expect(groupByAccount.get(id)).toBe('customer'));
+    ['laptop', 'phone', 'counter'].forEach(id => expect(groupByAccount.get(id)).toBe('fixed_asset'));
+    ['alaa', 'dina', 'ola', 'shorouk', 'laptop', 'phone', 'counter'].forEach(id => {
+      expect(groupByAccount.get(id)).not.toMatch(/^inventory_/);
+      expect(groupByAccount.get(id)).not.toMatch(/^merchant_/);
+    });
+  });
+
+  it('separates gold and silver merchants without duplicating any account', () => {
+    const selection = buildLedgerAccountSelection(namedAccounts);
+    const goldNames = selection.find(group => group.id === 'merchant_gold')?.accounts.map(item => item.displayName);
+    const silverNames = selection.find(group => group.id === 'merchant_silver')?.accounts.map(item => item.displayName);
+    const ids = selection.flatMap(group => group.accounts.map(item => item.account.id));
+
+    expect(goldNames).toEqual(expect.arrayContaining(['\u062e\u0627\u0644\u062f \u062d\u0645\u064a\u062f\u0648', '\u0645\u062d\u0645\u062f \u0627\u0644\u0633\u064a\u062f', '\u0639\u0644\u0627\u0621 \u0635\u0627\u0644\u062d', '\u0627\u0644\u0635\u0627\u0641\u064a']));
+    expect(silverNames).toEqual(['\u0633\u0645\u064a\u0631 \u0646\u0627\u0634\u062f']);
+    expect(new Set(ids).size).toBe(ids.length);
+  });
+
+  it('shows unknown accounts as unclassified and admits only real inventory to inventory groups', () => {
+    const unknown = structural('unknown', 'unknown', undefined, { subType: 'unknown', metal: 'gold' });
+    const falseInventory = structural('false-inventory', 'false inventory', 'inventory_gold', { metal: 'gold', is_inventory: false });
+    const realInventory = structural('real-inventory', 'real inventory', 'inventory_gold', { metal: 'gold', is_inventory: true });
+    const selection = buildLedgerAccountSelection([unknown, falseInventory, realInventory]);
+    const unclassified = selection.find(group => group.id === 'unclassified')?.accounts.map(item => item.account.id);
+    const inventory = selection.find(group => group.id === 'inventory_gold')?.accounts.map(item => item.account.id);
+
+    expect(unclassified).toEqual(expect.arrayContaining(['unknown', 'false-inventory']));
+    expect(inventory).toEqual(['real-inventory']);
+    expect(inventory).not.toContain('unknown');
+  });
+
+  it('aggregates one detailed warning and does not repeat it for an unchanged list', () => {
+    const unknown = structural('warning-account', 'warning account', undefined, { mainType: 'unknown-main', subType: 'unknown-sub' });
+    const warnings = getUnclassifiedLedgerAccounts([unknown]);
+    const spy = vi.spyOn(console, 'warn').mockImplementation(() => undefined);
+
+    warnUnclassifiedLedgerAccounts(warnings);
+    warnUnclassifiedLedgerAccounts(warnings);
+
+    expect(spy).toHaveBeenCalledTimes(1);
+    expect(spy).toHaveBeenCalledWith('Unclassified historical ledger accounts', [
+      expect.objectContaining({
+        accountId: 'warning-account',
+        accountName: 'warning account',
+        mainType: 'unknown-main',
+        subType: 'unknown-sub',
+        reason: expect.any(String),
+      }),
+    ]);
+    spy.mockRestore();
+    warnUnclassifiedLedgerAccounts([]);
+  });
+
+  it('exposes the required Arabic group labels without an Items default bucket', () => {
+    expect(Object.values(LEDGER_ACCOUNT_GROUPS)).toEqual(expect.arrayContaining([
+      '\u0645\u062e\u0632\u0648\u0646 \u0627\u0644\u0630\u0647\u0628',
+      '\u062a\u062c\u0627\u0631 \u0627\u0644\u0630\u0647\u0628',
+      '\u0630\u0645\u0645 \u0623\u062e\u0631\u0649',
+      '\u063a\u064a\u0631 \u0645\u0635\u0646\u0641',
+    ]));
+    expect(Object.values(LEDGER_ACCOUNT_GROUPS)).not.toContain('\u0627\u0644\u0623\u0635\u0646\u0627\u0641');
   });
 });
