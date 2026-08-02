@@ -166,6 +166,31 @@ export type AccountType =
   | 'merchant'
   | 'other';
 
+export type CanonicalMainType =
+  | 'assets'
+  | 'liabilities'
+  | 'equity'
+  | 'revenue'
+  | 'expense';
+
+export type CanonicalAccountSubType =
+  | 'inventory_gold'
+  | 'inventory_silver'
+  | 'inventory_accessory'
+  | 'cash'
+  | 'fixed_asset'
+  | 'customer'
+  | 'merchant_gold'
+  | 'merchant_silver'
+  | 'other_due'
+  | 'capital'
+  | 'revenue'
+  | 'expense'
+  | 'unclassified';
+
+export type MerchantDirection = 'payable' | 'receivable';
+export type ExplicitWeightedMetal = 'gold' | 'silver';
+
 export interface OperationRule {
   affectsInventory: boolean;
   isPurchase: boolean;
@@ -181,11 +206,15 @@ export interface Account {
   name: string;
   mainType: string;
   subType: string;
+  /** Normalized classification; legacy Arabic mainType/subType remain readable. */
+  canonicalMainType?: CanonicalMainType;
+  canonicalSubType?: CanonicalAccountSubType;
+  merchantDirection?: MerchantDirection;
   balanceNature: string;
   userId: string;
   type?: AccountType;
   karat?: '18' | '21' | '24' | 'silver' | null;
-  metal?: 'gold' | 'silver' | null;
+  metal?: ExplicitWeightedMetal | null;
   is_inventory?: boolean;
   inventoryKind?: 'gold' | 'silver' | 'accessory';
   measurementDimension?: 'weight' | 'quantity';
