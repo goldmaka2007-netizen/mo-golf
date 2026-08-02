@@ -158,6 +158,7 @@ export interface OperationRule {
 
 export interface Account {
   id?: string;
+  canonicalAccountId?: string;
   name: string;
   mainType: string;
   subType: string;
@@ -171,6 +172,7 @@ export interface Account {
   karat?: '18' | '21' | '24' | 'silver' | null;
   metal?: ExplicitWeightedMetal | null;
   is_inventory?: boolean;
+  measurementDimension?: 'weight' | 'quantity';
   quantityStep?: number | string;
   isActive?: boolean;
 }
