@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import type { Account, Entry } from '../../types';
 import type { EquityStatementReport } from '../equityStatementReport';
+import { computeAccountBalances } from '../engine';
 import {
   buildFinancialPositionReport,
   type FinancialPositionDetail,
@@ -188,7 +189,7 @@ const equityStatement: EquityStatementReport = {
   silver: emptyEquityDimension(),
   accs: emptyEquityDimension(),
 };
-const report = buildFinancialPositionReport(entries, accounts, equityStatement);
+const report = buildFinancialPositionReport(computeAccountBalances(entries, accounts), equityStatement);
 
 const sectionDetails = (dimension: FinancialPositionDimension): FinancialPositionDetail[] => [
   ...Object.values(dimension.assets.categories).flatMap(category => category.details),

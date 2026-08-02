@@ -1,3 +1,4 @@
+import { formatDecimal, formatInteger } from '../../../lib/formatting';
 import React, { useMemo } from 'react';
 import { motion } from 'framer-motion';
 import { LayoutDashboard, Wallet, Scale, Coins, Package, BarChart3, TrendingUp, ShieldCheck } from 'lucide-react';
@@ -113,7 +114,7 @@ export const ValuationOverviewView = React.memo(({ entries }: { entries: Entry[]
             <p className="text-xs font-bold text-[#c9a84c] uppercase tracking-widest mb-2 opacity-80">إجمالي القيمة التقديرية (صافي)</p>
             <div className="flex items-baseline gap-2 justify-center md:justify-end">
               <span className="text-5xl lg:text-6xl font-black text-[#ddd8cc] font-mono tracking-tighter">
-                {new Intl.NumberFormat('en-US').format(Math.round(valuation.netVal))}
+                {formatInteger(valuation.netVal)}
               </span>
               <span className="text-base font-bold text-[#5a5548]">ج.م</span>
             </div>
@@ -138,7 +139,7 @@ export const ValuationOverviewView = React.memo(({ entries }: { entries: Entry[]
               <div className="text-xs text-[#5a5548] font-bold uppercase mb-1">{card.title}</div>
               <div className="flex justify-between items-baseline mb-1">
                 <span className={cn("text-3xl font-black font-mono", card.color)}>
-                  {new Intl.NumberFormat('en-US').format(Math.round(card.val))}
+                  {formatInteger(card.val)}
                 </span>
                 <span className="text-xs text-[#5a5548] font-bold">ج.م</span>
               </div>
@@ -190,7 +191,7 @@ export const ValuationOverviewView = React.memo(({ entries }: { entries: Entry[]
                  key={i} 
                  style={{ width: `${grow}%` }} 
                  className={cn("h-full transition-all duration-1000", item.color)} 
-                 title={`${item.metric}: ${grow.toFixed(1)}%`}
+                 title={`${item.metric}: ${formatDecimal(grow, 1)}%`}
                />
              );
           })}

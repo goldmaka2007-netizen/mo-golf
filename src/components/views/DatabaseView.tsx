@@ -1,3 +1,4 @@
+import { formatWeight } from '../../lib/formatting';
 import React, { useState, useMemo, useDeferredValue, useEffect } from 'react';
 import { motion } from 'framer-motion';
 import { 
@@ -112,7 +113,7 @@ export const EntryRow = React.memo(({ e, setEditingEntry }: { e: Entry, setEditi
           {e.weight && (
             <div className="flex flex-col items-end">
               <div className="text-base text-[#ddd8cc] font-bold font-mono">
-                {parseFloat(e.weight).toFixed(2)}
+                {formatWeight(parseFloat(e.weight))}
                 <span className="text-xs font-sans opacity-50 mr-1">{unit}</span>
               </div>
               {e.arabicWeight && (

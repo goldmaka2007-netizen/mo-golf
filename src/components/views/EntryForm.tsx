@@ -1,3 +1,4 @@
+import { formatWeight } from '../../lib/formatting';
 import React, { useState, useMemo, useEffect } from 'react';
 import { motion } from 'framer-motion';
 import { 
@@ -661,7 +662,7 @@ export const EntryForm = React.memo(() => {
           {showWeightAndCount && (
             <div className="flex justify-between items-center bg-[#1a1e2a]/30 p-2 rounded-lg">
               <span className="text-sm text-[#8a8578] font-bold">الوزن:</span>
-              <span className="text-lg font-mono font-bold text-[#ddd8cc]">{parseFloat(formData.weight || '0').toFixed(2)} <span className="text-xs">ج</span></span>
+              <span className="text-lg font-mono font-bold text-[#ddd8cc]">{formatWeight(parseFloat(formData.weight || '0'))} <span className="text-xs">ج</span></span>
             </div>
           )}
           {formData.karat !== null && formData.karat !== undefined && (

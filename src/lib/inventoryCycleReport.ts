@@ -12,13 +12,14 @@ import {
   type OpeningCostConfig,
 } from './weightedAverageCost';
 import {
+  BALANCE_ENGINE_VERSION,
   buildAccountIndex,
   getEntryArabicWeight,
   isAccessoryAccount,
   isGoldAccount,
   isInventoryAccount,
   isSilverAccount,
-  processInventory,
+  computeAccountBalances,
   resolveAccount,
   resolveOperationKind,
   parseCash,
@@ -132,6 +133,7 @@ export interface InventoryCycleItemReport {
 }
 
 export interface InventoryCycleReport {
+  balanceEngineVersion: string;
   tab: InventoryCycleTab;
   filters: InventoryCycleFilters;
   cache: { status: ReportCacheStatus; updatedAt: string; lastUpdatedAt?: string; lastOperationId?: string; lastIncludedOperationNo?: string; error?: string };
@@ -201,11 +203,11 @@ const getStateCost = (timeline: CostTimelineResult, account: Account, tab: Inven
 };
 
 const getInventorySnapshotQuantity = (entries: Entry[], accountsDb: Account[], account: Account, tab: InventoryCycleTab): { physical: number; equivalent?: number } => {
-  const snapshot = processInventory(entries, accountsDb).snapshots[account.name];
-  if (!snapshot) return { physical: 0, equivalent: tab === 'gold' ? 0 : undefined };
-  if (tab === 'accessory') return { physical: snapshot.count };
-  if (tab === 'silver') return { physical: snapshot.weight };
-  return { physical: snapshot.weight, equivalent: snapshot.arabicWeight };
+  const balance = computeAccountBalances(entries, accountsDb).balances.get(account.id ?? `legacy-account:${account.name}`);
+  if (!balance) return { physical: 0, equivalent: tab === 'gold' ? 0 : undefined };
+  if (tab === 'accessory') return { physical: balance.quantityBalance };
+  if (tab === 'silver') return { physical: balance.silverBalance };
+  return { physical: balance.goldActualBalance, equivalent: balance.goldE21Balance };
 };
 
 const warningSeverity = (status: OperationCostResult['status']): WarningSeverity => {
@@ -530,11 +532,11 @@ export function buildInventoryCycleReport(args: {
 
   const chart: InventoryCycleSeriesPoint[] = eachDay(filters.startDate, filters.endDate).map(date => {
     const dayEntries = endEntries.filter(entry => isAtOrBefore(entry, date));
-    const inventory = processInventory(dayEntries, accountsDb);
+    const inventoryBalances = computeAccountBalances(dayEntries, accountsDb);
     const timeline = tab === 'accessory' ? rebuildCostTimeline(dayEntries, accountsDb, openingConfig) : null;
     const rows = accounts.map(account => {
-      const snapshot = inventory.snapshots[account.name];
-      const balance = tab === 'accessory' ? snapshot?.count ?? 0 : tab === 'silver' ? snapshot?.weight ?? 0 : snapshot?.arabicWeight ?? 0;
+      const snapshot = inventoryBalances.balances.get(account.id ?? `legacy-account:${account.name}`);
+      const balance = tab === 'accessory' ? snapshot?.quantityBalance ?? 0 : tab === 'silver' ? snapshot?.silverBalance ?? 0 : snapshot?.goldE21Balance ?? 0;
       const bookValue = timeline ? getStateCost(timeline, account, tab).cost ?? 0 : undefined;
       return { balance, bookValue };
     });
@@ -563,6 +565,7 @@ export function buildInventoryCycleReport(args: {
 
   const lastOperationId = sorted.length ? getOperationId(sorted[sorted.length - 1]) : undefined;
   return {
+    balanceEngineVersion: BALANCE_ENGINE_VERSION,
     tab,
     filters,
     cache: { status: cacheMeta.status ?? 'current', updatedAt: cacheMeta.updatedAt ?? new Date().toISOString(), lastUpdatedAt: cacheMeta.lastUpdatedAt, lastOperationId, lastIncludedOperationNo: cacheMeta.lastIncludedOperationNo, error: cacheMeta.error },

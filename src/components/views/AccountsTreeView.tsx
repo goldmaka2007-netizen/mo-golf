@@ -8,6 +8,8 @@ import { db, handleFirestoreError } from '../../firebase';
 import { cn } from '../../lib/utils';
 import { getDynamicAccountNature } from '../../utils/accountLogic';
 import { FormInput } from '../ui/FormInput';
+import { normalizeCanonicalMainType } from '../../lib/accountClassificationMigration';
+import { assertNewAccountMetadata } from '../../lib/accountMetadataValidation';
 
 export const AccountsTreeView = React.memo(() => {
   const { accountsDb, user } = useAppStore();
@@ -85,11 +87,16 @@ export const AccountsTreeView = React.memo(() => {
         mainType: editingAcc.mainType,
         subType: editingAcc.subType,
         balanceNature: editingAcc.balanceNature,
+        canonicalMainType: editingAcc.canonicalMainType ?? normalizeCanonicalMainType(editingAcc.mainType) ?? undefined,
+        type: editingAcc.type ?? 'other',
+        metal: editingAcc.metal ?? null,
+        is_inventory: editingAcc.is_inventory ?? false,
         userId: user.uid,
         updatedAt: serverTimestamp()
       };
 
       if (isAddingNew) {
+        assertNewAccountMetadata(data);
         await addDoc(collection(db, 'accounts'), { ...data, createdAt: serverTimestamp() });
       } else {
         await updateDoc(doc(db, 'accounts', editingAcc.id), data);

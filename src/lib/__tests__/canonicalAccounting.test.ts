@@ -179,7 +179,7 @@ describe('trial balance end-to-end revenue coverage', () => {
   it('traces raw surplus alias through ledger legs to a revenue trial-balance row', () => {
     const entry = { ...({ seq: 1, tx: 'تسوية', operationKind: 'adjustment', date: '2026-01-01', debit: 'خاتم ذهب', debitAccountId: 'product', credit: 'زيادة الذهب', cash: '0', weight: '0', arabicWeight: '8.97', count: '0', notes: '', userId: 'u' } as Entry), id: 'actual-shaped-surplus' };
     const registry = buildCanonicalAccountRegistry(accounts, [entry]); const legs = buildCanonicalAccountingLegs([entry], registry); const report = buildTrialBalanceReport([entry], accounts, 'gold', '2026-01-01', '2026-12-31');
-    const row = report.groups.flatMap(group => group.rows).find(item => item.accountName === 'زيادة الذهب');
+    const row = report.groups.find(group => group.id === 'revenue')?.rows[0];
     expect(registry.byLegacyName.get('زيادة الذهب')?.canonicalName).toBe('زيادة-الذهب'); expect(legs.some(leg => leg.accountName === 'زيادة-الذهب' && leg.side === 'credit' && leg.amount === 8.97)).toBe(true); expect(row).toMatchObject({ periodCredit: 8.97, closingCredit: 8.97 }); expect(report.balanced).toBe(true);
   });
   it('supports all five canonical groups when each has gold movement', () => {

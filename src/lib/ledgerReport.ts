@@ -1,5 +1,7 @@
+import { formatWeight as formatWeightValue } from './formatting';
 import { Account, AccountNature, CanonicalAccountDefinition, Entry } from '../types';
-import { getMerchantMetals } from './engine';
+import { compareBalanceEntries, computePeriodAccountBalances, getEntryArabicWeight, getMerchantMetals, type AccountBalanceResult, type PeriodAccountBalancesResult } from './engine';
+import { balanceDirectionLabel, resolveBalanceDirection, resolveNormalBalance, type NormalBalanceSide } from './balanceDirection';
 import { getDynamicAccountNature, getMetricActualValue } from '../utils/accountLogic';
 import { buildLegacyLedgerLegs, legacyLedgerEntityId, type LegacyLedgerBuildOptions } from './legacyLedger';
 import { splitLegsByPeriod } from './periodLegs';
@@ -21,6 +23,9 @@ export interface LedgerRow {
 }
 
 export interface LedgerReport {
+  balanceEngineVersion: string;
+  source: 'balance_engine';
+  normalBalance: NormalBalanceSide;
   openingBalance: number;
   totalDebit: number;
   totalCredit: number;
@@ -28,10 +33,9 @@ export interface LedgerReport {
   rows: LedgerRow[];
 }
 
-const creditMainTypes = new Set(['liability', 'liabilities', 'equity', 'revenue', 'revenues', 'خصوم', 'الخصوم', 'حقوق ملكية', 'حقوق الملكية', 'إيرادات', 'الإيرادات', 'ايرادات', 'الايرادات']);
-
 export const getAccountKey = (account: Account): string => account.id || account.name;
-export const isCreditNatureAccount = (account: Account | undefined): boolean => !!account && creditMainTypes.has(account.mainType);
+export const isCreditNatureAccount = (account: Account | undefined): boolean =>
+  !!account && resolveNormalBalance({ account }) === 'credit';
 
 const originalWeightFor = (entry: Entry, dimension: LedgerDimension, accounts: Account[]): number | undefined => {
   if (dimension !== 'gold') return undefined;
@@ -60,6 +64,31 @@ export const getAvailableDimensions = (account: Account, entries: Entry[], accou
   return (['cash', 'gold', 'silver', 'quantity'] as const).filter(dimension => historical.has(dimension));
 };
 
+export interface LedgerReportBuildOptions extends LegacyLedgerBuildOptions {
+  balancePeriod?: PeriodAccountBalancesResult;
+}
+
+const findEngineBalance = (
+  result: PeriodAccountBalancesResult['closing'],
+  account: Account,
+): AccountBalanceResult | undefined => {
+  const accountId = account.id ?? account.canonicalAccountId;
+  if (accountId && result.balances.has(accountId)) return result.balances.get(accountId);
+  const named = [...result.balances.values()].filter(balance => balance.accountName === account.name);
+  return named.length === 1 ? named[0] : undefined;
+};
+
+const engineDimensionBalance = (
+  balance: AccountBalanceResult | undefined,
+  dimension: LedgerDimension,
+): number => {
+  if (!balance) return 0;
+  if (dimension === 'cash') return balance.cashBalance;
+  if (dimension === 'gold') return balance.goldE21Balance;
+  if (dimension === 'silver') return balance.silverBalance;
+  return balance.quantityBalance;
+};
+
 export const buildLedgerReport = (
   entries: Entry[],
   accounts: Account[],
@@ -68,28 +97,29 @@ export const buildLedgerReport = (
   startDate: string,
   endDate: string,
   canonicalDefinitions?: CanonicalAccountDefinition[],
-  options: LegacyLedgerBuildOptions = {},
+  options: LedgerReportBuildOptions = {},
 ): LedgerReport => {
+  const balancePeriod = options.balancePeriod ?? computePeriodAccountBalances(entries, accounts, startDate, endDate);
   const entityId = legacyLedgerEntityId(account);
   const legs = buildLegacyLedgerLegs(entries, accounts, canonicalDefinitions, options)
     .filter(leg => leg.entityId === entityId && leg.dimension === dimension)
-    .sort((a, b) => (a.date || '').localeCompare(b.date || ''));
+    .sort((a, b) => compareBalanceEntries(a.entry, b.entry) || a.side.localeCompare(b.side, 'en'));
+  const normalBalance = legs[0]?.account.normalBalance ?? resolveNormalBalance({ account });
+  const openingBalance = engineDimensionBalance(findEngineBalance(balancePeriod.opening, account), dimension);
+  const closingBalance = engineDimensionBalance(findEngineBalance(balancePeriod.closing, account), dimension);
   if (legs.length) {
-    const normalBalance = legs[0].account.normalBalance;
-    const { openingLegs, periodLegs } = splitLegsByPeriod(legs, startDate, endDate);
-    let openingBalance = 0; let runningBalance = 0; const rows: LedgerRow[] = [];
-    openingLegs.forEach(leg => {
-      const change = normalBalance === 'credit' ? (leg.side === 'credit' ? leg.amount : -leg.amount) : (leg.side === 'debit' ? leg.amount : -leg.amount);
-      openingBalance += change;
-    });
+    const { periodLegs } = splitLegsByPeriod(legs, startDate, endDate);
+    let runningBalance = openingBalance; const rows: LedgerRow[] = [];
     periodLegs.forEach(leg => {
+      if (dimension === 'gold' && leg.entry.goldEquivalent21Snapshot) leg = { ...leg, amount: Math.abs(getEntryArabicWeight(leg.entry, account)) };
       const change = normalBalance === 'credit' ? (leg.side === 'credit' ? leg.amount : -leg.amount) : (leg.side === 'debit' ? leg.amount : -leg.amount);
       runningBalance += change;
-      rows.push({ entry: leg.entry, date: leg.date, operationNumber: getVisibleOperationNumber(leg.entry), operationType: leg.entry.tx || leg.operationKind || 'عملية', oppositeAccount: leg.oppositeAccount, debit: leg.side === 'debit' ? leg.amount : 0, credit: leg.side === 'credit' ? leg.amount : 0, balance: openingBalance + runningBalance, originalWeight: originalWeightFor(leg.entry, dimension, accounts), karat: leg.entry.karat });
+      rows.push({ entry: leg.entry, date: leg.date, operationNumber: getVisibleOperationNumber(leg.entry), operationType: leg.entry.tx || leg.operationKind || 'عملية', oppositeAccount: leg.oppositeAccount, debit: leg.side === 'debit' ? leg.amount : 0, credit: leg.side === 'credit' ? leg.amount : 0, balance: runningBalance, originalWeight: originalWeightFor(leg.entry, dimension, accounts), karat: leg.entry.karat });
     });
-    return { openingBalance, totalDebit: rows.reduce((total, row) => total + row.debit, 0), totalCredit: rows.reduce((total, row) => total + row.credit, 0), closingBalance: openingBalance + runningBalance, rows };
+    if (rows.length) rows[rows.length - 1].balance = closingBalance;
+    return { balanceEngineVersion: balancePeriod.balanceEngineVersion, source: 'balance_engine', normalBalance, openingBalance, totalDebit: rows.reduce((total, row) => total + row.debit, 0), totalCredit: rows.reduce((total, row) => total + row.credit, 0), closingBalance, rows };
   }
-  return { openingBalance: 0, totalDebit: 0, totalCredit: 0, closingBalance: 0, rows: [] };
+  return { balanceEngineVersion: balancePeriod.balanceEngineVersion, source: 'balance_engine', normalBalance, openingBalance, totalDebit: 0, totalCredit: 0, closingBalance, rows: [] };
 };
 
 export const filterLedgerRows = (rows: LedgerRow[], operationType: string, oppositeAccount: string): LedgerRow[] =>
@@ -104,12 +134,12 @@ export const getFilteredTotals = (rows: LedgerRow[]): Pick<LedgerReport, 'totalD
 });
 
 export const formatCash = (amount: number): string => `${amount.toLocaleString('en-US', { minimumFractionDigits: 0, maximumFractionDigits: 0 })} \u062c\u0646\u064a\u0647`;
-export const formatWeight = (amount: number): string => `${amount.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} \u062c\u0645`;
+export const formatWeight = (amount: number): string => formatWeightValue(amount, 2, true);
 export const formatQuantity = (amount: number): string => `${amount.toLocaleString('en-US', { minimumFractionDigits: 0, maximumFractionDigits: 3 })} \u0642\u0637\u0639\u0629`;
 export const formatLedgerAmount = (amount: number, dimension: LedgerDimension): string => dimension === 'cash' ? formatCash(amount) : dimension === 'quantity' ? formatQuantity(amount) : formatWeight(amount);
 
-export const formatBalance = (balance: number, dimension: LedgerDimension): string => {
-  const nature = balance < 0 ? '\u062f\u0627\u0626\u0646' : '\u0645\u062f\u064a\u0646';
+export const formatBalance = (balance: number, dimension: LedgerDimension, normalBalance: NormalBalanceSide = 'debit'): string => {
+  const nature = balanceDirectionLabel(resolveBalanceDirection({ signedBalance: balance, normalBalance }));
   const magnitude = balance < 0 ? -balance : balance;
   return `${formatLedgerAmount(magnitude, dimension)} ${nature}`;
 };
@@ -148,16 +178,16 @@ export const buildLedgerCsv = (args: {
   const dimensionLabel = dimension === 'cash' ? labels.cash : dimension === 'gold' ? labels.gold : dimension === 'silver' ? labels.silver : labels.quantity;
   const metadata = [
     [labels.accountName, accountName], [labels.dimension, dimensionLabel],
-    [labels.fromDate, startDate], [labels.toDate, endDate], [labels.openingBalance, formatBalance(report.openingBalance, dimension)],
+    [labels.fromDate, startDate], [labels.toDate, endDate], [labels.openingBalance, formatBalance(report.openingBalance, dimension, report.normalBalance)],
     [labels.totalDebit, formatLedgerAmount(report.totalDebit, dimension)], [labels.totalCredit, formatLedgerAmount(report.totalCredit, dimension)],
-    [labels.closingBalance, formatBalance(report.closingBalance, dimension)], [],
+    [labels.closingBalance, formatBalance(report.closingBalance, dimension, report.normalBalance)], [],
   ];
   const lines = metadata.map(row => row.map(cell => escapeCsv(cell)).join(','));
   lines.push([labels.date, labels.operationNumber, labels.description, labels.debit, labels.credit, labels.balance].map(escapeCsv).join(','));
-  lines.push(['', '', labels.openingBalance, '', '', formatBalance(report.openingBalance, dimension)].map(escapeCsv).join(','));
+  lines.push(['', '', labels.openingBalance, '', '', formatBalance(report.openingBalance, dimension, report.normalBalance)].map(escapeCsv).join(','));
   rows.forEach(row => lines.push([
     row.date, row.operationNumber, `${row.operationType} - ${row.oppositeAccount}`,
-    amount(row, row.debit), amount(row, row.credit), formatBalance(row.balance, dimension),
+    amount(row, row.debit), amount(row, row.credit), formatBalance(row.balance, dimension, report.normalBalance),
   ].map(escapeCsv).join(',')));
   return `\uFEFF${lines.join('\r\n')}`;
 };

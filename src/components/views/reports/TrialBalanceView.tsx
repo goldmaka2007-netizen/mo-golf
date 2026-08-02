@@ -4,6 +4,7 @@ import { Entry } from '../../../types';
 import { useAppStore } from '../../../store';
 import { LedgerDimension } from '../../../lib/ledgerReport';
 import { buildTrialBalanceCsv, buildTrialBalanceReport, TrialBalanceAmounts, TrialBalanceGroup, TrialBalanceReport, TrialBalanceRow } from '../../../lib/trialBalanceReport';
+import { computePeriodAccountBalances } from '../../../lib/engine';
 
 const today = () => new Date().toISOString().slice(0, 10);
 const yearStart = () => `${new Date().getFullYear()}-01-01`;
@@ -21,11 +22,11 @@ export const formatTrialDisplayAmount = (value: number, dimension: LedgerDimensi
 };
 
 export const TrialBalanceView = React.memo(({ entries }: { entries: Entry[] }) => {
-  const { accountsDb, canonicalAccounts, costCalculationRun } = useAppStore();
+  const { accountsDb } = useAppStore();
   const [from, setFrom] = useState(yearStart); const [to, setTo] = useState(today); const [custom, setCustom] = useState(false);
   const [open, setOpen] = useState<Record<LedgerDimension, boolean>>({ cash: true, gold: false, silver: false, quantity: false });
-  const costTimeline = costCalculationRun.status === 'valid' && costCalculationRun.timeline?.valid ? costCalculationRun.timeline : null;
-  const reports = useMemo(() => (['cash', 'gold', 'silver', 'quantity'] as LedgerDimension[]).map(dimension => buildTrialBalanceReport(entries, accountsDb.filter(account => account.isActive !== false), dimension, from, to, canonicalAccounts, { enableFinancialProjection: true, costTimeline })), [entries, accountsDb, from, to, canonicalAccounts, costTimeline]);
+  const computed = useMemo(() => computePeriodAccountBalances(entries, accountsDb.filter(account => account.isActive !== false), from, to), [entries, accountsDb, from, to]);
+  const reports = useMemo(() => (['cash', 'gold', 'silver', 'quantity'] as LedgerDimension[]).map(dimension => buildTrialBalanceReport(computed, dimension)), [computed]);
   const exportCsv = () => { const csv = buildTrialBalanceCsv(reports, from, to); const url = URL.createObjectURL(new Blob([csv], { type: 'text/csv;charset=utf-8' })); const link = document.createElement('a'); link.href = url; link.download = `trial-balance_${from}_${to}.csv`; link.click(); URL.revokeObjectURL(url); };
   return <section className="space-y-3 pb-[calc(var(--bottom-nav-height,5rem)+env(safe-area-inset-bottom)+24px)]" dir="rtl">
     <section className="space-y-3 rounded-2xl border border-[#1a1e2a] bg-[#0e1018] p-3"><div className="flex items-center justify-between gap-2"><p className="text-xs text-[#8a8172]">{'\u0627\u0644\u0641\u062a\u0631\u0629'}: {from} — {to}</p><button type="button" onClick={exportCsv} className="flex min-h-10 items-center gap-1 rounded-lg px-2 text-xs font-bold text-[#c9a84c] focus:outline-none focus:ring-2 focus:ring-[#c9a84c]"><Download className="h-4 w-4" />{'\u062a\u0635\u062f\u064a\u0631 CSV'}</button></div><div className="flex gap-2"><button type="button" onClick={() => { setCustom(false); setFrom(yearStart()); setTo(today()); }} className={`rounded-lg px-3 py-2 text-xs font-bold ${!custom ? 'bg-[#c9a84c] text-[#080a0f]' : 'bg-[#080a0f] text-[#ddd8cc]'}`}>{'\u0627\u0644\u0633\u0646\u0629 \u062d\u062a\u0649 \u0627\u0644\u064a\u0648\u0645'}</button><button type="button" onClick={() => setCustom(true)} className={`rounded-lg px-3 py-2 text-xs font-bold ${custom ? 'bg-[#c9a84c] text-[#080a0f]' : 'bg-[#080a0f] text-[#ddd8cc]'}`}>{'\u0641\u062a\u0631\u0629 \u0645\u062e\u0635\u0635\u0629'}</button></div>{custom && <div className="grid grid-cols-2 gap-2"><label className="text-xs text-[#8a8172]">{'\u0645\u0646'}<input type="date" value={from} max={to} onChange={event => setFrom(event.target.value)} className="mt-1 w-full rounded-lg bg-[#080a0f] p-2 text-[#ddd8cc]" /></label><label className="text-xs text-[#8a8172]">{'\u0625\u0644\u0649'}<input type="date" value={to} min={from} onChange={event => setTo(event.target.value)} className="mt-1 w-full rounded-lg bg-[#080a0f] p-2 text-[#ddd8cc]" /></label></div>}</section>

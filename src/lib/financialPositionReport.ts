@@ -1,7 +1,5 @@
-import type { Account, Entry } from '../types';
 import {
-  calculateGoldOwnershipPosition,
-  computeAccountBalances,
+  goldOwnershipPositionFromBalances,
   type AccountBalanceResult,
   type AccountClassificationWarning,
   type ComputeAccountBalancesResult,
@@ -35,6 +33,7 @@ export interface FinancialPositionDimension {
   uncategorized: FinancialPositionDetail[];
 }
 export interface FinancialPositionReport extends Record<IncomeStatementMetric, FinancialPositionDimension> {
+  balanceEngineVersion: string;
   goldPosition: GoldOwnershipPosition;
   balanceDiagnostics: {
     legacyNameMatchedEntries: LegacyMatchWarning[];
@@ -132,18 +131,18 @@ const buildDimension = (
   };
 };
 
+/** Pure projection over the central balance engine result. */
 export const buildFinancialPositionReport = (
-  entries: Entry[],
-  accounts: Account[],
+  computed: ComputeAccountBalancesResult,
   equityStatement: EquityStatementReport,
 ): FinancialPositionReport => {
-  const computed = computeAccountBalances(entries, accounts);
   return {
+    balanceEngineVersion: computed.balanceEngineVersion,
     cash: buildDimension(computed, 'cash', equityStatement.cash),
     gold: buildDimension(computed, 'gold', equityStatement.gold),
     silver: buildDimension(computed, 'silver', equityStatement.silver),
     accs: buildDimension(computed, 'accs', equityStatement.accs),
-    goldPosition: calculateGoldOwnershipPosition(entries, accounts),
+    goldPosition: goldOwnershipPositionFromBalances(computed),
     balanceDiagnostics: {
       legacyNameMatchedEntries: computed.legacyNameMatchedEntries,
       unclassifiedAccounts: computed.unclassifiedAccounts,

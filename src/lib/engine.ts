@@ -14,6 +14,9 @@ import { canCalculateGoldEquivalent21, calculateGoldEquivalent21 } from './goldE
 import { rebuildCostTimeline, getOperationId, compareEntriesForCost, ACCESSORY_QUANTITY_SCALE, type CostTimelineResult, type OperationCostResult, type OpeningCostConfig } from './weightedAverageCost';
 import { getAccountTypeDetails } from '../utils/accountLogic';
 import { isOpeningEntry } from './openingEntry';
+import { SEED_ACCOUNTS } from '../migrationData';
+import { buildLegacyLedgerLegs } from './legacyLedger';
+import { resolveBalanceDirection } from './balanceDirection';
 
 export const KARAT_MULT: Record<string, number> = { '18': 18 / 21, '21': 1, '24': 24 / 21, silver: 1 };
 
@@ -117,7 +120,7 @@ export const getEntryKaratKey = (entry: Entry, debitAcc?: Account, creditAcc?: A
 
 export const getEntryArabicWeight = (entry: Entry, account?: Account): number => {
   const weight = parseWeight(entry.weight);
-  if (weight <= 0) return 0;
+  if (weight <= 0) return parseWeight(entry.arabicWeight);
   if (isAccessoryAccount(account)) return 0;
   if (account?.metal === 'silver') return weight;
 
@@ -177,6 +180,7 @@ export interface InventorySnapshot {
 }
 
 export interface InventoryEngineResult {
+  balanceEngineVersion: string;
   snapshots: Record<string, InventorySnapshot>;
   merchantWeightLiabilities: Record<string, InventorySnapshot>;
   goldWeightLiabilities: Record<string, InventorySnapshot>;
@@ -268,7 +272,7 @@ export function processInventory(entries: Entry[], accountsDb: Account[]): Inven
     netShopGoldOwnership21: physicalGoldInventory21 - netGoldLiabilities21,
   };
 
-  return { snapshots, merchantWeightLiabilities, goldWeightLiabilities, goldPosition };
+  return { balanceEngineVersion: BALANCE_ENGINE_VERSION, snapshots, merchantWeightLiabilities, goldWeightLiabilities, goldPosition };
 }
 
 export const calculateGoldOwnershipPosition = (entries: Entry[], accountsDb: Account[]): GoldOwnershipPosition =>
@@ -286,6 +290,8 @@ export interface AccountBalanceResult {
   subType: CanonicalAccountSubType;
   isMerchant: boolean;
   merchantDirection?: MerchantDirection;
+  /** Presentation direction derived from the signed balance, never from metadata alone. */
+  actualMerchantDirection?: MerchantDirection | 'settled';
   metal?: ExplicitWeightedMetal | null;
 }
 
@@ -310,12 +316,28 @@ export interface AccountClassificationWarning {
   message: string;
 }
 
+export type BalanceMovementDimension = 'cash' | 'gold' | 'silver' | 'quantity';
+export interface AccountBalanceMovementAmounts { debit: number; credit: number; }
+export type AccountBalanceMovements = Record<BalanceMovementDimension, AccountBalanceMovementAmounts>;
+
 export interface ComputeAccountBalancesResult {
+  balanceEngineVersion: string;
   balances: Map<string, AccountBalanceResult>;
+  movements: Map<string, AccountBalanceMovements>;
   legacyNameMatchedEntries: LegacyMatchWarning[];
   unclassifiedAccounts: AccountClassificationWarning[];
   classificationConflicts: AccountClassificationWarning[];
+  legacyFallbackReport: {
+    nameMatchCount: number;
+    unclassifiedAccountCount: number;
+    classificationConflictCount: number;
+  };
 }
+
+export type AccountBalancesResult = ComputeAccountBalancesResult;
+export const BALANCE_ENGINE_VERSION = '1.0.0';
+
+const normalizeBalanceAccountName = (value: string): string => value.normalize('NFKC').trim().toLowerCase().replace(/[^\p{L}\p{N}]+/gu, '');
 
 interface NormalizedBalanceClassification {
   mainType: CanonicalMainType | 'unclassified';
@@ -348,23 +370,34 @@ const normalizeStoredMainType = (value?: string): CanonicalMainType | undefined 
   return values[normalized];
 };
 
+const legacyStructuralMetal = (account: Account): ExplicitWeightedMetal | null | undefined => {
+  if (account.metal === 'gold' || account.metal === 'silver' || account.metal === null) return account.metal;
+  const nature = String(account.balanceNature ?? '').trim().toLowerCase();
+  if (nature === 'gold' || nature.includes('جرام ذهب')) return 'gold';
+  if (nature === 'silver' || nature.includes('جرام فضة')) return 'silver';
+  return undefined;
+};
+
 const inferStructuralSubType = (
   account: Account,
   normalizedMainType?: CanonicalMainType,
 ): CanonicalAccountSubType | undefined => {
+  const structuralMetal = legacyStructuralMetal(account);
   if (account.is_inventory) {
     if (account.type === 'accessory') return 'inventory_accessory';
-    if (account.metal === 'gold') return 'inventory_gold';
-    if (account.metal === 'silver') return 'inventory_silver';
+    if (structuralMetal === 'gold') return 'inventory_gold';
+    if (structuralMetal === 'silver') return 'inventory_silver';
   }
   if (account.type === 'cash') return 'cash';
-  if (account.type === 'merchant' && account.metal === 'gold') return 'merchant_gold';
-  if (account.type === 'merchant' && account.metal === 'silver') return 'merchant_silver';
+  if (account.type === 'merchant' && structuralMetal === 'gold') return 'merchant_gold';
+  if (account.type === 'merchant' && structuralMetal === 'silver') return 'merchant_silver';
   if (account.subType === '\u0627\u0635\u0648\u0644 \u062b\u0627\u0628\u062a\u0629') return 'fixed_asset';
   if (account.subType === '\u0631\u0627\u0633 \u0627\u0644\u0645\u0627\u0644') return 'capital';
   if (account.type === 'other'
     && ['\u0630\u0645\u0645 \u0645\u062f\u064a\u0646\u0629', '\u0630\u0645\u0645 \u062f\u0627\u0626\u0646\u0629'].includes(account.subType)
     && !account.metal) return 'customer';
+  if (normalizedMainType === 'equity') return account.subType.toLowerCase().includes('withdraw') ? 'withdrawals' : 'capital';
+  if (normalizedMainType === 'liabilities' && structuralMetal) return 'other_due';
   if (normalizedMainType === 'revenue') return 'revenue';
   if (normalizedMainType === 'expense') return 'expense';
   return undefined;
@@ -404,7 +437,7 @@ const normalizeBalanceClassification = (account: Account): NormalizedBalanceClas
   const structuralMetal: ExplicitWeightedMetal | null | undefined =
     ['merchant_gold', 'inventory_gold'].includes(subType) ? 'gold'
       : ['merchant_silver', 'inventory_silver'].includes(subType) ? 'silver'
-        : account.metal;
+        : legacyStructuralMetal(account);
   const inferredMainType = expectedMainType(subType, merchantDirection);
   const mainType = storedMainType ?? inferredMainType;
 
@@ -507,16 +540,47 @@ const explicitEntryMetal = (entry: Entry): ExplicitWeightedMetal | undefined => 
   return undefined;
 };
 
+const canonicalEntryKey = (entry: Entry): string => {
+  const operationNumber = entry.operationNo ?? entry.invoiceNumber ?? entry.seq ?? '';
+  const entryId = entry.id ?? entry.legacyOperationId ?? entry.legacyOperationNo ?? '';
+  return [entry.date ?? '', String(operationNumber), String(entryId), entry.debitAccountId ?? entry.debit ?? '', entry.creditAccountId ?? entry.credit ?? ''].join('\u0000');
+};
+
+export const compareBalanceEntries = (left: Entry, right: Entry): number =>
+  canonicalEntryKey(left).localeCompare(canonicalEntryKey(right), 'en');
+
+const compareAccounts = (left: Account, right: Account): number =>
+  balanceAccountId(left).localeCompare(balanceAccountId(right), 'en') || left.name.localeCompare(right.name, 'ar');
+
+const numericBalance = (balance: AccountBalanceResult): number => {
+  if (balance.metal === 'gold') return balance.goldActualBalance;
+  if (balance.metal === 'silver') return balance.silverBalance;
+  return balance.cashBalance || balance.quantityBalance;
+};
+
+const actualMerchantDirection = (balance: AccountBalanceResult): MerchantDirection | 'settled' | undefined => {
+  if (!balance.merchantDirection) return undefined;
+  const direction = resolveBalanceDirection({ signedBalance: numericBalance(balance), mainType: balance.mainType });
+  if (direction === 'settled') return 'settled';
+  return direction === 'credit' ? 'payable' : 'receivable';
+};
+
 export function computeAccountBalances(
   entries: Entry[],
   accounts: Account[],
 ): ComputeAccountBalancesResult {
   const balances = new Map<string, AccountBalanceResult>();
+  const movements = new Map<string, AccountBalanceMovements>();
+  const emptyMovements = (): AccountBalanceMovements => ({
+    cash: { debit: 0, credit: 0 }, gold: { debit: 0, credit: 0 },
+    silver: { debit: 0, credit: 0 }, quantity: { debit: 0, credit: 0 },
+  });
   const legacyNameMatchedEntries: LegacyMatchWarning[] = [];
   const unclassifiedAccounts: AccountClassificationWarning[] = [];
   const classificationConflicts: AccountClassificationWarning[] = [];
   const warningKeys = new Set<string>();
-  const byId = new Map(accounts.filter(account => account.id).map(account => [account.id as string, account]));
+  const sortedAccounts = [...accounts].sort(compareAccounts);
+  const byId = new Map(sortedAccounts.filter(account => account.id).map(account => [account.id as string, account]));
   const byName = new Map<string, Account[]>();
 
   const pushClassificationWarning = (
@@ -529,14 +593,16 @@ export function computeAccountBalances(
     target.push(warning);
   };
 
-  for (const account of accounts) {
-    const named = byName.get(account.name) ?? [];
+  for (const account of sortedAccounts) {
+    const nameKey = normalizeBalanceAccountName(account.name);
+    const named = byName.get(nameKey) ?? [];
     named.push(account);
-    byName.set(account.name, named);
+    byName.set(nameKey, named);
 
     const accountId = balanceAccountId(account);
     const classification = normalizeBalanceClassification(account);
     balances.set(accountId, emptyAccountBalance(accountId, account.name, classification));
+    movements.set(accountId, emptyMovements());
 
     if (classification.conflict) {
       pushClassificationWarning(classificationConflicts, {
@@ -570,6 +636,7 @@ export function computeAccountBalances(
       unclassifiedReason: message,
     });
     balances.set(accountId, result);
+    movements.set(accountId, emptyMovements());
     pushClassificationWarning(unclassifiedAccounts, {
       accountId,
       accountName,
@@ -579,32 +646,10 @@ export function computeAccountBalances(
     return result;
   };
 
-  const validEntries = entries.filter(isIncludedBalanceEntry);
+  // Firestore query order is deliberately ignored. Every accumulation uses this canonical order.
+  const validEntries = entries.filter(isIncludedBalanceEntry).sort(compareBalanceEntries);
 
-  for (const account of accounts.filter(account => account.is_inventory)) {
-    const accountId = balanceAccountId(account);
-    const result = balances.get(accountId);
-    if (!result || result.mainType === 'unclassified') continue;
-    const inventoryEntries = validEntries.filter(entry => {
-      const debitMatches = entry.debitAccountId
-        ? entry.debitAccountId === account.id
-        : entry.debit === account.name && (byName.get(entry.debit)?.length ?? 0) === 1;
-      const creditMatches = entry.creditAccountId
-        ? entry.creditAccountId === account.id
-        : entry.credit === account.name && (byName.get(entry.credit)?.length ?? 0) === 1;
-      return debitMatches || creditMatches;
-    });
-    const snapshot = processInventory(inventoryEntries, [account]).snapshots[account.name];
-    if (!snapshot) continue;
-    if (account.type === 'accessory') {
-      result.quantityBalance = snapshot.count;
-    } else if (account.metal === 'silver') {
-      result.silverBalance = snapshot.weight;
-    } else if (account.metal === 'gold') {
-      result.goldActualBalance = snapshot.weight;
-      result.goldE21Balance = snapshot.arabicWeight;
-    }
-  }
+
 
   const resolveSide = (
     entry: Entry,
@@ -625,7 +670,7 @@ export function computeAccountBalances(
       };
     }
 
-    const candidates = byName.get(name) ?? [];
+    const candidates = byName.get(normalizeBalanceAccountName(name)) ?? [];
     if (candidates.length === 1) {
       const account = candidates[0];
       legacyNameMatchedEntries.push({
@@ -637,6 +682,19 @@ export function computeAccountBalances(
         reason: 'missing_account_id_unique_name_match',
       });
       return { account, balance: balances.get(balanceAccountId(account))! };
+    }
+
+    const legacySeed = SEED_ACCOUNTS.find(seed => normalizeBalanceAccountName(seed.name) === normalizeBalanceAccountName(name));
+    if (legacySeed) {
+      const account = { ...legacySeed, id: `legacy-seed:${normalizeBalanceAccountName(legacySeed.name)}`, userId: 'legacy-fallback' } as Account;
+      const accountId = balanceAccountId(account);
+      if (!balances.has(accountId)) {
+        const classification = normalizeBalanceClassification(account);
+        balances.set(accountId, emptyAccountBalance(accountId, account.name, classification));
+        movements.set(accountId, emptyMovements());
+      }
+      legacyNameMatchedEntries.push({ entryId: entry.id ?? String(entry.seq ?? 'unknown-entry'), side, legacyName: name, accountId, accountName: account.name, reason: 'missing_account_id_unique_name_match' });
+      return { account, balance: balances.get(accountId)! };
     }
 
     const accountId = `legacy-name:${name || '(blank)'}`;
@@ -656,10 +714,17 @@ export function computeAccountBalances(
     const cash = parseCash(entry);
     const weight = parseWeight(entry.weight);
     const count = parseFloat(normalizeNumerals(String(entry.count ?? '0'))) || 0;
-    if (cash === 0 && weight === 0 && count === 0) continue;
+    const goldEquivalent = getEntryArabicWeight(entry);
+    if (cash === 0 && weight === 0 && goldEquivalent === 0 && count === 0) continue;
 
     const debit = resolveSide(entry, 'debit');
     const credit = resolveSide(entry, 'credit');
+    const conversionAccount = entry.karat !== null && entry.karat !== undefined
+      ? undefined
+      : debit.account?.metal === 'gold'
+        ? debit.account
+        : credit.account?.metal === 'gold' ? credit.account : undefined;
+    const sharedGoldEquivalent = getEntryArabicWeight(entry, conversionAccount);
     const movementMetal = explicitEntryMetal(entry);
 
     const apply = (
@@ -669,18 +734,24 @@ export function computeAccountBalances(
       const { account, balance } = resolved;
       const debitSign = naturalDebitSign(balance.mainType);
       const sign = side === 'debit' ? debitSign : -debitSign;
-      if (cash !== 0) balance.cashBalance += cash * sign;
-      if (account?.is_inventory) return;
-
+      const accountMovements = movements.get(balance.accountId)!;
+      if (cash !== 0) {
+        balance.cashBalance += cash * sign;
+        accountMovements.cash[side] += Math.abs(cash);
+      }
       const metal = balance.metal ?? movementMetal;
+      const accountGoldEquivalent = sharedGoldEquivalent;
+      if (accountGoldEquivalent !== 0 && metal === 'gold') accountMovements.gold[side] += Math.abs(accountGoldEquivalent);
+      else if (weight !== 0 && metal === 'silver') accountMovements.silver[side] += Math.abs(weight);
+      if (count !== 0 && (account?.measurementDimension === 'quantity' || account?.type === 'accessory')) accountMovements.quantity[side] += Math.abs(count);
       if (!balance.metal && metal) balance.metal = metal;
-      if (weight !== 0 && metal === 'gold') {
+      if ((weight !== 0 || accountGoldEquivalent !== 0) && metal === 'gold') {
         balance.goldActualBalance += weight * sign;
-        balance.goldE21Balance += getEntryArabicWeight(entry, account) * sign;
+        balance.goldE21Balance += accountGoldEquivalent * sign;
       } else if (weight !== 0 && metal === 'silver') {
         balance.silverBalance += weight * sign;
       }
-      if (count !== 0 && account?.measurementDimension === 'quantity') {
+      if (count !== 0 && (account?.measurementDimension === 'quantity' || account?.type === 'accessory')) {
         balance.quantityBalance += count * sign;
       }
     };
@@ -689,13 +760,121 @@ export function computeAccountBalances(
     apply(credit, 'credit');
   }
 
+  // The historical ledger projection is folded back into the engine here so
+  // reports never rebuild dimensional debit/credit balances independently.
+  const rawMovements = new Map([...movements].map(([accountId, value]) => [accountId, {
+    cash: { ...value.cash }, gold: { ...value.gold }, silver: { ...value.silver }, quantity: { ...value.quantity },
+  }]));
+  const projectedLegs = buildLegacyLedgerLegs(validEntries, sortedAccounts);
+  const balancesByName = new Map<string, AccountBalanceResult[]>();
+  balances.forEach(balance => balancesByName.set(normalizeBalanceAccountName(balance.accountName), [...(balancesByName.get(normalizeBalanceAccountName(balance.accountName)) ?? []), balance]));
+
+  movements.forEach(value => (Object.keys(value) as BalanceMovementDimension[]).forEach(dimension => { value[dimension].debit = 0; value[dimension].credit = 0; }));
+  for (const leg of projectedLegs) {
+    const source = leg.account.sourceAccount;
+    const sourceId = source ? balanceAccountId(source) : undefined;
+    const named = balancesByName.get(normalizeBalanceAccountName(leg.accountName)) ?? [];
+    let balance = sourceId ? balances.get(sourceId) : named.length === 1 ? named[0] : undefined;
+    if (!balance) {
+      const mainType = leg.group === 'expenses' ? 'expense' : leg.group;
+      const subType: CanonicalAccountSubType = mainType === 'revenue' ? 'revenue' : mainType === 'expense' ? 'expense' : mainType === 'equity' ? 'capital' : 'unclassified';
+      const accountId = leg.entityId;
+      balance = emptyAccountBalance(accountId, leg.accountName, { mainType, subType, isMerchant: false, metal: leg.dimension === 'gold' || leg.dimension === 'silver' ? leg.dimension : null });
+      balances.set(accountId, balance);
+      movements.set(accountId, emptyMovements());
+      balancesByName.set(normalizeBalanceAccountName(balance.accountName), [balance]);
+    }
+    const activity = movements.get(balance.accountId)!;
+    const amount = leg.dimension === 'gold' && leg.entry.goldEquivalent21Snapshot
+      ? Math.abs(getEntryArabicWeight(leg.entry, leg.account.sourceAccount))
+      : leg.amount;
+    activity[leg.dimension][leg.side] += amount;
+
+  }
+
+  movements.forEach((value, accountId) => {
+    const raw = rawMovements.get(accountId);
+    if (!raw) return;
+    (Object.keys(value) as BalanceMovementDimension[]).forEach(dimension => {
+      if (value[dimension].debit === 0 && value[dimension].credit === 0) value[dimension] = raw[dimension];
+    });
+  });
+
+  balances.forEach(balance => {
+    balance.actualMerchantDirection = actualMerchantDirection(balance);
+  });
+  legacyNameMatchedEntries.sort((a, b) => a.entryId.localeCompare(b.entryId, 'en') || (a.side === b.side ? 0 : a.side === 'debit' ? -1 : 1));
+  unclassifiedAccounts.sort((a, b) => a.accountId.localeCompare(b.accountId, 'en'));
+  classificationConflicts.sort((a, b) => a.accountId.localeCompare(b.accountId, 'en'));
+
   return {
+    balanceEngineVersion: BALANCE_ENGINE_VERSION,
     balances,
+    movements,
     legacyNameMatchedEntries,
     unclassifiedAccounts,
     classificationConflicts,
+    legacyFallbackReport: {
+      nameMatchCount: legacyNameMatchedEntries.length,
+      unclassifiedAccountCount: unclassifiedAccounts.length,
+      classificationConflictCount: classificationConflicts.length,
+    },
   };
 }
+
+const stableHash = (value: string): string => {
+  let hash = 0x811c9dc5;
+  for (let index = 0; index < value.length; index += 1) {
+    hash ^= value.charCodeAt(index);
+    hash = Math.imul(hash, 0x01000193);
+  }
+  return (hash >>> 0).toString(16).padStart(8, '0');
+};
+
+const fixed = (value: number): string => (Number.isFinite(value) ? value : 0).toFixed(6);
+
+export const buildBalanceEngineGoldenHashes = (result: AccountBalancesResult): {
+  structuralHash: string;
+  numericHash: string;
+} => {
+  const rows = [...result.balances.values()];
+  const structural = rows.map(row => [row.accountId, row.accountName, row.mainType, row.subType, row.metal ?? '', row.isMerchant ? '1' : '0'].join('|'));
+  const numeric = rows.map(row => [row.accountId, fixed(row.cashBalance), fixed(row.goldActualBalance), fixed(row.goldE21Balance), fixed(row.silverBalance), fixed(row.quantityBalance)].join('|'));
+  return {
+    structuralHash: stableHash([result.balanceEngineVersion, rows.length, 'assets,liabilities,equity,revenue,expense,unclassified', ...structural].join('\n')),
+    numericHash: stableHash([result.balanceEngineVersion, ...numeric].join('\n')),
+  };
+};
+
+export interface PeriodAccountBalancesResult {
+  balanceEngineVersion: string;
+  opening: AccountBalancesResult;
+  period: AccountBalancesResult;
+  closing: AccountBalancesResult;
+}
+
+export const computePeriodAccountBalances = (
+  entries: Entry[], accounts: Account[], startDate: string, endDate: string,
+): PeriodAccountBalancesResult => {
+  const openingEntries = entries.filter(entry => isOpeningEntry(entry) || (entry.date ?? '') < startDate);
+  const periodEntries = entries.filter(entry => !isOpeningEntry(entry) && (entry.date ?? '') >= startDate && (entry.date ?? '') <= endDate);
+  return {
+    balanceEngineVersion: BALANCE_ENGINE_VERSION,
+    opening: computeAccountBalances(openingEntries, accounts),
+    period: computeAccountBalances(periodEntries, accounts),
+    closing: computeAccountBalances([...openingEntries, ...periodEntries], accounts),
+  };
+};
+
+export const goldOwnershipPositionFromBalances = (result: AccountBalancesResult): GoldOwnershipPosition => {
+  let physicalGoldInventory21 = 0;
+  let netGoldLiabilities21 = 0;
+  result.balances.forEach(balance => {
+    if (balance.subType === 'inventory_gold') physicalGoldInventory21 += balance.goldE21Balance;
+    if (balance.mainType === 'liabilities' && balance.metal === 'gold') netGoldLiabilities21 += balance.goldE21Balance;
+  });
+  return { physicalGoldInventory21, netGoldLiabilities21, netShopGoldOwnership21: physicalGoldInventory21 - netGoldLiabilities21 };
+};
 
 export interface CostBasisEngine {
   getCost: (accNameOrId: string) => number;

@@ -1,8 +1,9 @@
-﻿import { useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import type { Account, Entry } from '../types';
 import { buildInventoryCycleReport, type InventoryCycleFilters, type InventoryCycleReport, type InventoryCycleTab } from '../lib/inventoryCycleReport';
 import type { OpeningCostConfig } from '../lib/weightedAverageCost';
 import type { InventoryWarningState } from '../lib/inventoryCycleWarnings';
+import { BALANCE_ENGINE_VERSION } from '../lib/engine';
 import {
   createInventoryCycleFingerprint,
   findEarliestAffectedOperationId,
@@ -19,6 +20,7 @@ const makeLoadingReport = (args: {
   filters: InventoryCycleFilters;
   meta: InventoryCycleCacheMeta;
 }): InventoryCycleReport => ({
+  balanceEngineVersion: BALANCE_ENGINE_VERSION,
   tab: args.tab,
   filters: args.filters,
   cache: {

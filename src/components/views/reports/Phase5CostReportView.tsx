@@ -1,3 +1,4 @@
+import { roundToInteger } from '../../../lib/formatting';
 import React, { useMemo, useState } from 'react';
 import { AlertTriangle, RefreshCw } from 'lucide-react';
 import { useAppStore } from '../../../store';
@@ -140,9 +141,9 @@ export const Phase5CostReportView: React.FC<{ initialSection?: 'inventory' | 'pr
             const units = accessory ? state.accessoryQuantityUnits : state.standardizedQuantityUnits;
             const bookCostMinor = state.remainingTotalCostMinor;
             const marketValueMinor = state.kind === 'gold'
-              ? Math.round((state.standardizedQuantityUnits / 100) * goldPrice * 100)
+              ? roundToInteger((state.standardizedQuantityUnits / 100) * goldPrice * 100)
               : state.kind === 'silver'
-                ? Math.round((state.standardizedQuantityUnits / 100) * silverPrice * 100)
+                ? roundToInteger((state.standardizedQuantityUnits / 100) * silverPrice * 100)
                 : null;
             const unrealizedMinor = marketValueMinor === null ? null : marketValueMinor - bookCostMinor;
             return (

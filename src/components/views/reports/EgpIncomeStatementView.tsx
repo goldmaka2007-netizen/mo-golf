@@ -1,3 +1,4 @@
+import { formatWeight } from '../../../lib/formatting';
 import React, { useMemo, useState } from 'react';
 import { AlertTriangle, Download, TrendingUp } from 'lucide-react';
 import type { Entry } from '../../../types';
@@ -54,6 +55,6 @@ export const IncomeStatementView = React.memo(({ entries }: { entries: Entry[] }
       <Row label="صافي الربح (Net Profit)" value={data.netProfit} total />
     </div>
     <label className="flex items-center gap-2 rounded-xl bg-[#0e1018] p-3 text-xs text-[#8a8172]"><input type="checkbox" checked={showWeight} onChange={e => setShowWeight(e.target.checked)} />عرض الوزن المباع كمعلومة فقط</label>
-    {showWeight && <div className="grid grid-cols-2 gap-2 text-xs"><div className="rounded-xl bg-[#0e1018] p-3">ذهب مباع: <b>{data.soldWeight.gold.toFixed(3)} جم</b></div><div className="rounded-xl bg-[#0e1018] p-3">فضة مباعة: <b>{data.soldWeight.silver.toFixed(3)} جم</b></div></div>}
+    {showWeight && <div className="grid grid-cols-2 gap-2 text-xs"><div className="rounded-xl bg-[#0e1018] p-3">ذهب مباع: <b>{formatWeight(data.soldWeight.gold, 3)} جم</b></div><div className="rounded-xl bg-[#0e1018] p-3">فضة مباعة: <b>{formatWeight(data.soldWeight.silver, 3)} جم</b></div></div>}
   </div>;
 });

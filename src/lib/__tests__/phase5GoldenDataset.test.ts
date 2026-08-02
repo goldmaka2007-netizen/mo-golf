@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
+  calculateNormalizedSourceDatasetSha256,
   calculatePhase5SourceDatasetSha256,
   createGoldenResultFingerprint,
   loadPhase5GoldenBaseline,
@@ -228,5 +229,19 @@ describe('Phase 5 Golden Dataset Regression — phase5-cost-baseline-v2-sanitize
     );
     expect(PHASE5_COST_CATALOG_VERSION)
       .toBe(`${INVENTORY_COST_TAXONOMY_VERSION}:${INVENTORY_COST_CALCULATION_VERSION}`);
+
+    const lf = Buffer.from('{\n  "entries": [{"id": 1}, {"id": 2}]\n}\n');
+    const crlf = Buffer.from('{\r\n  "entries": [{"id": 1}, {"id": 2}]\r\n}\r\n');
+    const cr = Buffer.from('{\r  "entries": [{"id": 1}, {"id": 2}]\r}\r');
+    const numericChange = Buffer.from('{\n  "entries": [{"id": 1}, {"id": 3}]\n}\n');
+    const reordered = Buffer.from('{\n  "entries": [{"id": 2}, {"id": 1}]\n}\n');
+    const removed = Buffer.from('{\n  "entries": [{"id": 1}]\n}\n');
+    const expectedSha = calculateNormalizedSourceDatasetSha256(lf);
+
+    expect(calculateNormalizedSourceDatasetSha256(crlf)).toBe(expectedSha);
+    expect(calculateNormalizedSourceDatasetSha256(cr)).toBe(expectedSha);
+    expect(calculateNormalizedSourceDatasetSha256(numericChange)).not.toBe(expectedSha);
+    expect(calculateNormalizedSourceDatasetSha256(reordered)).not.toBe(expectedSha);
+    expect(calculateNormalizedSourceDatasetSha256(removed)).not.toBe(expectedSha);
   });
 });

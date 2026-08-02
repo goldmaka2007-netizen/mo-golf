@@ -1,3 +1,4 @@
+import { formatDecimal, formatWeight } from '../../../lib/formatting';
 import React, { useMemo } from 'react';
 import { 
   Layers, 
@@ -229,7 +230,7 @@ export const AnalysisReportView = React.memo(({ entries }: { entries: Entry[] })
                             <span className="text-left font-bold text-red-400/70">{d.expenses.toLocaleString()} ج</span>
                             <span className="text-[#5a5548]">صافي تغير الوزن (جم عربي):</span>
                             <span className={cn("text-left font-bold", (d.goldBuy - d.goldSell) >= 0 ? "text-[#c9a84c]" : "text-red-400")}>
-                                {(d.goldBuy - d.goldSell).toFixed(2)} جم
+                                {formatWeight(d.goldBuy - d.goldSell)} جم
                             </span>
                         </div>
                     </div>
@@ -254,14 +255,14 @@ export const AnalysisReportView = React.memo(({ entries }: { entries: Entry[] })
                             <div className="grid grid-cols-2 gap-4 text-xs">
                                 <div className="space-y-2">
                                     <div className="text-[#5a5548]">المبيعات:</div>
-                                    <div className="font-bold text-sm">{d.sb.toLocaleString()} ج / {d.sw.toFixed(2)} جم</div>
+                                    <div className="font-bold text-sm">{d.sb.toLocaleString()} ج / {formatWeight(d.sw)} جم</div>
                                     <div className="text-[#5a5548]">المشتريات:</div>
-                                    <div className="font-bold text-sm">{d.pb.toLocaleString()} ج / {d.pw.toFixed(2)} جم</div>
+                                    <div className="font-bold text-sm">{d.pb.toLocaleString()} ج / {formatWeight(d.pw)} جم</div>
                                 </div>
                                 <div className="space-y-2 text-left">
                                     <div className="text-[#5a5548]">الهامش:</div>
                                     <div className={cn("font-bold text-sm", margin >= 0 ? "text-green-400" : "text-red-400")}>
-                                        {margin.toLocaleString()} ج ({marginPct.toFixed(1)}%)
+                                        {margin.toLocaleString()} ج ({formatDecimal(marginPct, 1)}%)
                                     </div>
                                     <div className="text-[#5a5548]">متوسط سعر البيع:</div>
                                     <div className="font-bold text-sm text-[#c9a84c]">
@@ -316,13 +317,13 @@ export const AnalysisReportView = React.memo(({ entries }: { entries: Entry[] })
                         />
                     </svg>
                     <div className="absolute inset-0 flex flex-col items-center justify-center">
-                        <span className="text-xl font-black text-[#c9a84c]">{tefit.ratio.toFixed(1)}%</span>
+                        <span className="text-xl font-black text-[#c9a84c]">{formatDecimal(tefit.ratio, 1)}%</span>
                         <span className="text-[10px] text-[#5a5548]">نسبة التيفيت</span>
                     </div>
                 </div>
                 <div className="flex-1 space-y-3 text-center md:text-right">
                     <p className="text-sm text-[#ddd8cc] leading-relaxed">
-                        إجمالي الوزن المحول لكسر: <span className="text-[#c9a84c] font-bold">{tefit.total.toFixed(2)} جم</span>
+                        إجمالي الوزن المحول لكسر: <span className="text-[#c9a84c] font-bold">{formatWeight(tefit.total)} جم</span>
                     </p>
                     <p className="text-xs text-[#5a5548] italic leading-relaxed">
                         هذه النسبة تمثل حجم المشغولات التي تم "تكسيرها" لتجهيزها صبي أو بيعها كذهب خام. النسبة الصحية تتراوح عادة بين 5-15% من المشتريات.
@@ -346,7 +347,7 @@ export const AnalysisReportView = React.memo(({ entries }: { entries: Entry[] })
                                 <div className="flex justify-between text-xs">
                                     <span className="text-[#ddd8cc]">{name}</span>
                                     <span className={cn("font-bold", pct > 50 ? "text-red-500" : "text-[#5a5548]")}>
-                                        {val.toLocaleString()} ج ({pct.toFixed(0)}%)
+                                        {val.toLocaleString()} ج ({formatDecimal(pct, 0)}%)
                                     </span>
                                 </div>
                                 <div className="h-2 bg-[#1a1e2a] rounded-full overflow-hidden">
@@ -405,11 +406,11 @@ export const AnalysisReportView = React.memo(({ entries }: { entries: Entry[] })
                     </thead>
                     <tbody className="divide-y divide-[#1a1e2a]">
                         {[
-                            { name: "التدفقات النقدية التشغيلية", val: `${((exec.rawMargin / (exec.salesCash || 1)) * 100).toFixed(1)}%`, score: "جيد" },
+                            { name: "التدفقات النقدية التشغيلية", val: `${formatDecimal((exec.rawMargin / (exec.salesCash || 1)) * 100, 1)}%`, score: "جيد" },
                             { name: "متوسط المبيعات اليومي", val: exec.dailyAvg.toLocaleString(), score: exec.dailyAvg > 10000 ? "ممتاز" : "جيد" },
-                            { name: "كفاءة المصاريف", val: `${((totalExpenses / (exec.salesCash || 1)) * 100).toFixed(1)}%`, score: (totalExpenses/exec.salesCash) < 0.1 ? "ممتاز" : "جيد" },
+                            { name: "كفاءة المصاريف", val: `${formatDecimal((totalExpenses / (exec.salesCash || 1)) * 100, 1)}%`, score: (totalExpenses/exec.salesCash) < 0.1 ? "ممتاز" : "جيد" },
                             { name: "سيولة الخزنة", val: exec.treasuryBalance.toLocaleString(), score: "جيد" },
-                            { name: "نسبة التيفيت", val: `${tefit.ratio.toFixed(1)}%`, score: tefit.ratio < 20 ? "جيد" : "يحتاج تحسين" },
+                            { name: "نسبة التيفيت", val: `${formatDecimal(tefit.ratio, 1)}%`, score: tefit.ratio < 20 ? "جيد" : "يحتاج تحسين" },
                             { name: "معدل دوران المخزون", val: "N/A", score: "جيد" },
                             { name: "تغطية الأصول للخصوم", val: "100%", score: "ممتاز" },
                             { name: "ربحية الجرام (18)", val: "62 ج/جم", score: "جيد" },

@@ -1,3 +1,4 @@
+import { formatWeight } from '../../lib/formatting';
 import React, { useMemo } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
@@ -23,8 +24,7 @@ import { cn } from '../../lib/utils';
 import { db, auth } from '../../firebase';
 import { doc, setDoc } from 'firebase/firestore';
 import { useAppStore } from '../../store';
-import { calculateGoldOwnershipPosition, type GoldOwnershipPosition } from '../../lib/engine';
-import { buildOperationalProjection } from '../../lib/operationalProjection';
+import { computeAccountBalances, goldOwnershipPositionFromBalances, type GoldOwnershipPosition } from '../../lib/engine';
 
 interface KPICardProps {
   icon: React.ReactNode;
@@ -49,7 +49,7 @@ interface GoldSummaryCardProps {
   onClick: () => void;
 }
 
-const formatGold21 = (value: number) => `${value.toFixed(2)} جم`;
+const formatGold21 = (value: number) => formatWeight(value, 2, true);
 
 const GoldSummaryCard = React.memo(({ position, onClick }: GoldSummaryCardProps) => {
   const liabilityContext = position.netGoldLiabilities21 > 0 ? 'على المحل' : position.netGoldLiabilities21 < 0 ? 'لصالح المحل' : 'متوازن';
@@ -348,19 +348,19 @@ export const HomeView = React.memo(({
   const todayISO = format(new Date(), 'yyyy-MM-dd');
   const todayCount = entries.filter(e => e.date === todayISO).length;
 
-  const goldPosition = useMemo(() => calculateGoldOwnershipPosition(entries, accountsDb), [entries, accountsDb]);
-  const operationalProjection = useMemo(() => buildOperationalProjection(entries, accountsDb), [entries, accountsDb]);
-
+  const centralBalances = useMemo(() => computeAccountBalances(entries, accountsDb), [entries, accountsDb]);
+  const goldPosition = useMemo(() => goldOwnershipPositionFromBalances(centralBalances), [centralBalances]);
   const totals = useMemo(() => {
     let cash = 0;
-    const cashAccNames = accountsDb.filter(account => account.type === 'cash').map(account => account.name);
-    entries.forEach(entry => {
-      const amount = parseFloat(entry.cash || '0');
-      if (cashAccNames.includes(entry.debit)) cash += amount;
-      if (cashAccNames.includes(entry.credit)) cash -= amount;
+    let silver = 0;
+    let merchantSilver = 0;
+    centralBalances.balances.forEach(balance => {
+      if (balance.subType === 'cash' && balance.mainType === 'assets') cash += balance.cashBalance;
+      if (balance.subType === 'inventory_silver') silver += balance.silverBalance;
+      if (balance.mainType === 'liabilities' && balance.metal === 'silver') merchantSilver += balance.silverBalance;
     });
-    return { cash, silver: operationalProjection.physicalSilverInventoryMovement };
-  }, [entries, accountsDb, operationalProjection.physicalSilverInventoryMovement]);
+    return { cash, silver, merchantSilver };
+  }, [centralBalances]);
 
   const reportShortcuts = [
     { id: 'profit-analysis', label: 'تحليل الربحية والمخزون', icon: <BarChart3 className="w-5 h-5 text-[#c9a84c]" />, desc: 'الأرباح الحقيقية بالمتوسط المتحرك' },
@@ -413,7 +413,7 @@ export const HomeView = React.memo(({
           <KPICard
             icon={<Database className="w-5 h-5" />}
             title="المخزون الفعلي — فضة"
-            value={`${totals.silver.toFixed(2)} جم`}
+            value={formatWeight(totals.silver, 2, true)}
             color="text-[#6a8a9e]"
           />
           <KPICard
@@ -478,19 +478,19 @@ export const HomeView = React.memo(({
           <KPICard
             icon={<Database className="w-4 h-4" />}
             title="المخزون الفعلي — فضة"
-            value={`${totals.silver.toFixed(2)} جم`}
+            value={formatWeight(totals.silver, 2, true)}
             color="text-[#6a8a9e]"
           />
           <KPICard
             icon={<Scale className="w-4 h-4" />}
             title="التزامات التجار — فضة"
-            value={`${operationalProjection.merchantWeightLiabilityMovement.silver.toFixed(2)} جم`}
+            value={formatWeight(totals.merchantSilver, 2, true)}
             color="text-[#9e6a6a]"
           />
           <KPICard
             icon={<Database className="w-4 h-4" />}
             title="صافي ملكية المحل — فضة"
-            value={`${(totals.silver - operationalProjection.merchantWeightLiabilityMovement.silver).toFixed(2)} جم`}
+            value={formatWeight(totals.silver - totals.merchantSilver, 2, true)}
             color="text-[#c9a84c]"
           />
         </div>

@@ -1,5 +1,5 @@
 import type { Account, AccountingOperationKind, Entry } from '../types';
-import { affectsInventory, parseCash, processInventory, resolveOperationKind } from './engine';
+import { affectsInventory, computeAccountBalances, parseCash, resolveOperationKind } from './engine';
 import { isValidAccountingEntry } from './canonicalAccounting';
 
 export type CanonicalRuleStatus = 'legacy_only' | 'operational_only' | 'canonical_balanced' | 'unresolved';
@@ -77,33 +77,23 @@ export const buildUnresolvedCanonicalPostings = (entries: Entry[], accounts: Acc
 export const buildOperationalProjection = (entries: Entry[], accounts: Account[]): OperationalProjection => {
   const valid = entries.filter(isValidAccountingEntry);
   const index = accountIndex(accounts);
-  const inventory = processInventory(valid.filter(entry => !isTx42(entry)), accounts);
+  const central = computeAccountBalances(valid.filter(entry => !isTx42(entry)), accounts);
   let cashMovement = 0;
   let merchantWorkmanshipCashMovement = 0;
-  valid.filter(entry => !isTx42(entry)).forEach(entry => {
-    const debit = resolveSide(entry, 'debit', index);
-    const credit = resolveSide(entry, 'credit', index);
-    const cash = Math.abs(parseCash(entry));
-    if (debit?.type === 'cash') cashMovement += cash;
-    if (credit?.type === 'cash') cashMovement -= cash;
-    if (cash > 0 && (debit?.type === 'merchant' || credit?.type === 'merchant')) {
-      merchantWorkmanshipCashMovement += debit?.type === 'merchant' ? -cash : cash;
+  const physical = { gold: 0, gold21: 0, silver: 0, quantity: 0 };
+  const merchant = { gold: 0, silver: 0 };
+  central.balances.forEach(balance => {
+    if (balance.mainType === 'assets' && balance.subType === 'cash') cashMovement += balance.cashBalance;
+    if (balance.isMerchant) merchantWorkmanshipCashMovement += balance.cashBalance;
+    if (balance.subType === 'inventory_gold') {
+      physical.gold += balance.goldActualBalance;
+      physical.gold21 += balance.goldE21Balance;
     }
+    if (balance.subType === 'inventory_silver') physical.silver += balance.silverBalance;
+    if (balance.subType === 'inventory_accessory') physical.quantity += balance.quantityBalance;
+    if (balance.mainType === 'liabilities' && balance.metal === 'gold') merchant.gold += balance.goldE21Balance;
+    if (balance.mainType === 'liabilities' && balance.metal === 'silver') merchant.silver += balance.silverBalance;
   });
-  const physical = Object.entries(inventory.snapshots).reduce((total, [name, snapshot]) => {
-    const account = index.byName.get(name);
-    if (account?.metal === 'gold') total.gold += snapshot.weight;
-    if (account?.metal === 'gold') total.gold21 += snapshot.arabicWeight;
-    if (account?.metal === 'silver' || account?.type === 'silver') total.silver += snapshot.weight;
-    if (account?.type === 'accessory') total.quantity += snapshot.count;
-    return total;
-  }, { gold: 0, gold21: 0, silver: 0, quantity: 0 });
-  const merchant = Object.entries(inventory.merchantWeightLiabilities).reduce((total, [name, snapshot]) => {
-    const account = index.byName.get(name);
-    if (account?.metal === 'silver') total.silver += snapshot.weight;
-    if (account?.metal === 'gold') total.gold += snapshot.arabicWeight;
-    return total;
-  }, { gold: 0, silver: 0 });
   const unresolvedCanonicalPostings = buildUnresolvedCanonicalPostings(valid, accounts);
   return {
     source: 'canonical_operational_projection',

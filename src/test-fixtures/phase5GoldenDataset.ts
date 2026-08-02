@@ -124,8 +124,22 @@ export const loadPhase5GoldenBaseline = (): Phase5GoldenBaseline => {
   };
 };
 
+export const calculateNormalizedSourceDatasetSha256 = (source: Uint8Array): string => {
+  const normalized: number[] = [];
+  for (let index = 0; index < source.length; index += 1) {
+    const byte = source[index];
+    if (byte === 13) {
+      if (source[index + 1] === 10) index += 1;
+      normalized.push(10);
+    } else {
+      normalized.push(byte);
+    }
+  }
+  return createHash('sha256').update(Uint8Array.from(normalized)).digest('hex');
+};
+
 export const calculatePhase5SourceDatasetSha256 = (): string =>
-  createHash('sha256').update(readFileSync(fixtureUrl)).digest('hex');
+  calculateNormalizedSourceDatasetSha256(readFileSync(fixtureUrl));
 
 export const loadPhase5GoldenDataset = (): {
   entries: Entry[];

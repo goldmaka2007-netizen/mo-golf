@@ -1,3 +1,4 @@
+import { formatWeight } from '../../../lib/formatting';
 import React, { useMemo, useState } from 'react';
 import { format, parseISO } from 'date-fns';
 import { ar } from 'date-fns/locale';
@@ -30,8 +31,8 @@ const WeightedBalanceSection = ({ title, balances }: {
             <span className="text-xs text-[#c9a84c]">{balance.direction} - {balance.directionDescription}</span>
           </div>
           <div className="mt-2 grid grid-cols-2 gap-2 text-sm text-[#8a8578]">
-            <span>{balance.metal === 'gold' ? '\u0630\u0647\u0628' : '\u0641\u0636\u0629'}: <b className="font-mono text-[#f8fafc]">{balance.actualBalance.toFixed(3)} {'\u062c\u0645'}</b></span>
-            {balance.metal === 'gold' && <span>{'\u0645\u0643\u0627\u0641\u0626 21'}: <b className="font-mono text-[#f8fafc]">{balance.goldE21Balance.toFixed(3)} {'\u062c\u0645'}</b></span>}
+            <span>{balance.metal === 'gold' ? '\u0630\u0647\u0628' : '\u0641\u0636\u0629'}: <b className="font-mono text-[#f8fafc]">{formatWeight(balance.actualBalance, 3)} {'\u062c\u0645'}</b></span>
+            {balance.metal === 'gold' && <span>{'\u0645\u0643\u0627\u0641\u0626 21'}: <b className="font-mono text-[#f8fafc]">{formatWeight(balance.goldE21Balance, 3)} {'\u062c\u0645'}</b></span>}
           </div>
         </div>
       ))}
@@ -153,9 +154,9 @@ export const ScrapAnalysisView: React.FC<Props> = ({ entries, allEntries }) => {
       )}
 
       <div className="bg-[#1a1e2a]/50 border border-[#1a1e2a] rounded-2xl p-4 text-center text-[#f8fafc] font-bold text-lg max-w-4xl mx-auto shadow-sm">
-        إجمالي الداخل <span className="text-green-400 font-mono">({Math.abs(analysis.totalIn).toFixed(2)})</span> = إجمالي الخارج <span className="text-blue-400 font-mono">({Math.abs(analysis.totalOut).toFixed(2)})</span>
+        إجمالي الداخل <span className="text-green-400 font-mono">({formatWeight(Math.abs(analysis.totalIn))})</span> = إجمالي الخارج <span className="text-blue-400 font-mono">({formatWeight(Math.abs(analysis.totalOut))})</span>
         {selectedMonth === 'all' && (
-          <> + الكسر الموجود حالياً <span className="text-[#c9a84c] font-mono">({Math.abs(analysis.currentBalance).toFixed(2)})</span></>
+          <> + الكسر الموجود حالياً <span className="text-[#c9a84c] font-mono">({formatWeight(Math.abs(analysis.currentBalance))})</span></>
         )}
       </div>
 
@@ -172,7 +173,7 @@ export const ScrapAnalysisView: React.FC<Props> = ({ entries, allEntries }) => {
             <div className="flex justify-between items-center py-3 border-b border-[#1a1e2a]">
               <span className="text-[#8a8578] font-medium">مشتريات ورصيد افتتاحي</span>
               <span className="text-xl font-mono font-bold text-green-400">
-                {analysis.purchased.toFixed(2)} <span className="text-sm text-[#8a8578]">جم</span>
+                {formatWeight(analysis.purchased)} <span className="text-sm text-[#8a8578]">جم</span>
               </span>
             </div>
             
@@ -180,7 +181,7 @@ export const ScrapAnalysisView: React.FC<Props> = ({ entries, allEntries }) => {
               <div className="flex justify-between items-center py-3 border-b border-[#1a1e2a]">
                 <span className="text-[#8a8578] font-medium">أخرى (تسويات ومرتجعات)</span>
                 <span className="text-lg font-mono text-green-400">
-                  {analysis.othersIn.toFixed(2)} <span className="text-sm text-[#8a8578]">جم</span>
+                  {formatWeight(analysis.othersIn)} <span className="text-sm text-[#8a8578]">جم</span>
                 </span>
               </div>
             )}
@@ -188,7 +189,7 @@ export const ScrapAnalysisView: React.FC<Props> = ({ entries, allEntries }) => {
             <div className="pt-4 flex justify-between items-center">
               <span className="text-[#f8fafc] font-bold">إجمالي الداخل</span>
               <span className="text-2xl font-mono font-bold text-green-500">
-                {analysis.totalIn.toFixed(2)} <span className="text-sm text-[#8a8578]">جم</span>
+                {formatWeight(analysis.totalIn)} <span className="text-sm text-[#8a8578]">جم</span>
               </span>
             </div>
           </div>
@@ -209,7 +210,7 @@ export const ScrapAnalysisView: React.FC<Props> = ({ entries, allEntries }) => {
                 <span className="text-xs text-[#8a8578]">يتحول لأصناف جاهزة للبيع</span>
               </div>
               <span className="text-lg font-mono font-bold text-[#f8fafc]">
-                {analysis.toTifit.toFixed(2)} <span className="text-sm text-[#8a8578]">جم</span>
+                {formatWeight(analysis.toTifit)} <span className="text-sm text-[#8a8578]">جم</span>
               </span>
             </div>
 
@@ -219,7 +220,7 @@ export const ScrapAnalysisView: React.FC<Props> = ({ entries, allEntries }) => {
                 <span className="text-xs text-[#8a8578]">تم دفعه للتجار كذهب</span>
               </div>
               <span className="text-lg font-mono font-bold text-[#f8fafc]">
-                {analysis.toMerchants.toFixed(2)} <span className="text-sm text-[#8a8578]">جم</span>
+                {formatWeight(analysis.toMerchants)} <span className="text-sm text-[#8a8578]">جم</span>
               </span>
             </div>
 
@@ -229,7 +230,7 @@ export const ScrapAnalysisView: React.FC<Props> = ({ entries, allEntries }) => {
                 <span className="text-xs text-[#8a8578]">بيع كما هو للعملاء أو التجار</span>
               </div>
               <span className="text-lg font-mono font-bold text-[#f8fafc]">
-                {analysis.soldAsScrap.toFixed(2)} <span className="text-sm text-[#8a8578]">جم</span>
+                {formatWeight(analysis.soldAsScrap)} <span className="text-sm text-[#8a8578]">جم</span>
               </span>
             </div>
 
@@ -237,7 +238,7 @@ export const ScrapAnalysisView: React.FC<Props> = ({ entries, allEntries }) => {
               <div className="flex justify-between items-center py-3 border-b border-[#1a1e2a]">
                 <span className="text-[#8a8578] font-medium">منصرف أخرى (تسويات)</span>
                 <span className="text-lg font-mono text-[#8a8578]">
-                  {analysis.othersOut.toFixed(2)} <span className="text-sm text-[#8a8578]">جم</span>
+                  {formatWeight(analysis.othersOut)} <span className="text-sm text-[#8a8578]">جم</span>
                 </span>
               </div>
             )}
@@ -245,7 +246,7 @@ export const ScrapAnalysisView: React.FC<Props> = ({ entries, allEntries }) => {
             <div className="pt-2 flex justify-between items-center">
               <span className="text-blue-400 font-bold">إجمالي الخارج</span>
               <span className="text-xl font-mono font-bold text-blue-500">
-                {analysis.totalOut.toFixed(2)} <span className="text-sm text-[#8a8578]">جم</span>
+                {formatWeight(analysis.totalOut)} <span className="text-sm text-[#8a8578]">جم</span>
               </span>
             </div>
             
@@ -253,7 +254,7 @@ export const ScrapAnalysisView: React.FC<Props> = ({ entries, allEntries }) => {
               <div className="pt-2 flex justify-between items-center border-t border-[#1a1e2a] mt-2">
                 <span className="text-[#c9a84c] font-bold">الكسر الموجود حالياً (بالمخزن)</span>
                 <span className="text-2xl font-mono font-bold text-[#c9a84c]">
-                  {analysis.currentBalance.toFixed(2)} <span className="text-sm text-[#8a8578]">جم</span>
+                  {formatWeight(analysis.currentBalance)} <span className="text-sm text-[#8a8578]">جم</span>
                 </span>
               </div>
             )}
@@ -272,7 +273,7 @@ export const ScrapAnalysisView: React.FC<Props> = ({ entries, allEntries }) => {
               <div key={idx} className="flex justify-between items-center bg-[#1a1e2a]/50 p-3 rounded-xl border border-[#1a1e2a]">
                 <span className="text-[#f8fafc] font-bold">{item.name}</span>
                 <span className="text-purple-400 font-mono font-bold">
-                  {item.weight.toFixed(2)} <span className="text-xs text-[#8a8578]">جم</span>
+                  {formatWeight(item.weight)} <span className="text-xs text-[#8a8578]">جم</span>
                 </span>
               </div>
             ))}

@@ -1,3 +1,4 @@
+import { formatWeight } from '../../lib/formatting';
 import React, { useState, useEffect } from 'react';
 import { createPortal } from 'react-dom';
 import { motion } from 'framer-motion';
@@ -154,7 +155,7 @@ export const InvoicePrintModal = () => {
 
         {settings.weight.show && printEntry.weight && parseFloat(printEntry.weight) > 0 && (
           <div style={{ position: 'absolute', top: `${settings.weight.top}cm`, right: `${settings.weight.right}cm`, fontSize: `${settings.weight.fontSize}px`, fontWeight: 'bold' }}>
-            {parseFloat(printEntry.weight).toFixed(2)} ج
+            {formatWeight(parseFloat(printEntry.weight))} ج
           </div>
         )}
 

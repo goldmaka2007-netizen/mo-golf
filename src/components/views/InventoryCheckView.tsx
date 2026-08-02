@@ -1,3 +1,4 @@
+import { formatWeight } from '../../lib/formatting';
 import React, { useState, useMemo, useCallback } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { ClipboardList, Plus, CheckCircle2, History, X, Save, Scale, Package, ArrowRightLeft, Download, CheckSquare } from 'lucide-react';
@@ -660,7 +661,7 @@ export const InventoryCheckView = React.memo(() => {
                     <Scale className="w-6 h-6 text-[#5a5548] mb-2" />
                     <div className="text-xs font-bold text-[#5a5548] mb-1">الوزن الدفتري</div>
                     <div className="text-2xl font-bold text-[#ddd8cc] font-mono">
-                      {systemState.weight.toFixed(2)} <span className="text-xs font-sans opacity-50">غ</span>
+                      {formatWeight(systemState.weight)} <span className="text-xs font-sans opacity-50">غ</span>
                       {systemState.type === 'gold' && Object.entries(systemState.karats || {}).map(([k, w]) => (
                         <div key={k} className="text-sm text-[#c9a84c] font-mono bg-[#c9a84c11] px-2 py-0.5 rounded-md mt-1">
                           عيار {k}: {Math.abs(Number(w)).toFixed(2)} غ
@@ -724,7 +725,7 @@ export const InventoryCheckView = React.memo(() => {
                       <div className="flex gap-4">
                         {actualWeight !== '' && (
                           <div className={cn("text-base font-bold font-mono", calculateDiffColor(systemState.weight, parseFloat(actualWeight)))}>
-                            وزن: {(parseFloat(actualWeight) - systemState.weight).toFixed(2)}
+                            وزن: {formatWeight(parseFloat(actualWeight) - systemState.weight)}
                           </div>
                         )}
                         {actualCount !== '' && (

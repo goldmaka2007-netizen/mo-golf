@@ -1,10 +1,12 @@
-﻿import type { Account, Entry } from '../types';
+import type { Account, Entry } from '../types';
 import type { InventoryCycleFilters, InventoryCycleReport, InventoryCycleTab, ReportCacheStatus } from './inventoryCycleReport';
 import { compareEntriesForCost, getOperationId } from './weightedAverageCost';
 import type { OpeningCostConfig } from './weightedAverageCost';
 import type { InventoryWarningState } from './inventoryCycleWarnings';
+import { BALANCE_ENGINE_VERSION } from './engine';
 
 export interface InventoryCycleCacheMeta {
+  balanceEngineVersion?: string;
   status: ReportCacheStatus;
   lastUpdatedAt?: string;
   lastIncludedOperationNo?: string;
@@ -126,6 +128,7 @@ export const saveInventoryCycleCache = (userKey: string, tab: InventoryCycleTab,
 
 export const makeCurrentCacheRecord = (report: InventoryCycleReport, fingerprint: string, entries: Entry[]): InventoryCycleCacheRecord => ({
   meta: {
+    balanceEngineVersion: BALANCE_ENGINE_VERSION,
     status: 'current',
     lastUpdatedAt: new Date().toISOString(),
     lastIncludedOperationNo: getLastIncludedOperationNo(entries),
@@ -138,7 +141,7 @@ export const resolveCacheStatus = (record: InventoryCycleCacheRecord | null, fin
   if (!record) return 'stale';
   if (record.meta.status === 'failed') return 'failed';
   if (record.meta.status === 'rebuilding') return 'rebuilding';
-  return record.meta.fingerprint === fingerprint && record.report ? 'current' : 'stale';
+  return record.meta.balanceEngineVersion === BALANCE_ENGINE_VERSION && record.meta.fingerprint === fingerprint && record.report ? 'current' : 'stale';
 };
 
 export const makeFailedCacheRecord = (previous: InventoryCycleCacheRecord | null, error: unknown): InventoryCycleCacheRecord => ({

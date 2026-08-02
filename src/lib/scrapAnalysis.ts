@@ -2,6 +2,7 @@ import type { Account, Entry, MerchantDirection } from '../types';
 import {
   computeAccountBalances,
   type AccountClassificationWarning,
+  type AccountBalancesResult,
 } from './engine';
 import { parseWeight } from './accounting';
 
@@ -35,11 +36,12 @@ export interface WeightedPartyBalance {
   metal: 'gold' | 'silver';
   actualBalance: number;
   goldE21Balance: number;
-  direction: MerchantDirection;
+  direction: MerchantDirection | 'settled';
   directionDescription: string;
 }
 
 export interface WeightedPartyBalances {
+  balanceEngineVersion: string;
   merchants: WeightedPartyBalance[];
   otherDues: WeightedPartyBalance[];
   legacyNameMatchedEntries: ReturnType<typeof computeAccountBalances>['legacyNameMatchedEntries'];
@@ -54,16 +56,16 @@ export interface ScrapAnalysisModel {
   balanceEntries: Entry[];
 }
 
-const directionDescription = (direction: MerchantDirection): string =>
-  direction === 'payable'
-    ? '\u0639\u0644\u0649 \u0627\u0644\u0645\u062d\u0644'
-    : '\u0644\u0635\u0627\u0644\u062d \u0627\u0644\u0645\u062d\u0644';
+const directionDescription = (direction: MerchantDirection | 'settled'): string =>
+  direction === 'settled' ? 'رصيد مسوى'
+    : direction === 'payable' ? '\u0639\u0644\u0649 \u0627\u0644\u0645\u062d\u0644'
+      : '\u0644\u0635\u0627\u0644\u062d \u0627\u0644\u0645\u062d\u0644';
 
-export const buildWeightedPartyBalances = (
-  entries: Entry[],
-  accounts: Account[],
-): WeightedPartyBalances => {
-  const computed = computeAccountBalances(entries, accounts);
+export function buildWeightedPartyBalances(computed: AccountBalancesResult): WeightedPartyBalances;
+/** @deprecated Compatibility adapter; report callers should pass AccountBalancesResult. */
+export function buildWeightedPartyBalances(entries: Entry[], accounts: Account[]): WeightedPartyBalances;
+export function buildWeightedPartyBalances(input: AccountBalancesResult | Entry[], accounts: Account[] = []): WeightedPartyBalances {
+  const computed = Array.isArray(input) ? computeAccountBalances(input, accounts) : input;
   const merchants: WeightedPartyBalance[] = [];
   const otherDues: WeightedPartyBalance[] = [];
 
@@ -77,8 +79,8 @@ export const buildWeightedPartyBalances = (
       metal: balance.metal,
       actualBalance: balance.metal === 'gold' ? balance.goldActualBalance : balance.silverBalance,
       goldE21Balance: balance.metal === 'gold' ? balance.goldE21Balance : 0,
-      direction: balance.merchantDirection,
-      directionDescription: directionDescription(balance.merchantDirection),
+      direction: balance.actualMerchantDirection ?? 'settled',
+      directionDescription: directionDescription(balance.actualMerchantDirection ?? 'settled'),
     };
     if (balance.subType === 'other_due') otherDues.push(item);
     else merchants.push(item);
@@ -90,13 +92,14 @@ export const buildWeightedPartyBalances = (
   otherDues.sort(byName);
 
   return {
+    balanceEngineVersion: computed.balanceEngineVersion,
     merchants,
     otherDues,
     legacyNameMatchedEntries: computed.legacyNameMatchedEntries,
     unclassifiedAccounts: computed.unclassifiedAccounts,
     classificationConflicts: computed.classificationConflicts,
   };
-};
+}
 
 interface AccountLookup {
   byId: Map<string, Account>;

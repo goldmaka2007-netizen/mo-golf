@@ -1,5 +1,4 @@
-import type { Account, Entry } from '../types';
-import { belongsToMetric, getAccountTypeDetails, getMetricValue } from '../utils/accountLogic';
+import type { AccountBalanceResult, AccountBalancesResult } from './engine';
 import type { IncomeStatementMetric, IncomeStatementReport } from './incomeStatementReport';
 
 export interface EquityStatementDimension {
@@ -11,48 +10,44 @@ export interface EquityStatementDimension {
 
 export type EquityStatementReport = Record<IncomeStatementMetric, EquityStatementDimension>;
 
+const valueFor = (balance: AccountBalanceResult, metric: IncomeStatementMetric): number => {
+  if (metric === 'cash') return balance.cashBalance;
+  if (metric === 'gold') return balance.goldE21Balance;
+  if (metric === 'silver') return balance.silverBalance;
+  return balance.quantityBalance;
+};
+
 const buildDimension = (
-  entries: Entry[],
-  accounts: Account[],
+  computed: AccountBalancesResult,
   metric: IncomeStatementMetric,
   netProfit: number,
 ): EquityStatementDimension => {
-  let capitalAdditions = 0;
-  const capitalAccounts: Record<string, number> = {};
-  let drawings = 0;
-  const drawingsAccounts: Record<string, number> = {};
-
-  entries.forEach(entry => {
-    const value = getMetricValue(entry, metric, accounts);
-    if (value === 0) return;
-    const debitDetails = getAccountTypeDetails(entry.debit, accounts);
-    const creditDetails = getAccountTypeDetails(entry.credit, accounts);
-
-    if (creditDetails.main === 'equity' && belongsToMetric(entry.credit, metric, accounts)) {
-      capitalAdditions += value;
-      capitalAccounts[entry.credit] = (capitalAccounts[entry.credit] || 0) + value;
-    }
-    if (debitDetails.main === 'equity' && belongsToMetric(entry.debit, metric, accounts)) {
-      drawings += value;
-      drawingsAccounts[entry.debit] = (drawingsAccounts[entry.debit] || 0) + value;
-    }
+  const additions: Record<string, number> = {};
+  const deductions: Record<string, number> = {};
+  computed.balances.forEach(balance => {
+    if (balance.mainType !== 'equity') return;
+    const value = valueFor(balance, metric);
+    if (Math.abs(value) <= 1e-12) return;
+    if (value > 0) additions[balance.accountName] = value;
+    else deductions[balance.accountName] = Math.abs(value);
   });
-
+  const additionTotal = Object.values(additions).reduce((total, value) => total + value, 0);
+  const deductionTotal = Object.values(deductions).reduce((total, value) => total + value, 0);
   return {
-    additions: { total: capitalAdditions, accounts: capitalAccounts },
-    deductions: { total: drawings, accounts: drawingsAccounts },
+    additions: { total: additionTotal, accounts: additions },
+    deductions: { total: deductionTotal, accounts: deductions },
     netProfit,
-    totalChange: (capitalAdditions - drawings) + netProfit,
+    totalChange: additionTotal - deductionTotal + netProfit,
   };
 };
 
+/** Pure projection over computeAccountBalances(); JournalEntry[] is intentionally not accepted. */
 export const buildEquityStatementReport = (
-  entries: Entry[],
-  accounts: Account[],
+  computed: AccountBalancesResult,
   incomeStatement: IncomeStatementReport,
 ): EquityStatementReport => ({
-  cash: buildDimension(entries, accounts, 'cash', incomeStatement.cash.net),
-  gold: buildDimension(entries, accounts, 'gold', incomeStatement.gold.net),
-  silver: buildDimension(entries, accounts, 'silver', incomeStatement.silver.net),
-  accs: buildDimension(entries, accounts, 'accs', incomeStatement.accs.net),
+  cash: buildDimension(computed, 'cash', incomeStatement.cash.net),
+  gold: buildDimension(computed, 'gold', incomeStatement.gold.net),
+  silver: buildDimension(computed, 'silver', incomeStatement.silver.net),
+  accs: buildDimension(computed, 'accs', incomeStatement.accs.net),
 });

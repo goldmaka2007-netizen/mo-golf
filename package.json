@@ -5,7 +5,7 @@
     "type":  "module",
     "scripts":  {
                     "dev":  "tsx server.ts",
-                    "build":  "vite build",
+                    "build":  "npm run check:balance-contract \u0026\u0026 vite build",
                     "typecheck":  "tsc --noEmit",
                     "start":  "node server.ts",
                     "preview":  "vite preview",
@@ -15,7 +15,8 @@
                     "test":  "vitest run --testTimeout=30000",
                     "test:golden":  "vitest run src/lib/__tests__/phase5GoldenDataset.test.ts",
                     "test:golden:prerequisites":  "vitest run src/lib/__tests__/inventoryCostPhase5.test.ts src/lib/__tests__/historicalInventoryOverlay.test.ts src/lib/__tests__/costRecalculationPhase5.test.ts src/lib/__tests__/costIntegrity.test.ts",
-                    "golden:generate":  "tsx scripts/generate-phase5-golden-baseline.ts"
+                    "golden:generate":  "tsx scripts/generate-phase5-golden-baseline.ts",
+                    "check:balance-contract":  "tsx scripts/check-balance-engine-contract.ts"
                 },
     "dependencies":  {
                          "@tailwindcss/vite":  "^4.1.14",

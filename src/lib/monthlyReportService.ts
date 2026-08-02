@@ -2,6 +2,8 @@ import type { Account, Entry } from '../types';
 import { parseWeight } from './accounting';
 import {
   buildAccountIndex,
+  computeAccountBalances,
+  computePeriodAccountBalances,
   getEntryArabicWeight,
   getMerchantMetadataMetal,
   isAccessoryAccount,
@@ -9,7 +11,6 @@ import {
   isGoldAccount,
   isSilverAccount,
   parseCash,
-  processInventory,
   resolveAccount,
   resolveOperationKind,
 } from './engine';
@@ -67,14 +68,12 @@ const operationKey = (entry: Entry, index: number): string =>
   entry.operationNo || entry.invoiceNumber || entry.legacyOperationId || entry.id || `${entry.date}:${entry.tx}:${index}`;
 
 const cashBalance = (entries: Entry[], accounts: Account[]): number => {
-  const accountIndex = buildAccountIndex(accounts);
-  return entries.reduce((total, entry) => {
-    const cash = parseCash(entry);
-    if (!cash) return total;
-    const debit = resolveAccount(entry, 'debit', accountIndex);
-    const credit = resolveAccount(entry, 'credit', accountIndex);
-    return total + (isCashAccount(debit) ? cash : 0) - (isCashAccount(credit) ? cash : 0);
-  }, 0);
+  const computed = computeAccountBalances(entries, accounts);
+  let total = 0;
+  computed.balances.forEach(balance => {
+    if (balance.mainType === 'assets' && balance.subType === 'cash') total += balance.cashBalance;
+  });
+  return total;
 };
 
 type MovementKey = 'gold' | 'gold21' | 'silver' | 'accessories';
@@ -88,33 +87,29 @@ const emptyMovementAccumulator = (): MovementAccumulator => ({
 });
 
 const inventoryTotals = (entries: Entry[], accounts: Account[]) => {
-  const result = processInventory(entries, accounts);
+  const result = computeAccountBalances(entries, accounts);
   let goldWeight = 0;
   let gold21 = 0;
   let silverWeight = 0;
   let accessoryCount = 0;
-  Object.entries(result.snapshots).forEach(([name, snapshot]) => {
-    const account = accounts.find(item => item.name === name);
-    if (isAccessoryAccount(account)) accessoryCount += snapshot.count;
-    else if (isGoldAccount(account)) {
-      goldWeight += snapshot.weight;
-      gold21 += snapshot.arabicWeight;
-    } else if (isSilverAccount(account)) silverWeight += snapshot.weight;
-  });
-
   let merchantGold21 = 0;
   let merchantSilver = 0;
   let supportsMerchantSilver = false;
-  Object.entries(result.merchantWeightLiabilities).forEach(([name, snapshot]) => {
-    const account = accounts.find(item => item.name === name);
-    const metal = getMerchantMetadataMetal(account);
-    if (metal === 'gold') merchantGold21 += snapshot.arabicWeight;
-    if (metal === 'silver') {
+  result.balances.forEach(balance => {
+    if (balance.subType === 'inventory_gold') {
+      goldWeight += balance.goldActualBalance;
+      gold21 += balance.goldE21Balance;
+    } else if (balance.subType === 'inventory_silver') {
+      silverWeight += balance.silverBalance;
+    } else if (balance.subType === 'inventory_accessory') {
+      accessoryCount += balance.quantityBalance;
+    }
+    if (balance.mainType === 'liabilities' && balance.metal === 'gold') merchantGold21 += balance.goldE21Balance;
+    if (balance.mainType === 'liabilities' && balance.metal === 'silver') {
       supportsMerchantSilver = true;
-      merchantSilver += snapshot.weight;
+      merchantSilver += balance.silverBalance;
     }
   });
-
   return { goldWeight, gold21, silverWeight, accessoryCount, merchantGold21, merchantSilver, supportsMerchantSilver };
 };
 
@@ -226,7 +221,7 @@ const buildSnapshot = (
     applyInventoryFlow(creditInventory, -1);
   });
 
-  const incomeStatement = buildIncomeStatementReport(periodEntries, accounts, startDate, endDate);
+  const incomeStatement = buildIncomeStatementReport(computeAccountBalances(periodEntries, accounts), startDate, endDate);
   const costResults = costTimeline?.valid
     ? costTimeline.results.filter(result =>
       result.classification === 'sale' && result.entry.date >= startDate && result.entry.date <= endDate)
@@ -415,13 +410,16 @@ export const buildMonthlyReport = (input: BuildMonthlyReportInput): MonthlyRepor
   const periodEntries = entries.filter(entry => entry.date <= period.endDate);
   const operatingEntries = entries.filter(entry =>
     entry.date >= period.startDate && entry.date <= period.endDate && resolveOperationKind(entry) !== 'opening');
-  const incomeStatement = buildIncomeStatementReport(operatingEntries, accounts, period.startDate, period.endDate);
-  const equity = buildEquityStatementReport(operatingEntries, accounts, incomeStatement);
-  const position = buildFinancialPositionReport(periodEntries, accounts, equity);
+  const operatingBalances = computeAccountBalances(operatingEntries, accounts);
+  const positionBalances = computeAccountBalances(periodEntries, accounts);
+  const incomeStatement = buildIncomeStatementReport(operatingBalances, period.startDate, period.endDate);
+  const equity = buildEquityStatementReport(operatingBalances, incomeStatement);
+  const position = buildFinancialPositionReport(positionBalances, equity);
   current.cashLiabilities = position.cash.liabilities.total;
-  const trialCash = buildTrialBalanceReport(entries, accounts, 'cash', period.startDate, period.endDate);
-  const trialGold = buildTrialBalanceReport(entries, accounts, 'gold', period.startDate, period.endDate);
-  const trialSilver = buildTrialBalanceReport(entries, accounts, 'silver', period.startDate, period.endDate);
+  const periodBalances = computePeriodAccountBalances(entries, accounts, period.startDate, period.endDate);
+  const trialCash = buildTrialBalanceReport(periodBalances, 'cash');
+  const trialGold = buildTrialBalanceReport(periodBalances, 'gold');
+  const trialSilver = buildTrialBalanceReport(periodBalances, 'silver');
 
   const insights = buildMonthlyDecisionInsights({ current, previous, rolling3 });
   const healthStatus = deriveMonthlyHealthStatus(current, insights);

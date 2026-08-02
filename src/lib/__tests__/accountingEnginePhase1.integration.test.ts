@@ -56,9 +56,9 @@ describe('Accounting Engine Repair — Phase 1', () => {
     expect(projection.trialBalanceTotals.silver.credit).toBeCloseTo(8509.39, 8);
   });
 
-  it('uses only LegacyLedgerLegs in all historical Trial Balances', () => {
+  it('routes all historical Trial Balances through the central balance engine', () => {
     reports.forEach(report => {
-      expect(report.source).toBe('legacy_raw_fields');
+      expect(report.source).toBe('balance_engine');
       expect(report.balanced).toBe(true);
       expect(report.difference).toBe(0);
     });

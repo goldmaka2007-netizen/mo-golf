@@ -1,3 +1,4 @@
+import { formatPercent, formatQuantity } from '../../../lib/formatting';
 import React, { useEffect, useMemo, useState } from 'react';
 import { AlertTriangle, BarChart3, ChevronDown, ChevronUp, Download, RefreshCw, RotateCcw, Settings2 } from 'lucide-react';
 import { Area, AreaChart, CartesianGrid, Line, LineChart, Tooltip, XAxis, YAxis } from 'recharts';
@@ -25,9 +26,9 @@ interface Props {
 
 const tabLabels: Record<InventoryCycleTab, string> = { gold: 'ذهب', silver: 'فضة', accessory: 'ملحقات' };
 const storageKey = (tab: InventoryCycleTab) => `inventory-cycle-filters-${tab}`;
-const fmtQty = (value?: number | null) => value === null || value === undefined ? 'غير متاحة' : Number(value.toFixed(3)).toLocaleString('ar-EG', { maximumFractionDigits: 3 });
+const fmtQty = (value?: number | null) => value === null || value === undefined ? 'غير متاحة' : formatQuantity(value, 3);
 const fmtMoney = (value?: number | null) => value === null || value === undefined ? 'غير متاحة' : value.toLocaleString('ar-EG', { maximumFractionDigits: 2, minimumFractionDigits: 2 });
-const fmtPct = (value?: number | null) => value === null || value === undefined ? 'غير متاحة' : `${value.toFixed(1)}%`;
+const fmtPct = (value?: number | null) => value === null || value === undefined ? 'غير متاحة' : formatPercent(value, 1);
 
 const movementLabel = (kind: string) => ({
   opening: 'افتتاح', purchase: 'شراء', sale: 'بيع', transfer: 'تحويل', tifeet: 'تفييت', adjustment: 'تسوية', merchant_settlement: 'تسوية تاجر', personal_withdrawal: 'مسحوبات', expense: 'مصروف', other: 'أخرى', all: 'كل الحركات',

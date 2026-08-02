@@ -1,3 +1,4 @@
+import { formatWeight } from '../../../lib/formatting';
 import React, { useMemo, useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { 
@@ -16,6 +17,7 @@ import { cn } from '../../../lib/utils';
 import { buildIncomeStatementReport } from '../../../lib/incomeStatementReport';
 import { buildEquityStatementReport } from '../../../lib/equityStatementReport';
 import { buildFinancialPositionReport } from '../../../lib/financialPositionReport';
+import { computeAccountBalances } from '../../../lib/engine';
 import { exportToExcel } from '../../../utils/exportUtils';
 
 type LedgerType = 'cash' | 'gold' | 'silver' | 'accs';
@@ -25,9 +27,10 @@ export const BalanceSheetView = React.memo(({ entries }: { entries: Entry[] }) =
   const [activeTab, setActiveTab] = useState<LedgerType>('gold');
 
   const balanceSheet = useMemo(() => {
-    const incomeStatement = buildIncomeStatementReport(entries, accountsDb);
-    const equityStatement = buildEquityStatementReport(entries, accountsDb, incomeStatement);
-    return buildFinancialPositionReport(entries, accountsDb, equityStatement);
+    const computed = computeAccountBalances(entries, accountsDb);
+    const incomeStatement = buildIncomeStatementReport(computed);
+    const equityStatement = buildEquityStatementReport(computed, incomeStatement);
+    return buildFinancialPositionReport(computed, equityStatement);
   }, [entries, accountsDb]);
   const goldPosition = balanceSheet.goldPosition;
 
@@ -116,7 +119,7 @@ export const BalanceSheetView = React.memo(({ entries }: { entries: Entry[] }) =
                       {item.val.toLocaleString(undefined, {minimumFractionDigits: unit === 'ج.م' || unit === 'قطعة' ? 0 : 2, maximumFractionDigits: 2})}
                       {(activeTab === 'gold' && Math.abs(item.val - (item.actualVal || 0)) > 0.01) && (
                         <span className="text-[10px] text-[#5a5548] mr-1">
-                          ({(item.actualVal || 0).toFixed(2)} جرام فعلي)
+                          ({formatWeight(item.actualVal || 0)} جرام فعلي)
                         </span>
                       )}
                     </span>
@@ -180,7 +183,7 @@ export const BalanceSheetView = React.memo(({ entries }: { entries: Entry[] }) =
             <div className="flex items-start justify-between gap-3">
               <div>
                 <div className="text-xs font-black text-[#8a8172]">صافي ملكية المحل</div>
-                <div className="mt-1 text-3xl font-black font-mono text-[#c9a84c]">{goldPosition.netShopGoldOwnership21.toFixed(2)} جم</div>
+                <div className="mt-1 text-3xl font-black font-mono text-[#c9a84c]">{formatWeight(goldPosition.netShopGoldOwnership21)} جم</div>
               </div>
               <div className="rounded-xl border border-[#c9a84c33] bg-[#c9a84c11] px-2 py-1 text-[10px] font-bold text-[#c9a84c]">
                 عيار 21 مكافئ
@@ -189,7 +192,7 @@ export const BalanceSheetView = React.memo(({ entries }: { entries: Entry[] }) =
             <div className="mt-3 grid grid-cols-2 gap-2 text-xs font-bold">
               <div className="rounded-xl border border-[#1a1e2a] bg-[#080a0f] p-3">
                 <div className="text-[#5a5548]">مخزون فعلي</div>
-                <div className="mt-1 font-mono text-[#ddd8cc]">{goldPosition.physicalGoldInventory21.toFixed(2)} جم</div>
+                <div className="mt-1 font-mono text-[#ddd8cc]">{formatWeight(goldPosition.physicalGoldInventory21)} جم</div>
               </div>
               <div className="rounded-xl border border-[#1a1e2a] bg-[#080a0f] p-3">
                 <div className="flex items-center justify-between gap-2 text-[#5a5548]">
@@ -198,7 +201,7 @@ export const BalanceSheetView = React.memo(({ entries }: { entries: Entry[] }) =
                     {goldPosition.netGoldLiabilities21 > 0 ? 'على المحل' : goldPosition.netGoldLiabilities21 < 0 ? 'لصالح المحل' : 'متوازن'}
                   </span>
                 </div>
-                <div className="mt-1 font-mono text-[#ddd8cc]">{goldPosition.netGoldLiabilities21.toFixed(2)} جم</div>
+                <div className="mt-1 font-mono text-[#ddd8cc]">{formatWeight(goldPosition.netGoldLiabilities21)} جم</div>
               </div>
             </div>
           </div>

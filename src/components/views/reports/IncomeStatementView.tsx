@@ -1,3 +1,4 @@
+import { formatWeight } from '../../../lib/formatting';
 import React, { useMemo, useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { format, parseISO } from 'date-fns';
@@ -16,6 +17,7 @@ import { Entry } from '../../../types';
 import { useAppStore } from '../../../store';
 import { cn } from '../../../lib/utils';
 import { buildIncomeStatementReport, type IncomeStatementCashBreakdown, type IncomeStatementSection } from '../../../lib/incomeStatementReport';
+import { computeAccountBalances } from '../../../lib/engine';
 import { buildIncomeStatementExcelSheets } from '../../../lib/incomeStatementExcel';
 import { exportToExcel } from '../../../utils/exportUtils';
 
@@ -41,8 +43,12 @@ export const IncomeStatementView = React.memo(({ entries }: { entries: Entry[] }
   }, [entries, selectedMonth]);
 
   const financials = useMemo(
-    () => buildIncomeStatementReport(filteredEntries, accountsDb),
-    [filteredEntries, accountsDb],
+    () => buildIncomeStatementReport(
+      computeAccountBalances(filteredEntries, accountsDb),
+      selectedMonth === 'all' ? null : selectedMonth + '-01',
+      selectedMonth === 'all' ? null : selectedMonth + '-31',
+    ),
+    [filteredEntries, accountsDb, selectedMonth],
   );
 
   const handleExport = () => {
@@ -65,7 +71,7 @@ export const IncomeStatementView = React.memo(({ entries }: { entries: Entry[] }
       accs: 'from-[#1a1e2a] to-[#080a0f] border-[#9e8a6a55]'
     };
     const bgGradient = bgGradientMap[activeTab];
-    const formatWeight = (value: number) => Number.isFinite(value) && value > 0 ? value.toFixed(2) : '—';
+    const displayWeight = (value: number) => Number.isFinite(value) && value > 0 ? formatWeight(value) : '—';
     const formatAverage = (value: number | null) => value !== null && Number.isFinite(value) ? value.toLocaleString(undefined, { maximumFractionDigits: 2 }) : '—';
     const formatCount = (value: number) => Number.isFinite(value) && value > 0 ? value.toLocaleString(undefined, { maximumFractionDigits: 3 }) : '—';
     const formatCash = (value: number) => Number.isFinite(value) ? value.toLocaleString(undefined, { maximumFractionDigits: 2 }) : '—';
@@ -73,9 +79,9 @@ export const IncomeStatementView = React.memo(({ entries }: { entries: Entry[] }
     const cashCells = (metrics: IncomeStatementCashBreakdown, amount: number, strong = false) => (
       <>
         <span className={cn('text-left font-mono text-[#ddd8cc]', strong && 'font-bold')}>{amount.toLocaleString(undefined, { maximumFractionDigits: 2 })}</span>
-        <span className="text-center font-mono">{formatWeight(metrics.goldWeight)}</span>
+        <span className="text-center font-mono">{displayWeight(metrics.goldWeight)}</span>
         <span className="text-center font-mono">{formatAverage(metrics.goldAverage)}</span>
-        <span className="text-center font-mono">{formatWeight(metrics.silverWeight)}</span>
+        <span className="text-center font-mono">{displayWeight(metrics.silverWeight)}</span>
         <span className="text-center font-mono">{formatAverage(metrics.silverAverage)}</span>
         <span className="text-center font-mono">{formatCount(metrics.accessoryCount)}</span>
       </>
@@ -136,7 +142,7 @@ export const IncomeStatementView = React.memo(({ entries }: { entries: Entry[] }
               <div key={catName} className="space-y-2">
                 <div className={cn('grid grid-cols-[minmax(0,1.35fr)_minmax(0,.8fr)_minmax(0,1fr)_minmax(0,1fr)] items-center gap-1 rounded-xl bg-[#1a1e2a]/30 p-2 text-[11px] font-bold sm:gap-2 sm:text-sm', colClass)}>
                   <span className="min-w-0 break-words text-[#ddd8cc]">{catName}</span>
-                  <span className="text-center font-mono">{formatWeight(catData.total)} <span className="text-[9px] sm:text-[10px]">جم عربي</span></span>
+                  <span className="text-center font-mono">{displayWeight(catData.total)} <span className="text-[9px] sm:text-[10px]">جم عربي</span></span>
                   <span className="text-center font-mono">{formatCash(catData.goldAmount)} <span className="text-[9px] sm:text-[10px]">ج.م</span></span>
                   <span className="text-center font-mono">{formatAverage(catData.goldAverage)} <span className="text-[9px] sm:text-[10px]">ج.م/جم</span></span>
                 </div>
@@ -144,7 +150,7 @@ export const IncomeStatementView = React.memo(({ entries }: { entries: Entry[] }
                   {catData.details.map((item, idx) => (
                     <div key={idx} className="grid grid-cols-[minmax(0,1.35fr)_minmax(0,.8fr)_minmax(0,1fr)_minmax(0,1fr)] items-center gap-1 rounded-lg p-1.5 text-[10px] text-[#5a5548] transition-colors hover:bg-[#1a1e2a]/50 sm:gap-2 sm:text-xs">
                       <span className="min-w-0 break-words font-bold">{item.name}</span>
-                      <span className="text-center font-mono">{formatWeight(item.val)} <span className="text-[8px] sm:text-[10px]">جم عربي</span></span>
+                      <span className="text-center font-mono">{displayWeight(item.val)} <span className="text-[8px] sm:text-[10px]">جم عربي</span></span>
                       <span className="text-center font-mono">{formatCash(item.goldAmount)} <span className="text-[8px] sm:text-[10px]">ج.م</span></span>
                       <span className="text-center font-mono">{formatAverage(item.goldAverage)} <span className="text-[8px] sm:text-[10px]">ج.م/جم</span></span>
                     </div>
@@ -155,7 +161,7 @@ export const IncomeStatementView = React.memo(({ entries }: { entries: Entry[] }
             {Object.keys(groupData.categories).length === 0 && <div className="py-4 text-center text-sm text-[#5a5548]">لا توجد حركات في هذا القسم</div>}
             <div className={cn('grid grid-cols-[minmax(0,1.35fr)_minmax(0,.8fr)_minmax(0,1fr)_minmax(0,1fr)] items-center gap-1 border-t border-[#c9a84c33] px-1 pt-3 text-[11px] font-bold sm:gap-2 sm:px-2 sm:text-sm', colClass)}>
               <span className="min-w-0 break-words">إجمالي {title.split(' ')[0]}</span>
-              <span className="text-center font-mono">{formatWeight(groupData.total)} <span className="text-[9px] sm:text-[10px]">جم عربي</span></span>
+              <span className="text-center font-mono">{displayWeight(groupData.total)} <span className="text-[9px] sm:text-[10px]">جم عربي</span></span>
               <span className="text-center font-mono">{formatCash(groupData.goldAmount)} <span className="text-[9px] sm:text-[10px]">ج.م</span></span>
               <span className="text-center font-mono">{formatAverage(groupData.goldAverage)} <span className="text-[9px] sm:text-[10px]">ج.م/جم</span></span>
             </div>

@@ -14,14 +14,16 @@ import { useAppStore } from '../../../store';
 import { cn } from '../../../lib/utils';
 import { buildIncomeStatementReport } from '../../../lib/incomeStatementReport';
 import { buildEquityStatementReport } from '../../../lib/equityStatementReport';
+import { computeAccountBalances } from '../../../lib/engine';
 
 export const EquityStatementView = React.memo(({ entries }: { entries: Entry[] }) => {
   const { accountsDb } = useAppStore();
   const [activeTab, setActiveTab] = useState<'cash' | 'gold' | 'silver' | 'accs'>('cash');
 
   const financials = useMemo(() => {
-    const incomeStatement = buildIncomeStatementReport(entries, accountsDb);
-    return buildEquityStatementReport(entries, accountsDb, incomeStatement);
+    const computed = computeAccountBalances(entries, accountsDb);
+    const incomeStatement = buildIncomeStatementReport(computed);
+    return buildEquityStatementReport(computed, incomeStatement);
   }, [entries, accountsDb]);
 
   const renderStatement = () => {
