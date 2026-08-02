@@ -2,7 +2,7 @@ import React, { useEffect, useMemo, useState } from 'react';
 import { Book, ChevronDown, ChevronRight, Download, Search, X } from 'lucide-react';
 import { Account, Entry } from '../../../types';
 import { useAppStore } from '../../../store';
-import { buildLedgerAccountSelection, buildLedgerCsv, buildLedgerReport, filterLedgerRows, formatBalance, formatLedgerAmount, getAccountKey, getAvailableDimensions, getFilteredTotals, GoldDisplayMode, LedgerDimension, LedgerRow } from '../../../lib/ledgerReport';
+import { buildLedgerAccountSelection, buildLedgerCsv, buildLedgerReport, filterLedgerRows, formatBalance, formatLedgerAmount, getAccountKey, getAvailableDimensions, getFilteredTotals, getUnclassifiedLedgerAccounts, GoldDisplayMode, LedgerDimension, LedgerRow, warnUnclassifiedLedgerAccounts } from '../../../lib/ledgerReport';
 import { CostDataBlockedView } from './CostDataBlockedView';
 
 const today = () => new Date().toISOString().slice(0, 10);
@@ -25,6 +25,8 @@ export const GeneralLedgerView = React.memo(({ entries }: { entries: Entry[]; st
     })),
   ], [accountsDb, canonicalAccounts]);
   const groups = useMemo(() => buildLedgerAccountSelection(accounts, search), [accounts, search]);
+  const unclassifiedAccounts = useMemo(() => getUnclassifiedLedgerAccounts(accounts), [accounts]);
+  useEffect(() => warnUnclassifiedLedgerAccounts(unclassifiedAccounts), [unclassifiedAccounts]);
   const account = useMemo(() => accounts.find(a => getAccountKey(a) === accountKey), [accounts, accountKey]);
   const completeCostTimeline = costCalculationRun.status === 'valid' && costCalculationRun.timeline?.valid && costCalculationRun.timeline.costDataComplete !== false ? costCalculationRun.timeline : null;
 

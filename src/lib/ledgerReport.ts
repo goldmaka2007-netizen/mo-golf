@@ -169,17 +169,106 @@ export const buildLedgerCsv = (args: {
   return `\uFEFF${lines.join('\r\n')}`;
 };
 
-export const getAccountGroup = (account: Account): string => {
-  if (account.type === 'cash') return '\u0627\u0644\u062e\u0632\u0646\u0629';
-  if (account.type === 'merchant') return '\u0627\u0644\u062a\u062c\u0627\u0631';
-  if (account.type === 'accessory') return '\u0627\u0644\u0623\u0635\u0646\u0627\u0641 - \u0645\u0644\u062d\u0642\u0627\u062a';
-  if (account.metal === 'gold') return '\u0627\u0644\u0623\u0635\u0646\u0627\u0641 - \u0630\u0647\u0628';
-  if (account.metal === 'silver') return '\u0627\u0644\u0623\u0635\u0646\u0627\u0641 - \u0641\u0636\u0629';
-  if (['revenue', 'revenues', '\u0625\u064a\u0631\u0627\u062f\u0627\u062a', '\u0627\u0644\u0625\u064a\u0631\u0627\u062f\u0627\u062a', '\u0627\u064a\u0631\u0627\u062f\u0627\u062a', '\u0627\u0644\u0627\u064a\u0631\u0627\u062f\u0627\u062a'].includes(account.mainType)) return '\u0627\u0644\u0625\u064a\u0631\u0627\u062f\u0627\u062a';
-  if (['expense', 'expenses', '\u0645\u0635\u0631\u0648\u0641\u0627\u062a', '\u0627\u0644\u0645\u0635\u0631\u0648\u0641\u0627\u062a'].includes(account.mainType)) return '\u0627\u0644\u0645\u0635\u0631\u0648\u0641\u0627\u062a';
-  if (['equity', '\u062d\u0642\u0648\u0642 \u0645\u0644\u0643\u064a\u0629', '\u062d\u0642\u0648\u0642 \u0627\u0644\u0645\u0644\u0643\u064a\u0629'].includes(account.mainType)) return '\u062d\u0642\u0648\u0642 \u0627\u0644\u0645\u0644\u0643\u064a\u0629';
-  return '\u0627\u0644\u0623\u0635\u0646\u0627\u0641';
-};export const getAccountNature = (account: Account, accounts: Account[]): AccountNature => {
+export const LEDGER_ACCOUNT_GROUPS = {
+  cash: '\u0627\u0644\u062e\u0632\u0646\u0629 / \u0627\u0644\u0646\u0642\u062f\u064a\u0629',
+  inventory_gold: '\u0645\u062e\u0632\u0648\u0646 \u0627\u0644\u0630\u0647\u0628',
+  inventory_silver: '\u0645\u062e\u0632\u0648\u0646 \u0627\u0644\u0641\u0636\u0629',
+  inventory_accessory: '\u0627\u0644\u0645\u0644\u062d\u0642\u0627\u062a',
+  merchant_gold: '\u062a\u062c\u0627\u0631 \u0627\u0644\u0630\u0647\u0628',
+  merchant_silver: '\u062a\u062c\u0627\u0631 \u0627\u0644\u0641\u0636\u0629',
+  customer: '\u0627\u0644\u0639\u0645\u0644\u0627\u0621',
+  fixed_asset: '\u0627\u0644\u0623\u0635\u0648\u0644 \u0627\u0644\u062b\u0627\u0628\u062a\u0629',
+  other_due: '\u0630\u0645\u0645 \u0623\u062e\u0631\u0649',
+  expense: '\u0627\u0644\u0645\u0635\u0631\u0648\u0641\u0627\u062a',
+  revenue: '\u0627\u0644\u0625\u064a\u0631\u0627\u062f\u0627\u062a',
+  equity: '\u0631\u0623\u0633 \u0627\u0644\u0645\u0627\u0644 \u0648\u062d\u0642\u0648\u0642 \u0627\u0644\u0645\u0644\u0643\u064a\u0629',
+  unclassified: '\u063a\u064a\u0631 \u0645\u0635\u0646\u0641',
+} as const;
+
+export type LedgerAccountGroupId = keyof typeof LEDGER_ACCOUNT_GROUPS;
+
+const canonicalSubTypeFor = (account: Account): string => {
+  if (account.canonicalSubType) return account.canonicalSubType;
+  const legacySubTypes: Record<string, string> = {
+    '\u0627\u0644\u0646\u0642\u062f\u064a\u0629 \u0628\u0627\u0644\u062e\u0632\u0646\u0629': 'cash',
+    '\u0645\u062e\u0632\u0648\u0646 \u0630\u0647\u0628': 'inventory_gold',
+    '\u0645\u062e\u0632\u0648\u0646 \u0641\u0636\u0629': 'inventory_silver',
+    '\u0645\u062e\u0632\u0648\u0646 \u0645\u0644\u062d\u0642\u0627\u062a \u0627\u0636\u0627\u0641\u064a\u0629': 'inventory_accessory',
+    '\u0627\u0635\u0648\u0644 \u062b\u0627\u0628\u062a\u0629': 'fixed_asset',
+    '\u0630\u0645\u0645 \u0645\u062f\u064a\u0646\u0629': 'customer',
+    '\u062a\u062c\u0627\u0631 \u0630\u0647\u0628': 'merchant_gold',
+    '\u062a\u062c\u0627\u0631 \u0641\u0636\u0629': 'merchant_silver',
+    '\u0631\u0627\u0633 \u0627\u0644\u0645\u0627\u0644': 'capital',
+  };
+  return legacySubTypes[account.subType] ?? account.subType;
+};
+
+export const getLedgerAccountGroupId = (account: Account): LedgerAccountGroupId => {
+  const subType = canonicalSubTypeFor(account);
+  if (subType === 'cash') return 'cash';
+  if (subType === 'inventory_gold' && account.is_inventory === true) return 'inventory_gold';
+  if (subType === 'inventory_silver' && account.is_inventory === true) return 'inventory_silver';
+  if (subType === 'inventory_accessory' && account.is_inventory === true) return 'inventory_accessory';
+  if (subType === 'merchant_gold') return 'merchant_gold';
+  if (subType === 'merchant_silver') return 'merchant_silver';
+  if (subType === 'customer') return 'customer';
+  if (subType === 'fixed_asset') return 'fixed_asset';
+  if (subType === 'other_due') return 'other_due';
+  if (['capital', 'withdrawals', 'retained_earnings'].includes(subType)) return 'equity';
+  if (subType === 'revenue') return 'revenue';
+  if (subType === 'expense') return 'expense';
+  if (subType === 'unclassified') return 'unclassified';
+
+  if (account.type === 'cash') return 'cash';
+  if (account.type === 'merchant' && account.metal === 'gold') return 'merchant_gold';
+  if (account.type === 'merchant' && account.metal === 'silver') return 'merchant_silver';
+  if (account.is_inventory === true && account.type === 'accessory') return 'inventory_accessory';
+  if (account.is_inventory === true && account.metal === 'gold') return 'inventory_gold';
+  if (account.is_inventory === true && account.metal === 'silver') return 'inventory_silver';
+  const mainType = account.canonicalMainType ?? account.mainType;
+  if (['revenue', 'revenues', '\u0625\u064a\u0631\u0627\u062f\u0627\u062a', '\u0627\u064a\u0631\u0627\u062f\u0627\u062a'].includes(mainType)) return 'revenue';
+  if (['expense', 'expenses', '\u0645\u0635\u0631\u0648\u0641\u0627\u062a'].includes(mainType)) return 'expense';
+  if (['equity', '\u062d\u0642\u0648\u0642 \u0645\u0644\u0643\u064a\u0629'].includes(mainType)) return 'equity';
+  return 'unclassified';
+};
+
+export const getAccountGroup = (account: Account): string =>
+  LEDGER_ACCOUNT_GROUPS[getLedgerAccountGroupId(account)];
+
+export interface LedgerUnclassifiedAccount {
+  accountId: string;
+  accountName: string;
+  mainType: string;
+  subType: string;
+  reason: string;
+}
+
+export const getUnclassifiedLedgerAccounts = (accounts: Account[]): LedgerUnclassifiedAccount[] =>
+  accounts
+    .filter(account => account.isActive !== false && getLedgerAccountGroupId(account) === 'unclassified')
+    .map(account => ({
+      accountId: account.id ?? '',
+      accountName: account.name,
+      mainType: account.canonicalMainType ?? account.mainType,
+      subType: account.canonicalSubType ?? account.subType,
+      reason: canonicalSubTypeFor(account).startsWith('inventory_') && account.is_inventory !== true
+        ? 'Inventory subtype requires is_inventory === true'
+        : 'No supported structural subtype or main/type/metal classification',
+    }));
+
+let lastUnclassifiedLedgerWarning = '';
+export const warnUnclassifiedLedgerAccounts = (warnings: LedgerUnclassifiedAccount[]): void => {
+  const fingerprint = JSON.stringify(warnings);
+  if (!warnings.length) {
+    lastUnclassifiedLedgerWarning = '';
+    return;
+  }
+  if (fingerprint === lastUnclassifiedLedgerWarning) return;
+  lastUnclassifiedLedgerWarning = fingerprint;
+  console.warn('Unclassified historical ledger accounts', warnings);
+};
+
+export const getAccountNature = (account: Account, accounts: Account[]): AccountNature => {
   const found = accounts.find(item => getAccountKey(item) === getAccountKey(account));
   return found?.metal === 'gold' ? AccountNature.GOLD : found?.metal === 'silver' ? AccountNature.SILVER : AccountNature.CASH;
 };
@@ -241,6 +330,8 @@ export const buildLedgerAccountSelection = (accounts: Account[], search = ''): L
   });
   const grouped = new Map<string, LedgerSelectableEntity[]>();
   selected.forEach(entity => grouped.set(entity.primaryGroup, [...(grouped.get(entity.primaryGroup) || []), entity]));
-  return [...grouped].map(([label, groupAccounts]) => ({ id: label, label, accounts: groupAccounts }));
+  return (Object.entries(LEDGER_ACCOUNT_GROUPS) as Array<[LedgerAccountGroupId, string]>)
+    .map(([id, label]) => ({ id, label, accounts: grouped.get(label) ?? [] }))
+    .filter(group => group.accounts.length > 0);
 };
 
