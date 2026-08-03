@@ -328,7 +328,7 @@ describe('computeAccountBalances', () => {
     });
   });
 
-  it('keeps an unknown structural account ID visible without falling back to its name', () => {
+  it('keeps an unknown structural account ID visible without inferring a metal from the entry', () => {
     const result = computeAccountBalances([
       entry({
         id: 'unknown-id-entry',
@@ -345,7 +345,7 @@ describe('computeAccountBalances', () => {
     expect(result.balances.get('missing-account-id')).toMatchObject({
       mainType: 'unclassified',
       subType: 'unclassified',
-      goldActualBalance: -1,
+      goldActualBalance: 0,
     });
     expect(result.unclassifiedAccounts).toContainEqual(
       expect.objectContaining({

@@ -1094,6 +1094,22 @@ export const rebuildInventoryCostTimeline = (
           if (workmanshipCost > 0 && quantity.physicalUnits <= 0) {
             fail('merchant_workmanship_without_weight', 'Merchant workmanship requires positive physical weight', entry);
           }
+          // Merchant metal principal is acquired at the related inventory's
+          // existing WAC. A stored transaction price is a narrow historical
+          // fallback only when no prior WAC exists; current market prices are
+          // never read here.
+          if (state.standardizedQuantityUnits > 0 && state.remainingMetalCostMinor > 0) {
+            metalCost = proportionalCost(
+              state.remainingMetalCostMinor,
+              quantity.standardizedUnits,
+              state.standardizedQuantityUnits,
+              entry,
+              'merchant metal principal at WAC',
+            );
+          } else if (Number.isFinite(entry.marketPrice) && Number(entry.marketPrice) > 0) {
+            metalCost = Math.round(Number(entry.marketPrice) * quantity.physicalUnits);
+            if (!Number.isSafeInteger(metalCost)) fail('invalid_amount', 'Merchant metal principal overflow', entry, state.inventoryAccountId);
+          }
         }
         addIncoming(state, quantity, metalCost, workmanshipCost, accessoryCost, entry);
         const result = blankResult(entry, classification);
@@ -1239,12 +1255,16 @@ export const rebuildInventoryCostTimeline = (
         if (!creditInventory) fail('missing_inventory_account_id', 'Merchant delivery inventory accountId is missing', entry);
         const state = states[creditInventory.inventoryAccountId];
         const quantity = movementQuantity(entry, creditInventory);
-        applyZeroCostMerchantDelivery(state, quantity, entry);
+        const removed = calculateRemoval(state, quantity, entry);
+        applyRemoval(state, quantity, removed, entry);
         const result = blankResult(entry, classification);
         Object.assign(result, {
           sourceInventoryAccountId: creditInventory.inventoryAccountId,
           outgoingStandardizedQuantityUnits: quantity.standardizedUnits,
           outgoingActualPhysicalWeightUnits: quantity.physicalUnits,
+          outgoingMetalCostMinor: removed.metalCostMinor,
+          outgoingWorkmanshipCostMinor: removed.workmanshipCostMinor,
+          outgoingTotalCostMinor: removed.totalCostMinor,
         });
         results.push(result);
         continue;

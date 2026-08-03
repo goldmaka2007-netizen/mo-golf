@@ -7,7 +7,7 @@ import { buildLegacyLedgerLegs, legacyLedgerEntityId, type LegacyLedgerBuildOpti
 import { splitLegsByPeriod } from './periodLegs';
 import { applyRuntimeAccountOverride } from './runtimeAccountOverrides';
 
-export type LedgerDimension = 'cash' | 'gold' | 'silver' | 'quantity';
+export type LedgerDimension = 'cash' | 'gold' | 'silver' | 'quantity' | 'book_value';
 export type GoldDisplayMode = 'equivalent21' | 'original';
 
 export interface LedgerRow {
@@ -48,8 +48,8 @@ const originalWeightFor = (entry: Entry, dimension: LedgerDimension, accounts: A
 /** The only user-facing operation identifier in the persisted model is invoiceNumber. */
 export const getVisibleOperationNumber = (entry: Entry): string => entry.invoiceNumber || String(entry.seq || '');
 
-export const getAvailableDimensions = (account: Account, entries: Entry[], accounts: Account[]): LedgerDimension[] => {
-  const historical = new Set(buildLegacyLedgerLegs(entries, accounts).filter(leg => leg.entityId === legacyLedgerEntityId(account)).map(leg => leg.dimension));
+export const getAvailableDimensions = (account: Account, entries: Entry[], accounts: Account[], canonicalDefinitions: CanonicalAccountDefinition[] = [], options: LegacyLedgerBuildOptions = {}): LedgerDimension[] => {
+  const historical = new Set(buildLegacyLedgerLegs(entries, accounts, canonicalDefinitions, { ...options, enableFinancialProjection: true }).filter(leg => leg.entityId === legacyLedgerEntityId(account)).map(leg => leg.dimension));
   const configured: LedgerDimension[] = [];
   if (account.type === 'merchant') configured.push('cash', ...getMerchantMetals(account, entries, accounts));
   else if (account.type === 'cash') configured.push('cash');
@@ -62,7 +62,7 @@ export const getAvailableDimensions = (account: Account, entries: Entry[], accou
     if (nature === AccountNature.MIXED_SILVER) configured.push('cash', 'silver');
   }
   configured.forEach(dimension => historical.add(dimension));
-  return (['cash', 'gold', 'silver', 'quantity'] as const).filter(dimension => historical.has(dimension));
+  return (['cash', 'gold', 'silver', 'quantity', 'book_value'] as const).filter(dimension => historical.has(dimension));
 };
 
 export interface LedgerReportBuildOptions extends LegacyLedgerBuildOptions {
@@ -102,27 +102,33 @@ export const buildLedgerReport = (
 ): LedgerReport => {
   const balancePeriod = options.balancePeriod ?? computePeriodAccountBalances(entries, accounts, startDate, endDate);
   const entityId = legacyLedgerEntityId(account);
-  const legs = buildLegacyLedgerLegs(entries, accounts, canonicalDefinitions, options)
+  const legs = buildLegacyLedgerLegs(entries, accounts, canonicalDefinitions, { ...options, enableFinancialProjection: true })
     .filter(leg => leg.entityId === entityId && leg.dimension === dimension)
     .sort((a, b) => compareBalanceEntries(a.entry, b.entry) || a.side.localeCompare(b.side, 'en'));
   const normalBalance = legs[0]?.account.normalBalance ?? resolveNormalBalance({ account });
-  const openingBalance = engineDimensionBalance(findEngineBalance(balancePeriod.opening, account), dimension);
-  const closingBalance = engineDimensionBalance(findEngineBalance(balancePeriod.closing, account), dimension);
-  if (legs.length) {
-    const { periodLegs } = splitLegsByPeriod(legs, startDate, endDate);
-    let runningBalance = openingBalance; const rows: LedgerRow[] = [];
-    periodLegs.forEach(leg => {
-      if (dimension === 'gold' && leg.entry.goldEquivalent21Snapshot) leg = { ...leg, amount: Math.abs(getEntryArabicWeight(leg.entry, account)) };
-      const change = normalBalance === 'credit' ? (leg.side === 'credit' ? leg.amount : -leg.amount) : (leg.side === 'debit' ? leg.amount : -leg.amount);
-      runningBalance += change;
-      rows.push({ entry: leg.entry, date: leg.date, operationNumber: getVisibleOperationNumber(leg.entry), operationType: leg.entry.tx || leg.operationKind || 'عملية', oppositeAccount: leg.oppositeAccount, debit: leg.side === 'debit' ? leg.amount : 0, credit: leg.side === 'credit' ? leg.amount : 0, balance: runningBalance, originalWeight: originalWeightFor(leg.entry, dimension, accounts), karat: leg.entry.karat });
-    });
-    if (rows.length) rows[rows.length - 1].balance = closingBalance;
-    return { balanceEngineVersion: balancePeriod.balanceEngineVersion, source: 'balance_engine', normalBalance, openingBalance, totalDebit: rows.reduce((total, row) => total + row.debit, 0), totalCredit: rows.reduce((total, row) => total + row.credit, 0), closingBalance, rows };
-  }
-  return { balanceEngineVersion: balancePeriod.balanceEngineVersion, source: 'balance_engine', normalBalance, openingBalance, totalDebit: 0, totalCredit: 0, closingBalance, rows: [] };
+  const signed = (side: 'debit' | 'credit', amount: number): number =>
+    normalBalance === 'credit' ? (side === 'credit' ? amount : -amount) : (side === 'debit' ? amount : -amount);
+  const { openingLegs, periodLegs } = splitLegsByPeriod(legs, startDate, endDate);
+  const openingBalance = openingLegs.reduce((total, leg) => total + signed(leg.side, leg.amount), 0);
+  let runningBalance = openingBalance;
+  const rows: LedgerRow[] = [];
+  periodLegs.forEach(rawLeg => {
+    let leg = rawLeg;
+    if (dimension === 'gold' && leg.entry.goldEquivalent21Snapshot) leg = { ...leg, amount: Math.abs(getEntryArabicWeight(leg.entry, account)) };
+    runningBalance += signed(leg.side, leg.amount);
+    rows.push({ entry: leg.entry, date: leg.date, operationNumber: getVisibleOperationNumber(leg.entry), operationType: leg.entry.tx || leg.operationKind || '\u0639\u0645\u0644\u064a\u0629', oppositeAccount: leg.oppositeAccount, debit: leg.side === 'debit' ? leg.amount : 0, credit: leg.side === 'credit' ? leg.amount : 0, balance: runningBalance, originalWeight: originalWeightFor(leg.entry, dimension, accounts), karat: leg.entry.karat });
+  });
+  return {
+    balanceEngineVersion: balancePeriod.balanceEngineVersion,
+    source: 'balance_engine',
+    normalBalance,
+    openingBalance,
+    totalDebit: rows.reduce((total, row) => total + row.debit, 0),
+    totalCredit: rows.reduce((total, row) => total + row.credit, 0),
+    closingBalance: runningBalance,
+    rows,
+  };
 };
-
 export const filterLedgerRows = (rows: LedgerRow[], operationType: string, oppositeAccount: string): LedgerRow[] =>
   rows.filter(row =>
     (!operationType || row.operationType === operationType) &&
@@ -137,7 +143,7 @@ export const getFilteredTotals = (rows: LedgerRow[]): Pick<LedgerReport, 'totalD
 export const formatCash = (amount: number): string => `${amount.toLocaleString('en-US', { minimumFractionDigits: 0, maximumFractionDigits: 0 })} \u062c\u0646\u064a\u0647`;
 export const formatWeight = (amount: number): string => formatWeightValue(amount, 2, true);
 export const formatQuantity = (amount: number): string => `${amount.toLocaleString('en-US', { minimumFractionDigits: 0, maximumFractionDigits: 3 })} \u0642\u0637\u0639\u0629`;
-export const formatLedgerAmount = (amount: number, dimension: LedgerDimension): string => dimension === 'cash' ? formatCash(amount) : dimension === 'quantity' ? formatQuantity(amount) : formatWeight(amount);
+export const formatLedgerAmount = (amount: number, dimension: LedgerDimension): string => dimension === 'cash' || dimension === 'book_value' ? formatCash(amount) : dimension === 'quantity' ? formatQuantity(amount) : formatWeight(amount);
 
 export const formatBalance = (balance: number, dimension: LedgerDimension, normalBalance: NormalBalanceSide = 'debit'): string => {
   const nature = balanceDirectionLabel(resolveBalanceDirection({ signedBalance: balance, normalBalance }));
@@ -163,6 +169,7 @@ export const buildLedgerCsv = (args: {
     gold: '\u0630\u0647\u0628',
     silver: '\u0641\u0636\u0629',
     quantity: '\u0639\u062f\u062f',
+    book_value: '\u0627\u0644\u0642\u064a\u0645\u0629 \u0627\u0644\u062f\u0641\u062a\u0631\u064a\u0629',
     fromDate: '\u0645\u0646 \u062a\u0627\u0631\u064a\u062e',
     toDate: '\u0625\u0644\u0649 \u062a\u0627\u0631\u064a\u062e',
     openingBalance: '\u0631\u0635\u064a\u062f \u0623\u0648\u0644 \u0627\u0644\u0645\u062f\u0629',

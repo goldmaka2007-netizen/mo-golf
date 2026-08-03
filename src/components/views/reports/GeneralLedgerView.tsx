@@ -7,7 +7,7 @@ import { computePeriodAccountBalances } from '../../../lib/engine';
 
 const today = () => new Date().toISOString().slice(0, 10);
 const yearStart = () => `${new Date().getFullYear()}-01-01`;
-const labels: Record<LedgerDimension, string> = { cash: 'نقدية', gold: 'ذهب', silver: 'فضة', quantity: 'عدد' };
+const labels: Record<LedgerDimension, string> = { cash: 'نقدية', gold: 'ذهب', silver: 'فضة', quantity: 'عدد', book_value: 'القيمة الدفترية' };
 const original = (row: LedgerRow, value: number, dimension: LedgerDimension, mode: GoldDisplayMode) => mode === 'original' && dimension === 'gold' && row.originalWeight !== undefined && row.karat ? `${formatLedgerAmount(row.originalWeight, 'gold')} — عيار ${row.karat}` : formatLedgerAmount(value, dimension);
 
 export const GeneralLedgerView = React.memo(({ entries }: { entries: Entry[]; startDate?: string; endDate?: string }) => {
@@ -44,7 +44,7 @@ const AccountSelection = ({ groups, search, setSearch, expanded, setExpanded, on
 </section>;
 
 const LedgerDetails = ({ account, accounts, entries, canonicalAccounts, costTimeline, onBack }: { account: Account; accounts: Account[]; entries: Entry[]; canonicalAccounts: import('../../../types').CanonicalAccountDefinition[]; costTimeline: import('../../../lib/inventoryCostTypes').InventoryCostTimeline | null; onBack: () => void }) => {
-  const dimensions = useMemo(() => getAvailableDimensions(account, entries, accounts), [account, entries, accounts]);
+  const dimensions = useMemo(() => getAvailableDimensions(account, entries, accounts, canonicalAccounts, { enableFinancialProjection: true, costTimeline }), [account, entries, accounts, canonicalAccounts, costTimeline]);
   const [dimension, setDimension] = useState<LedgerDimension>('cash');
   const [from, setFrom] = useState(yearStart); const [to, setTo] = useState(today);
   const [operation, setOperation] = useState(''); const [opposite, setOpposite] = useState(''); const [mode, setMode] = useState<GoldDisplayMode>('equivalent21'); const [detail, setDetail] = useState<LedgerRow | null>(null);

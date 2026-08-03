@@ -1,11 +1,11 @@
 import type { Account, CanonicalAccountDefinition, Entry } from '../types';
 import { resolveOperationKind } from './engine';
 import { isValidAccountingEntry } from './canonicalAccounting';
-import type { InventoryCostTimeline, OperationCostResultV2 } from './inventoryCostTypes';
+import type { InventoryCostTimeline } from './inventoryCostTypes';
 import { isOpeningEntry } from './openingEntry';
 import { applyRuntimeAccountOverride } from './runtimeAccountOverrides';
 
-export type LegacyLedgerDimension = 'cash' | 'gold' | 'silver' | 'quantity';
+export type LegacyLedgerDimension = 'cash' | 'gold' | 'silver' | 'quantity' | 'book_value';
 export type LegacyLedgerSide = 'debit' | 'credit';
 export type LegacyLedgerGroup = 'assets' | 'liabilities' | 'equity' | 'revenue' | 'expenses';
 
@@ -32,6 +32,15 @@ export interface LegacyLedgerLeg {
   account: LegacyLedgerAccountMetadata;
   entry: Entry;
   oppositeAccount: string;
+  amountMinor: number;
+  accountId?: string;
+  canonicalCategory?: string;
+  metalType?: 'gold' | 'silver' | 'accessory' | null;
+  quantityBasis?: 'equivalent21' | 'physical_grams' | 'pieces' | null;
+  bookValueSource?: 'stored_egp' | 'wac' | null;
+  origin: 'historical' | 'generated';
+  generatedLegId: string;
+  deduplicationId: string;
 }
 
 export interface LegacyLedgerAccountBalance {
@@ -164,16 +173,29 @@ const virtualAccount = (
   normalBalance: ['liabilities', 'equity', 'revenue'].includes(group) ? 'credit' : 'debit',
 });
 
-const virtualSalesRevenue = virtualAccount('system:income:sales-revenue', '\u0625\u064a\u0631\u0627\u062f \u0645\u0628\u064a\u0639\u0627\u062a \u0627\u0644\u0645\u062e\u0632\u0648\u0646', 'revenue', '\u0625\u064a\u0631\u0627\u062f \u0645\u0628\u064a\u0639\u0627\u062a \u0645\u0646 \u0625\u0633\u0642\u0627\u0637 \u0645\u062d\u0627\u0633\u0628\u064a \u0645\u0631\u0643\u0632\u064a');
-const virtualCogsExpense = virtualAccount('system:income:cogs', '\u062a\u0643\u0644\u0641\u0629 \u0627\u0644\u0628\u0636\u0627\u0639\u0629 \u0627\u0644\u0645\u0628\u0627\u0639\u0629', 'expenses', 'COGS \u0645\u0646 \u0627\u0644\u0645\u062a\u0648\u0633\u0637 \u0627\u0644\u0645\u0631\u062c\u062d');
+const inventoryKind = (account: Account | undefined): 'gold' | 'silver' | 'accessories' =>
+  account?.type === 'accessory' ? 'accessories' : metalFor(account) === 'silver' ? 'silver' : 'gold';
+const kindLabel = (kind: ReturnType<typeof inventoryKind>): string =>
+  kind === 'gold' ? '\u0627\u0644\u0630\u0647\u0628' : kind === 'silver' ? '\u0627\u0644\u0641\u0636\u0629' : '\u0627\u0644\u0645\u0644\u062d\u0642\u0627\u062a';
+const virtualSalesRevenueFor = (account: Account | undefined): LegacyLedgerAccountMetadata => {
+  const kind = inventoryKind(account);
+  return virtualAccount(`system:income:sales-revenue:${kind}`, `\u0625\u064a\u0631\u0627\u062f \u0645\u0628\u064a\u0639\u0627\u062a ${kindLabel(kind)}`, 'revenue', '\u0625\u064a\u0631\u0627\u062f \u0645\u0628\u064a\u0639\u0627\u062a \u0645\u0648\u0644\u062f \u0645\u0631\u0629 \u0648\u0627\u062d\u062f\u0629');
+};
+const virtualCogsFor = (account: Account | undefined): LegacyLedgerAccountMetadata => {
+  const kind = inventoryKind(account);
+  return virtualAccount(`system:income:cogs:${kind}`, `\u062a\u0643\u0644\u0641\u0629 \u0627\u0644\u0628\u0636\u0627\u0639\u0629 \u0627\u0644\u0645\u0628\u0627\u0639\u0629 - ${kindLabel(kind)}`, 'expenses', 'COGS \u0645\u0646 WAC');
+};
 const virtualShortageLoss = virtualAccount('system:income:inventory-shortage-loss', '\u062e\u0633\u0627\u0626\u0631 \u062a\u0633\u0648\u064a\u0629 \u0639\u062c\u0632 \u0627\u0644\u0645\u062e\u0632\u0648\u0646', 'expenses', '\u062e\u0633\u0627\u0631\u0629 \u0639\u062c\u0632 \u0645\u0646 \u0627\u0644\u0645\u062a\u0648\u0633\u0637 \u0627\u0644\u0645\u0631\u062c\u062d');
 
 const isInventoryAccount = (account: Account | undefined): boolean =>
   !!account && (account.is_inventory === true || ['gold_product', 'gold_raw', 'gold_direct', 'silver', 'accessory'].includes(account.type ?? ''));
 
 const ownsDimension = (account: Account | undefined, dimension: LegacyLedgerDimension, financialProjection: boolean): boolean => {
+  // Raw historical projection remains lossless and balanced. Eligibility is
+  // applied only by the normalized financial projection.
+  if (!financialProjection) return true;
   if (!account) return true;
-  if (dimension === 'cash') return !isInventoryAccount(account) || financialProjection;
+  if (dimension === 'cash') return !isInventoryAccount(account);
   if (dimension === 'quantity') return account.type === 'accessory';
   return metalFor(account) === dimension;
 };
@@ -185,47 +207,133 @@ const legFrom = (
   side: LegacyLedgerSide,
   dimension: LegacyLedgerDimension,
   amount: number,
+  origin: LegacyLedgerLeg['origin'] = 'historical',
+  bookValueSource: LegacyLedgerLeg['bookValueSource'] = null,
 ): LegacyLedgerLeg => ({
   dimension,
   amount,
+  amountMinor: Math.round(amount * 100),
   sourceEntryId: operationId(entry),
   operationKind: resolveOperationKind(entry),
   date: entry.date,
   isOpening: isOpeningEntry(entry),
   entry,
   entityId: account.entityId,
+  accountId: account.sourceAccount?.id,
   accountName: account.accountName,
+  canonicalCategory: account.sourceAccount?.canonicalSubType ?? account.sourceAccount?.subType,
+  metalType: account.sourceAccount?.type === 'accessory' ? 'accessory' : metalFor(account.sourceAccount),
+  quantityBasis: dimension === 'gold' ? 'equivalent21' : dimension === 'silver' ? 'physical_grams' : dimension === 'quantity' ? 'pieces' : null,
+  bookValueSource: bookValueSource ?? (dimension === 'cash' ? 'stored_egp' : null),
+  origin,
+  generatedLegId: `${operationId(entry)}:${dimension}:${account.entityId}:${side}:${origin}`,
+  deduplicationId: `${operationId(entry)}:${dimension}:${account.entityId}:${side}`,
   side,
   group: account.group,
   account,
   oppositeAccount: opposite.accountName,
 });
 
-const costAmount = (result: OperationCostResultV2): number =>
-  (result.classification === 'sale' ? result.totalCogsMinor : result.classification === 'shortage' ? result.adjustmentLossMinor : 0) / 100;
-
 const appendCostLegs = (
   legs: LegacyLedgerLeg[],
   accounts: Account[],
   index: LegacyAccountIndex,
   timeline: InventoryCostTimeline | null | undefined,
+  allowedOperationIds: ReadonlySet<string>,
 ) => {
   if (!timeline?.valid) return;
-  timeline.results.forEach(result => {
-    const amount = costAmount(result);
-    if (!Number.isFinite(amount) || amount <= 0) return;
-    const entry = result.entry;
-    const inventoryAccountId = result.sourceInventoryAccountId || result.inventoryAccountId;
-    const inventoryAccount = inventoryAccountId ? accounts.find(account => account.id === inventoryAccountId) : undefined;
-    const credit = inventoryAccount
-      ? metadataFor({ ...entry, credit: inventoryAccount.name, creditAccountId: inventoryAccount.id }, 'credit', index)
-      : metadataFor(entry, 'credit', index);
-    const debit = result.classification === 'shortage' ? virtualShortageLoss : virtualCogsExpense;
-    legs.push(legFrom(entry, debit, credit, 'debit', 'cash', amount));
-    legs.push(legFrom(entry, credit, debit, 'credit', 'cash', amount));
-  });
-};
+  const seen = new Set(legs.map(leg => leg.deduplicationId));
+  const pushOne = (
+    entry: Entry,
+    account: LegacyLedgerAccountMetadata,
+    opposite: LegacyLedgerAccountMetadata,
+    side: LegacyLedgerSide,
+    amountMinor: number,
+  ) => {
+    if (!Number.isSafeInteger(amountMinor) || amountMinor <= 0) return;
+    const leg = legFrom(entry, account, opposite, side, 'book_value', amountMinor / 100, 'generated', 'wac');
+    if (seen.has(leg.deduplicationId)) return;
+    seen.add(leg.deduplicationId);
+    legs.push(leg);
+  };
+  const pushGenerated = (
+    entry: Entry,
+    debit: LegacyLedgerAccountMetadata,
+    credit: LegacyLedgerAccountMetadata,
+    amountMinor: number,
+  ) => {
+    pushOne(entry, debit, credit, 'debit', amountMinor);
+    pushOne(entry, credit, debit, 'credit', amountMinor);
+  };
 
+  timeline.results.filter(result => allowedOperationIds.has(result.operationId || operationId(result.entry))).forEach(result => {
+    const entry = result.entry;
+    const sourceAccount = result.sourceInventoryAccountId
+      ? accounts.find(account => account.id === result.sourceInventoryAccountId)
+      : undefined;
+    const destinationId = result.destinationInventoryAccountId || result.inventoryAccountId;
+    const destinationAccount = destinationId ? accounts.find(account => account.id === destinationId) : undefined;
+    const source = sourceAccount
+      ? metadataFor({ ...entry, credit: sourceAccount.name, creditAccountId: sourceAccount.id }, 'credit', index)
+      : metadataFor(entry, 'credit', index);
+    const destination = destinationAccount
+      ? metadataFor({ ...entry, debit: destinationAccount.name, debitAccountId: destinationAccount.id }, 'debit', index)
+      : metadataFor(entry, 'debit', index);
+
+    if (['opening', 'customer_purchase', 'merchant_receipt'].includes(result.classification)) {
+      const counterpart = metadataFor(entry, 'credit', index);
+      if (result.classification === 'opening') {
+        pushGenerated(entry, destination, counterpart, result.incomingTotalCostMinor);
+      } else if (result.classification === 'customer_purchase') {
+        // The Treasury/customer credit remains in ordinary EGP; inventory is
+        // represented only through carrying value.
+        pushOne(entry, destination, counterpart, 'debit', result.incomingTotalCostMinor);
+      } else {
+        // The inventory debit includes principal plus workmanship. Principal
+        // is a metal liability carrying value; workmanship remains the stored
+        // cash-denominated merchant payable.
+        pushOne(entry, destination, counterpart, 'debit', result.incomingTotalCostMinor);
+        pushOne(entry, counterpart, destination, 'credit', result.incomingMetalCostMinor);
+      }
+      return;
+    }
+    if (result.classification === 'sale') {
+      pushGenerated(entry, virtualCogsFor(sourceAccount), source, result.totalCogsMinor);
+      return;
+    }
+    if (result.classification === 'shortage') {
+      pushGenerated(entry, virtualShortageLoss, source, result.adjustmentLossMinor);
+      return;
+    }
+    if (result.classification === 'surplus') {
+      const gain = virtualAccount('system:income:inventory-surplus-gain', '\u0645\u0643\u0627\u0633\u0628 \u0632\u064a\u0627\u062f\u0629 \u0627\u0644\u0645\u062e\u0632\u0648\u0646', 'revenue', '\u062a\u0633\u0648\u064a\u0629 \u0645\u062e\u0632\u0648\u0646');
+      pushGenerated(entry, destination, gain, result.adjustmentGainMinor);
+      return;
+    }
+    if (['transfer', 'tafyeet', 'two_sided_adjustment'].includes(result.classification)) {
+      pushGenerated(entry, destination, source, Math.min(result.incomingTotalCostMinor, result.outgoingTotalCostMinor));
+      return;
+    }
+    if (result.classification === 'merchant_delivery') {
+      pushGenerated(entry, metadataFor(entry, 'debit', index), source, result.outgoingTotalCostMinor);
+    }
+  });
+
+  (timeline.historicalInventoryOverlays ?? [])
+    .filter(overlay => allowedOperationIds.has(overlay.sourceDeficitOperationId))
+    .forEach(overlay => {
+      const inventoryAccount = accounts.find(account => account.id === overlay.stableInventoryAccountId);
+      if (!inventoryAccount) return;
+      const entry: Entry = {
+        id: overlay.overlayId, operationKind: 'opening', tx: '\u062a\u0633\u0648\u064a\u0629 \u0627\u0641\u062a\u062a\u0627\u062d\u064a\u0629 \u0644\u0644\u0645\u062e\u0632\u0648\u0646', date: overlay.effectiveDate,
+        debit: inventoryAccount.name, debitAccountId: inventoryAccount.id, credit: '\u062d\u0642\u0648\u0642 \u0645\u0644\u0643\u064a\u0629 \u0627\u0641\u062a\u062a\u0627\u062d\u064a\u0629',
+        cash: '0', weight: '0', arabicWeight: '0', count: '0', notes: overlay.reasonCode, userId: inventoryAccount.userId,
+      };
+      const inventory = metadataFor(entry, 'debit', index);
+      const equity = virtualAccount('system:equity:inventory-opening', '\u062d\u0642\u0648\u0642 \u0645\u0644\u0643\u064a\u0629 \u0627\u0641\u062a\u062a\u0627\u062d\u064a\u0629', 'equity', '\u0623\u0633\u0627\u0633 \u062a\u0643\u0644\u0641\u0629 \u062a\u0627\u0631\u064a\u062e\u064a');
+      pushGenerated(entry, inventory, equity, overlay.totalCostMinor);
+    });
+};
 /** Builds exactly two historical legs for every dimension physically stored on
  * a valid imported row. No account-dimension eligibility or canonical rule is
  * allowed to suppress either historical side. */
@@ -256,15 +364,20 @@ export const buildLegacyLedgerLegs = (
         && dimension === 'cash'
         && (entry.operationKind || '') === 'sale'
         && isInventoryAccount(creditAccount)
-          ? virtualSalesRevenue
+          ? virtualSalesRevenueFor(creditAccount)
           : credit;
       if (ownsDimension(debitAccount, dimension, options.enableFinancialProjection === true))
         legs.push(legFrom(entry, debit, projectedCredit, 'debit', dimension, amount));
       if (projectedCredit !== credit || ownsDimension(creditAccount, dimension, options.enableFinancialProjection === true))
-        legs.push(legFrom(entry, projectedCredit, debit, 'credit', dimension, amount));
+        legs.push(legFrom(entry, projectedCredit, debit, 'credit', dimension, amount, projectedCredit !== credit ? 'generated' : 'historical'));
     });
   });
-  if (options.enableFinancialProjection) appendCostLegs(legs, accounts, index, options.costTimeline);
+  if (options.enableFinancialProjection) {
+    appendCostLegs(legs, accounts, index, options.costTimeline, new Set(entries.map(operationId)));
+    const unique = new Map<string, LegacyLedgerLeg>();
+    legs.forEach(leg => { if (!unique.has(leg.deduplicationId)) unique.set(leg.deduplicationId, leg); });
+    return [...unique.values()];
+  }
   return legs;
 };
 
@@ -281,6 +394,7 @@ export const buildLegacyJournalProjection = (
     gold: { debit: 0, credit: 0, difference: 0 },
     silver: { debit: 0, credit: 0, difference: 0 },
     quantity: { debit: 0, credit: 0, difference: 0 },
+    book_value: { debit: 0, credit: 0, difference: 0 },
   };
   legs.forEach(leg => {
     totals[leg.dimension][leg.side] += leg.amount;

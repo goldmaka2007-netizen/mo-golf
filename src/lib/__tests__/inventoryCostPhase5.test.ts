@@ -85,7 +85,7 @@ describe('Phase 5 component WAC engine', () => {
     expect(timeline.finalStates['gold-b'].metalWacMinorPerStandardUnit).toBe(200);
   });
 
-  it('adds merchant cash to workmanship only and weights it by physical grams', () => {
+  it('capitalizes merchant metal at WAC and cash as workmanship once', () => {
     const timeline = rebuild([
       entry({ id: 'opening', seq: 1, tx: 'قيد افتتاحي', operationKind: 'opening', debit: 'ذهب أ', debitAccountId: 'gold-a', credit: 'رأس المال', creditAccountId: 'equity', weight: '100' }),
       entry({ id: 'merchant-receipt', seq: 2, date: '2026-01-02', tx: 'تاجر ذهب', debit: 'ذهب أ', debitAccountId: 'gold-a', credit: 'تاجر', creditAccountId: 'merchant', weight: '10', cash: '1000' }),
@@ -95,7 +95,7 @@ describe('Phase 5 component WAC engine', () => {
     expect(timeline.finalStates['gold-a']).toMatchObject({
       standardizedQuantityUnits: 11000,
       actualPhysicalWeightUnits: 11000,
-      remainingMetalCostMinor: 1000000,
+      remainingMetalCostMinor: 1100000,
       remainingWorkmanshipCostMinor: 100000,
     });
     expect(timeline.finalStates['gold-a'].workmanshipWacMinorPerPhysicalUnit).toBeCloseTo(100000 / 11000);
@@ -109,11 +109,11 @@ describe('Phase 5 component WAC engine', () => {
     ]);
 
     expect(timeline.resultsByOperationId.sale).toMatchObject({
-      metalCogsMinor: 100000,
+      metalCogsMinor: 110000,
       workmanshipCogsMinor: 10000,
-      totalCogsMinor: 110000,
+      totalCogsMinor: 120000,
       saleAmountMinor: 200000,
-      profitMinor: 90000,
+      profitMinor: 80000,
     });
   });
 
