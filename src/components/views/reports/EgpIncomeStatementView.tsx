@@ -1,60 +1,34 @@
-import { formatWeight } from '../../../lib/formatting';
 import React, { useMemo, useState } from 'react';
 import { AlertTriangle, Download, TrendingUp } from 'lucide-react';
 import type { Entry } from '../../../types';
 import { useAppStore } from '../../../store';
-import { buildFinancialStatementsEgp } from '../../../lib/financialStatementsEgp';
+import { buildFinancialStatementsEgp, type FinancialStatementCategory, type QuantifiedFinancialStatementLine } from '../../../lib/financialStatementsEgp';
 import { exportToExcel } from '../../../utils/exportUtils';
 import { cn } from '../../../lib/utils';
+import { formatQuantity, formatWeight } from '../../../lib/formatting';
 
+const text = {
+  title: '\u0642\u0627\u0626\u0645\u0629 \u0627\u0644\u062f\u062e\u0644', subtitle: '\u0627\u0644\u0642\u064a\u0645\u0629 \u0627\u0644\u0645\u0627\u0644\u064a\u0629 \u0645\u0639 \u0648\u0632\u0646/\u0643\u0645\u064a\u0629 \u0627\u0644\u0628\u064a\u0639 \u0648\u0645\u062a\u0648\u0633\u0637 \u0633\u0639\u0631 \u0627\u0644\u0648\u062d\u062f\u0629.',
+  export: '\u062a\u0635\u062f\u064a\u0631 Excel', all: '\u0643\u0644 \u0627\u0644\u0641\u062a\u0631\u0629', revenue: '\u0627\u0644\u0625\u064a\u0631\u0627\u062f\u0627\u062a', revenueTotal: '\u0625\u062c\u0645\u0627\u0644\u064a \u0627\u0644\u0625\u064a\u0631\u0627\u062f\u0627\u062a',
+  cogs: '\u062a\u0643\u0644\u0641\u0629 \u0627\u0644\u0628\u0636\u0627\u0639\u0629 \u0627\u0644\u0645\u0628\u0627\u0639\u0629', cogsTotal: '\u0625\u062c\u0645\u0627\u0644\u064a \u062a\u0643\u0644\u0641\u0629 \u0627\u0644\u0628\u0636\u0627\u0639\u0629 \u0627\u0644\u0645\u0628\u0627\u0639\u0629', gross: '\u0645\u062c\u0645\u0644 \u0627\u0644\u0631\u0628\u062d',
+  operating: '\u0645\u0635\u0631\u0648\u0641\u0627\u062a \u0627\u0644\u062a\u0634\u063a\u064a\u0644', operatingTotal: '\u0625\u062c\u0645\u0627\u0644\u064a \u0645\u0635\u0631\u0648\u0641\u0627\u062a \u0627\u0644\u062a\u0634\u063a\u064a\u0644', net: '\u0635\u0627\u0641\u064a \u0627\u0644\u0631\u0628\u062d \u0623\u0648 \u0627\u0644\u062e\u0633\u0627\u0631\u0629',
+  weight: '\u0627\u0644\u0648\u0632\u0646', quantity: '\u0627\u0644\u0643\u0645\u064a\u0629', noExpenses: '\u0644\u0627 \u062a\u0648\u062c\u062f \u0645\u0635\u0631\u0648\u0641\u0627\u062a \u062a\u0634\u063a\u064a\u0644.',
+  unavailable: 'COGS \u063a\u064a\u0631 \u0645\u062a\u0627\u062d \u062d\u062a\u0649 \u064a\u0643\u062a\u0645\u0644 Cost Run \u0635\u0627\u0644\u062d. \u0644\u0645 \u064a\u064f\u0633\u062a\u062e\u062f\u0645 \u0627\u0644\u0648\u0632\u0646 \u0623\u0648 \u0633\u0639\u0631 \u0627\u0644\u0633\u0648\u0642 \u0643\u0628\u062f\u064a\u0644.',
+};
 const money = (value: number) => value.toLocaleString('ar-EG', { maximumFractionDigits: 2 });
-const Row: React.FC<{ label: string; value: number; total?: boolean }> = ({ label, value, total = false }) => (
-  <div className={cn('flex justify-between gap-3 rounded-xl px-3 py-2 text-sm', total ? 'border border-[#c9a84c33] bg-[#c9a84c0d] font-black' : 'bg-[#080a0f]')}>
-    <span>{label}</span><span className="font-mono tabular-nums">{money(value)} ج.م</span>
-  </div>
-);
+type MetricProps = Pick<QuantifiedFinancialStatementLine, 'label' | 'amount' | 'weight' | 'quantity' | 'unitPrice' | 'unitPriceLabel'> & { total?: boolean; key?: React.Key };
+const MetricRow = ({ label, amount, weight, quantity, unitPrice, unitPriceLabel, total = false }: MetricProps) => <div className={cn('min-w-0 rounded-xl p-3', total ? 'border border-[#c9a84c33] bg-[#c9a84c0d] font-black' : 'bg-[#080a0f]')}><div className="flex min-w-0 items-start justify-between gap-3"><span className="min-w-0 break-words text-sm">{label}</span><span className="shrink-0 font-mono tabular-nums text-[#c9a84c]">{money(amount)} \u062c.\u0645</span></div>{(weight !== null || quantity !== null) && <div className="mt-2 grid grid-cols-1 gap-1 text-[11px] text-[#8a8172] sm:grid-cols-2"><span>{weight !== null ? `${text.weight}: ${formatWeight(weight, 3)} \u062c\u0631\u0627\u0645` : `${text.quantity}: ${formatQuantity(quantity ?? 0, 3)} \u0642\u0637\u0639\u0629`}</span><span className="break-words">{unitPriceLabel}: <b className="font-mono text-[#ddd8cc]">{unitPrice === null ? '\u2014' : `${money(unitPrice)} \u062c.\u0645`}</b></span></div>}</div>;
+const CategoryBlock = ({ category }: { category: FinancialStatementCategory; key?: React.Key }) => <details className="overflow-hidden rounded-xl border border-[#1a1e2a]" open><summary className="min-h-11 cursor-pointer px-3 py-3 text-sm font-black text-[#ddd8cc]">{category.label}</summary><div className="space-y-2 border-t border-[#1a1e2a] p-2">{category.lines.map(line => <MetricRow key={line.id} {...line} />)}<MetricRow label={`\u0625\u062c\u0645\u0627\u0644\u064a ${category.label}`} amount={category.amount} weight={category.weight} quantity={category.quantity} unitPrice={category.unitPrice} unitPriceLabel={category.unitPriceLabel} total /></div></details>;
+const CashRow = ({ label, amount, total = false }: { label: string; amount: number; total?: boolean; key?: React.Key }) => <MetricRow label={label} amount={amount} weight={null} quantity={null} unitPrice={null} unitPriceLabel={null} total={total} />;
 
 export const IncomeStatementView = React.memo(({ entries }: { entries: Entry[] }) => {
   const { accountsDb, canonicalAccounts, costCalculationRun } = useAppStore();
+  const months = useMemo(() => [...new Set(entries.map(entry => entry.date.slice(0, 7)))].sort().reverse(), [entries]);
   const [month, setMonth] = useState('all');
-  const [showWeight, setShowWeight] = useState(false);
-  const months = useMemo(() => [...new Set(entries.map(e => e.date.slice(0, 7)))].sort().reverse(), [entries]);
-  const periodEntries = useMemo(() => month === 'all' ? entries : entries.filter(e => e.date.startsWith(month)), [entries, month]);
-  const dates = periodEntries.map(e => e.date).sort();
-  const report = useMemo(() => buildFinancialStatementsEgp(periodEntries, accountsDb, {
-    canonicalDefinitions: canonicalAccounts,
-    timeline: costCalculationRun.timeline,
-    incomeStartDate: dates[0],
-    incomeEndDate: dates.at(-1),
-  }), [periodEntries, accountsDb, canonicalAccounts, costCalculationRun.timeline, dates]);
+  const periodEntries = month === 'all' ? entries : entries.filter(entry => entry.date.startsWith(month));
+  const dates = periodEntries.map(entry => entry.date).sort();
+  const report = useMemo(() => buildFinancialStatementsEgp(periodEntries, accountsDb, { canonicalDefinitions: canonicalAccounts, timeline: costCalculationRun.timeline, incomeStartDate: dates[0], incomeEndDate: dates.at(-1) }), [periodEntries, accountsDb, canonicalAccounts, costCalculationRun.timeline, dates]);
   const data = report.incomeStatement;
-  const exportReport = () => exportToExcel([{ name: 'قائمة الدخل EGP', data: [
-    ...data.revenue.map(x => ({ البيان: x.label, 'المبلغ (ج.م)': x.amount })),
-    { البيان: 'إجمالي الإيرادات', 'المبلغ (ج.م)': data.revenueTotal },
-    { البيان: 'تكلفة البضاعة المباعة', 'المبلغ (ج.م)': -data.cogs },
-    { البيان: 'مجمل الربح', 'المبلغ (ج.م)': data.grossProfit },
-    ...data.operatingExpenses.map(x => ({ البيان: x.label, 'المبلغ (ج.م)': -x.amount })),
-    { البيان: 'صافي الربح', 'المبلغ (ج.م)': data.netProfit },
-  ] }], `قائمة_الدخل_EGP_${month}`);
-
-  return <div className="space-y-4 pb-20" dir="rtl">
-    <div className="flex flex-col gap-3 rounded-2xl border border-[#1a1e2a] bg-[#0e1018] p-4 sm:flex-row sm:items-center sm:justify-between">
-      <div><h3 className="flex items-center gap-2 text-lg font-black text-[#f5f1e8]"><TrendingUp className="h-5 w-5 text-[#c9a84c]" />قائمة الدخل</h3><p className="mt-1 text-xs text-[#8a8172]">جميع النتائج بالجنيه المصري فقط؛ الأوزان لا تدخل في الحساب.</p></div>
-      <button onClick={exportReport} className="flex items-center justify-center gap-2 rounded-xl border border-[#c9a84c33] px-4 py-2 text-xs font-black text-[#c9a84c]"><Download className="h-4 w-4" />تصدير Excel</button>
-    </div>
-    <div className="flex gap-2 overflow-x-auto">
-      <button onClick={() => setMonth('all')} className={cn('whitespace-nowrap rounded-xl px-4 py-2 text-xs font-black', month === 'all' ? 'bg-[#c9a84c] text-[#080a0f]' : 'bg-[#0e1018] text-[#8a8172]')}>كل الفترة</button>
-      {months.map(item => <button key={item} onClick={() => setMonth(item)} className={cn('whitespace-nowrap rounded-xl px-4 py-2 text-xs font-black', month === item ? 'bg-[#c9a84c] text-[#080a0f]' : 'bg-[#0e1018] text-[#8a8172]')}>{item}</button>)}
-    </div>
-    {!report.costBasisAvailable && <div className="flex gap-2 rounded-2xl border border-amber-500/30 bg-amber-500/10 p-3 text-xs text-amber-100"><AlertTriangle className="h-4 w-4 shrink-0" />COGS غير متاح حتى يكتمل Cost Run صالح. لم يُستخدم الوزن أو سعر السوق كبديل.</div>}
-    <div className="space-y-5 rounded-2xl border border-[#1a1e2a] bg-[#0e1018] p-4">
-      <section className="space-y-2"><h4 className="font-black text-[#6a9e6a]">الإيرادات (Revenue)</h4>{data.revenue.map(x => <Row key={x.id} label={x.label} value={x.amount} />)}<Row label="إجمالي الإيرادات" value={data.revenueTotal} total /></section>
-      <Row label="(-) تكلفة البضاعة المباعة (COGS)" value={data.cogs} />
-      <Row label="مجمل الربح (Gross Profit)" value={data.grossProfit} total />
-      <section className="space-y-2"><h4 className="font-black text-[#d08a6a]">مصروفات التشغيل (Operating Expenses)</h4>{data.operatingExpenses.map(x => <Row key={x.id} label={x.label} value={x.amount} />)}{!data.operatingExpenses.length && <div className="rounded-xl bg-[#080a0f] p-3 text-xs text-[#8a8172]">لا توجد مصروفات تشغيل.</div>}<Row label="إجمالي مصروفات التشغيل" value={data.operatingExpensesTotal} total /></section>
-      <Row label="صافي الربح (Net Profit)" value={data.netProfit} total />
-    </div>
-    <label className="flex items-center gap-2 rounded-xl bg-[#0e1018] p-3 text-xs text-[#8a8172]"><input type="checkbox" checked={showWeight} onChange={e => setShowWeight(e.target.checked)} />عرض الوزن المباع كمعلومة فقط</label>
-    {showWeight && <div className="grid grid-cols-2 gap-2 text-xs"><div className="rounded-xl bg-[#0e1018] p-3">ذهب مباع: <b>{formatWeight(data.soldWeight.gold, 3)} جم</b></div><div className="rounded-xl bg-[#0e1018] p-3">فضة مباعة: <b>{formatWeight(data.soldWeight.silver, 3)} جم</b></div></div>}
-  </div>;
+  const exportReport = () => exportToExcel([{ name: text.title, data: [...data.revenueCategories, ...data.cogsCategories].flatMap(category => [...category.lines.map(line => ({ '\u0627\u0644\u0641\u0626\u0629': category.label, '\u0627\u0644\u0628\u064a\u0627\u0646': line.label, '\u0627\u0644\u0645\u0628\u0644\u063a (\u062c.\u0645)': line.amount, '\u0627\u0644\u0648\u0632\u0646': line.weight, '\u0627\u0644\u0643\u0645\u064a\u0629': line.quantity, '\u0633\u0639\u0631 \u0627\u0644\u0648\u062d\u062f\u0629': line.unitPrice })), { '\u0627\u0644\u0641\u0626\u0629': category.label, '\u0627\u0644\u0628\u064a\u0627\u0646': `\u0625\u062c\u0645\u0627\u0644\u064a ${category.label}`, '\u0627\u0644\u0645\u0628\u0644\u063a (\u062c.\u0645)': category.amount, '\u0627\u0644\u0648\u0632\u0646': category.weight, '\u0627\u0644\u0643\u0645\u064a\u0629': category.quantity, '\u0633\u0639\u0631 \u0627\u0644\u0648\u062d\u062f\u0629': category.unitPrice }]) }], `income_statement_${month}`);
+  return <div className="space-y-4 pb-28" dir="rtl"><div className="flex flex-col gap-3 rounded-2xl border border-[#1a1e2a] bg-[#0e1018] p-4 sm:flex-row sm:items-center sm:justify-between"><div className="min-w-0"><h3 className="flex items-center gap-2 text-lg font-black text-[#f5f1e8]"><TrendingUp className="h-5 w-5 shrink-0 text-[#c9a84c]" />{text.title}</h3><p className="mt-1 text-xs text-[#8a8172]">{text.subtitle}</p></div><button onClick={exportReport} className="flex min-h-11 items-center justify-center gap-2 rounded-xl border border-[#c9a84c33] px-4 py-2 text-xs font-black text-[#c9a84c]"><Download className="h-4 w-4" />{text.export}</button></div><div className="flex gap-2 overflow-x-auto pb-1"><button onClick={() => setMonth('all')} className={cn('min-h-11 whitespace-nowrap rounded-xl px-4 py-2 text-xs font-black', month === 'all' ? 'bg-[#c9a84c] text-[#080a0f]' : 'bg-[#0e1018] text-[#8a8172]')}>{text.all}</button>{months.map(item => <button key={item} onClick={() => setMonth(item)} className={cn('min-h-11 whitespace-nowrap rounded-xl px-4 py-2 text-xs font-black', month === item ? 'bg-[#c9a84c] text-[#080a0f]' : 'bg-[#0e1018] text-[#8a8172]')}>{item}</button>)}</div>{!report.costBasisAvailable && <div className="flex gap-2 rounded-2xl border border-amber-500/30 bg-amber-500/10 p-3 text-xs text-amber-100"><AlertTriangle className="h-4 w-4 shrink-0" />{text.unavailable}</div>}<section className="space-y-3 rounded-2xl border border-[#1a1e2a] bg-[#0e1018] p-3 sm:p-4"><h4 className="font-black text-[#6a9e6a]">{text.revenue}</h4>{data.revenueCategories.map(category => <CategoryBlock key={category.id} category={category} />)}<CashRow label={text.revenueTotal} amount={data.revenueTotal} total /><h4 className="pt-2 font-black text-[#d08a6a]">{text.cogs}</h4>{data.cogsCategories.map(category => <CategoryBlock key={category.id} category={category} />)}<CashRow label={text.cogsTotal} amount={data.cogs} total /><CashRow label={text.gross} amount={data.grossProfit} total /><h4 className="pt-2 font-black text-[#d08a6a]">{text.operating}</h4>{data.operatingExpenses.map(line => <CashRow key={line.id} label={line.label} amount={line.amount} />)}{!data.operatingExpenses.length && <div className="rounded-xl bg-[#080a0f] p-3 text-xs text-[#8a8172]">{text.noExpenses}</div>}<CashRow label={text.operatingTotal} amount={data.operatingExpensesTotal} total /><CashRow label={text.net} amount={data.netProfit} total /></section></div>;
 });

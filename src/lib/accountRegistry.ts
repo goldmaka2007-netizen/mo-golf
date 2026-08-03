@@ -20,6 +20,8 @@ export type AccountResolution =
   | { status: 'ambiguous'; value: string; candidates: CanonicalAccountDefinition[] };
 
 export interface AccountRegistry {
+  /** Active source accounts after adding read-only per-item Sales/COGS companions. */
+  expandedAccounts: Account[];
   accounts: CanonicalAccountDefinition[];
   byId: Map<string, CanonicalAccountDefinition>;
   bySourceAccountId: Map<string, CanonicalAccountDefinition>;
@@ -320,7 +322,7 @@ export const buildAccountRegistry = (accounts: Account[], entries: Entry[] = [],
     if (candidates.length > 1) return { status: 'ambiguous', value, candidates };
     return { status: 'unknown', value };
   };
-  return { accounts: definitions, byId, bySourceAccountId, aliases, ambiguousAliases, resolve };
+  return { expandedAccounts: linkedAccounts.filter(account => account.isActive !== false), accounts: definitions, byId, bySourceAccountId, aliases, ambiguousAliases, resolve };
 };
 
 export const validateCanonicalAccount = (account: CanonicalAccountDefinition): string[] => {

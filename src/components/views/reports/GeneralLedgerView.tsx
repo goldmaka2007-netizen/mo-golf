@@ -4,6 +4,7 @@ import { Account, Entry } from '../../../types';
 import { useAppStore } from '../../../store';
 import { buildLedgerAccountSelection, combineLedgerDimensionReports, buildLedgerCsv, buildLedgerReport, filterLedgerRows, formatBalance, formatLedgerAmount, getAccountKey, getAvailableDimensions, getFilteredTotals, getUnclassifiedLedgerAccounts, GoldDisplayMode, LedgerDimension, LedgerRow, warnUnclassifiedLedgerAccounts } from '../../../lib/ledgerReport';
 import { computePeriodAccountBalances } from '../../../lib/engine';
+import { buildAccountRegistry } from '../../../lib/accountRegistry';
 
 const today = () => new Date().toISOString().slice(0, 10);
 const yearStart = () => `${new Date().getFullYear()}-01-01`;
@@ -15,15 +16,19 @@ export const GeneralLedgerView = React.memo(({ entries }: { entries: Entry[]; st
   const [accountKey, setAccountKey] = useState<string | null>(null);
   const [search, setSearch] = useState('');
   const [expanded, setExpanded] = useState<Set<string>>(new Set());
-  const accounts = useMemo(() => [
-    ...accountsDb.filter(a => a.isActive !== false),
-    ...canonicalAccounts.filter(item => item.isActive && !item.sourceAccountId).map(item => ({
+  const accounts = useMemo(() => {
+    const registry = buildAccountRegistry(accountsDb, entries, canonicalAccounts);
+    const expandedIds = new Set(registry.expandedAccounts.map(account => account.id).filter(Boolean));
+    return [
+    ...registry.expandedAccounts,
+    ...registry.accounts.filter(item => item.isActive && !item.sourceAccountId && !expandedIds.has(item.id)).map(item => ({
       id: item.id, name: item.displayName, mainType: item.mainGroup, subType: item.entityType,
       balanceNature: item.tracksGold ? 'جرام ذهب' : item.tracksSilver ? 'جرام فضة' : item.tracksQuantity ? 'قطعة' : 'جنية مصري',
       userId: item.userId || '', type: item.isMerchant ? 'merchant' as const : item.entityType === 'cash' ? 'cash' as const : item.metal === 'silver' ? 'silver' as const : item.metal === 'accessory' ? 'accessory' as const : item.metal === 'gold' ? 'gold_product' as const : 'other' as const,
       metal: item.metal === 'gold' || item.metal === 'silver' ? item.metal : null, is_inventory: item.isInventory, karat: item.karat ? String(item.karat) as '18' | '21' | '24' : null, isActive: item.isActive,
     })),
-  ], [accountsDb, canonicalAccounts]);
+    ];
+  }, [accountsDb, entries, canonicalAccounts]);
   const groups = useMemo(() => buildLedgerAccountSelection(accounts, search), [accounts, search]);
   const unclassifiedAccounts = useMemo(() => getUnclassifiedLedgerAccounts(accounts), [accounts]);
   useEffect(() => warnUnclassifiedLedgerAccounts(unclassifiedAccounts), [unclassifiedAccounts]);
