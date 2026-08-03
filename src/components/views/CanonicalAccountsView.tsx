@@ -1,11 +1,15 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { ChevronRight, Landmark } from 'lucide-react';
 import { useAppStore } from '../../store';
 import { CanonicalAccountsPanel } from './CanonicalAccountsPanel';
+import { AccountManagementView } from './AccountManagementView';
 
 /** Standalone, mobile-first route for the canonical chart of accounts. */
 export const CanonicalAccountsView = React.memo(() => {
   const setView = useAppStore(state => state.setView);
+  const [screen, setScreen] = useState<'chart' | 'management'>('chart');
+
+  if (screen === 'management') return <AccountManagementView />;
 
   return (
     <section className="space-y-4 pb-6" aria-label="دليل الحسابات المركزي">
@@ -29,6 +33,7 @@ export const CanonicalAccountsView = React.memo(() => {
           رجوع
         </button>
       </div>
+      <button type="button" onClick={() => setScreen('management')} className="w-full rounded-2xl border border-[#c9a84c55] bg-[#c9a84c11] p-4 text-sm font-black text-[#c9a84c]">فتح إدارة الحسابات والاستنساخ</button>
       <CanonicalAccountsPanel />
     </section>
   );

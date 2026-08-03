@@ -163,8 +163,8 @@ describe('Phase 5 Golden Dataset Regression — phase5-cost-baseline-v2-sanitize
     expect(surplus).toMatchObject({
       classification: 'surplus',
       incomingStandardizedQuantityUnits: 78,
-      incomingTotalCostMinor: 1746332,
-      adjustmentGainMinor: 1746332,
+      incomingTotalCostMinor: 531442,
+      adjustmentGainMinor: 531442,
     });
     expect(timeline!.historicalInventoryOverlays).toHaveLength(3);
     expect(timeline!.finalStates[SCRAP_ARABIC].standardizedQuantityUnits).toBe(1833);

@@ -1094,21 +1094,23 @@ export const rebuildInventoryCostTimeline = (
           if (workmanshipCost > 0 && quantity.physicalUnits <= 0) {
             fail('merchant_workmanship_without_weight', 'Merchant workmanship requires positive physical weight', entry);
           }
-          // Merchant metal principal is acquired at the related inventory's
-          // existing WAC. A stored transaction price is a narrow historical
-          // fallback only when no prior WAC exists; current market prices are
-          // never read here.
-          if (state.standardizedQuantityUnits > 0 && state.remainingMetalCostMinor > 0) {
+          // A trader invoice capitalizes the received metal at its immutable
+          // invoice gold price. Making charges remain a separate cost
+          // component. Existing inventory WAC must never replace invoice
+          // consideration; WAC is recalculated only after this receipt.
+          if (Number.isFinite(entry.marketPrice) && Number(entry.marketPrice) > 0) {
+            metalCost = Math.round(Number(entry.marketPrice) * quantity.physicalUnits);
+            if (!Number.isSafeInteger(metalCost)) fail('invalid_amount', 'Merchant metal principal overflow', entry, state.inventoryAccountId);
+          } else if (state.standardizedQuantityUnits > 0 && state.remainingMetalCostMinor > 0) {
+            // Compatibility for historical invoices that predate the stored
+            // invoice-price field. New writes are rejected without a price.
             metalCost = proportionalCost(
               state.remainingMetalCostMinor,
               quantity.standardizedUnits,
               state.standardizedQuantityUnits,
               entry,
-              'merchant metal principal at WAC',
+              'historical merchant metal principal fallback',
             );
-          } else if (Number.isFinite(entry.marketPrice) && Number(entry.marketPrice) > 0) {
-            metalCost = Math.round(Number(entry.marketPrice) * quantity.physicalUnits);
-            if (!Number.isSafeInteger(metalCost)) fail('invalid_amount', 'Merchant metal principal overflow', entry, state.inventoryAccountId);
           }
         }
         addIncoming(state, quantity, metalCost, workmanshipCost, accessoryCost, entry);

@@ -7,6 +7,7 @@ import { Entry } from './types';
 import { buildGoldEquivalent21Audit, canCalculateGoldEquivalent21, inferGoldKaratFromMultiplier } from './lib/goldEquivalent';
 import { isGoldEquivalentEntry } from './utils/accountLogic';
 import { resolveEntryIdentity } from './lib/entryIdentity';
+import { validateAccountingPolicy } from './lib/accountingPolicy';
 
 import { Home, BookOpenCheck, PlusCircle, BarChart3, Menu, RefreshCw, Gem } from 'lucide-react';
 
@@ -176,6 +177,11 @@ export default function App() {
         return;
       }
       Object.assign(rawData, identity.value);
+      const accountingPolicyIssues = validateAccountingPolicy(rawData, accountsDb);
+      if (accountingPolicyIssues.length > 0) {
+        setGlobalError(accountingPolicyIssues.map(issue => issue.message).join(' — '));
+        return;
+      }
       const calculationKarat = rawData.karat ?? inferGoldKaratFromMultiplier(rawData.multiplier);
       if (isGoldEquivalentEntry(rawData, accountsDb) && canCalculateGoldEquivalent21(rawData.weight || '', calculationKarat)) {
         const goldAudit = buildGoldEquivalent21Audit(rawData.weight || '', calculationKarat, rawData.arabicWeight);

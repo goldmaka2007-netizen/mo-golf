@@ -164,6 +164,7 @@ const buildCandidateBaseline = (
     changeId: metadata?.changeId ?? current.changeId,
     updateReason: metadata?.updateReason ?? current.updateReason,
     explanatoryNote: current.explanatoryNote,
+    transitionProof: current.transitionProof,
   };
   if (Object.prototype.hasOwnProperty.call(current, 'sourceDatasetSha256')) {
     next.sourceDatasetSha256 = calculatePhase5SourceDatasetSha256();

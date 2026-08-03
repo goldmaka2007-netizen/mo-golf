@@ -80,9 +80,10 @@ const buildIncomeFromProjection = (
 ): EgpIncomeStatement => {
   const period = allLegs.filter(leg => financialLeg(leg) && !leg.isOpening && inPeriod(leg.date, startDate, endDate));
   const revenue = groupLines(period.filter(leg => leg.group === 'revenue'), 'credit');
-  const expenseLines = groupLines(period.filter(leg => leg.group === 'expenses'), 'debit');
-  const cogsLines = expenseLines.filter(line => line.id.startsWith('system:income:cogs:'));
-  const operatingExpenses = expenseLines.filter(line => !line.id.startsWith('system:income:cogs:'));
+  const expenseLegs = period.filter(leg => leg.group === 'expenses');
+  const isCogs = (leg: LegacyLedgerLeg): boolean => leg.entityId.startsWith('system:income:cogs:') || leg.account.sourceAccount?.accountRole === 'cost_of_sales';
+  const cogsLines = groupLines(expenseLegs.filter(isCogs), 'debit');
+  const operatingExpenses = groupLines(expenseLegs.filter(leg => !isCogs(leg)), 'debit');
   const revenueTotal = roundMoney(revenue.reduce((sum, line) => sum + line.amount, 0));
   const cogs = roundMoney(cogsLines.reduce((sum, line) => sum + line.amount, 0));
   const operatingExpensesTotal = roundMoney(operatingExpenses.reduce((sum, line) => sum + line.amount, 0));

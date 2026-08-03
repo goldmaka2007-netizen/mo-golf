@@ -34,6 +34,37 @@ export interface LedgerReport {
   rows: LedgerRow[];
 }
 
+export interface MultiDimensionLedgerRow {
+  key: string;
+  entry: Entry;
+  date: string;
+  operationNumber: string;
+  operationType: string;
+  oppositeAccount: string;
+  dimensions: Partial<Record<LedgerDimension, Pick<LedgerRow, 'debit' | 'credit' | 'balance'>>>;
+}
+
+/** Combines the dimension reports without recalculating any amount. */
+export const combineLedgerDimensionReports = (
+  reports: Array<{ dimension: LedgerDimension; report: LedgerReport }>,
+): MultiDimensionLedgerRow[] => {
+  const combined = new Map<string, MultiDimensionLedgerRow>();
+  reports.forEach(({ dimension, report }) => report.rows.forEach((row, index) => {
+    const sourceId = row.entry.id || row.entry.legacyOperationId || row.entry.legacyOperationNo || row.operationNumber;
+    const key = `${sourceId}:${row.date}:${row.oppositeAccount}:${index}`;
+    const existingKey = [...combined.keys()].find(candidate => candidate.startsWith(`${sourceId}:${row.date}:${row.oppositeAccount}:`));
+    const targetKey = existingKey ?? key;
+    const target = combined.get(targetKey) ?? {
+      key: targetKey, entry: row.entry, date: row.date, operationNumber: row.operationNumber,
+      operationType: row.operationType, oppositeAccount: row.oppositeAccount, dimensions: {},
+    };
+    target.dimensions[dimension] = { debit: row.debit, credit: row.credit, balance: row.balance };
+    combined.set(targetKey, target);
+  }));
+  return [...combined.values()].sort((left, right) => left.date.localeCompare(right.date)
+    || left.operationNumber.localeCompare(right.operationNumber));
+};
+
 export const getAccountKey = (account: Account): string => account.id || account.name;
 export const isCreditNatureAccount = (account: Account | undefined): boolean =>
   !!account && resolveNormalBalance({ account }) === 'credit';

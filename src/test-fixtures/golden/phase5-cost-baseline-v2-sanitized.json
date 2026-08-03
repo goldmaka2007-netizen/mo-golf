@@ -1,294 +1,297 @@
 {
-    "baselineVersion":  "phase5-cost-baseline-v2-sanitized",
-    "previousBaselineVersion":  "phase5-cost-baseline-v1",
-    "fixtureVersion":  "phase5-cost-fixture-v2-sanitized",
-    "datasetRecordCount":  2169,
-    "datasetFingerprint":  "fnv1a-17e7dcf7",
-    "sanitizedFixtureSha256":  "118c352748cf0496a4c44127423e85c47bdccf31b511b4033186f1d7c781d46b",
-    "expectedResultFingerprint":  "c349705c1fa99f48a3aeec36196cddb1b80ff4de4c9346576141277d73c9099c",
-    "calculationRulesVersion":  "makka-inventory-taxonomy-v1:phase5-wac-v1+historical-inventory-reconciliation-v1",
-    "approvedOverlayIds":  [
-                               "hiro-20260304-scrap-arabic-e21-002",
-                               "hiro-20260320-scrap-arabic-e21-076",
-                               "hiro-20260406-gouache-arabic-e21-002"
-                           ],
-    "approvedOverlayAuditHashes":  {
-                                       "hiro-20260304-scrap-arabic-e21-002":  "e1b47ca05c4ef76cbfe2b761e75010d4e547d6cc94c7953d2f2c1c4c2f70f789",
-                                       "hiro-20260320-scrap-arabic-e21-076":  "b64608a48b8e7417a5ae2da68d56c9399cbc29fc72ddc6dc09f61fc50e535649",
-                                       "hiro-20260406-gouache-arabic-e21-002":  "6fb8ff6ad906edf8b302a4f0792514144bbef2f5f41bfddcdc08eefa6f28e02b"
-                                   },
-    "expectedCogsMinor":  1215298333,
-    "expectedGrossProfitMinor":  119015167,
-    "expectedFinalAccountBalances":  {
-                                         "seed-account-f7259c51816b3eca60b0":  {
-                                                                                   "accountName":  "seed-account-f7259c51816b3eca60b0",
-                                                                                   "quantityUnits":  36385,
-                                                                                   "unitBasis":  "gold_equivalent21_centigram",
-                                                                                   "metalWacMinorPerStandardUnit":  5713.499738903394,
-                                                                                   "workmanshipWacMinorPerPhysicalUnit":  49.13435261967584
-                                                                               },
-                                         "seed-account-960d86a1b65899e364b7":  {
-                                                                                   "accountName":  "seed-account-960d86a1b65899e364b7",
-                                                                                   "quantityUnits":  8635,
-                                                                                   "unitBasis":  "gold_equivalent21_centigram",
-                                                                                   "metalWacMinorPerStandardUnit":  6630.356340474812,
-                                                                                   "workmanshipWacMinorPerPhysicalUnit":  0.13925558312655087
-                                                                               },
-                                         "seed-account-cb5d499baa26a3db6f1c":  {
-                                                                                   "accountName":  "seed-account-cb5d499baa26a3db6f1c",
-                                                                                   "quantityUnits":  30559,
-                                                                                   "unitBasis":  "gold_equivalent21_centigram",
-                                                                                   "metalWacMinorPerStandardUnit":  6181.351222225858,
-                                                                                   "workmanshipWacMinorPerPhysicalUnit":  15.164548795197621
-                                                                               },
-                                         "seed-account-6b34c4189c5376f463c7":  {
-                                                                                   "accountName":  "seed-account-6b34c4189c5376f463c7",
-                                                                                   "quantityUnits":  15511,
-                                                                                   "unitBasis":  "gold_equivalent21_centigram",
-                                                                                   "metalWacMinorPerStandardUnit":  6749.955450970279,
-                                                                                   "workmanshipWacMinorPerPhysicalUnit":  0.39456233421750664
-                                                                               },
-                                         "seed-account-7a7da1fd500bce293e8b":  {
-                                                                                   "accountName":  "seed-account-7a7da1fd500bce293e8b",
-                                                                                   "quantityUnits":  11429,
-                                                                                   "unitBasis":  "gold_equivalent21_centigram",
-                                                                                   "metalWacMinorPerStandardUnit":  6910.25934027474,
-                                                                                   "workmanshipWacMinorPerPhysicalUnit":  11.619583145898936
-                                                                               },
-                                         "seed-account-60ed1f8a1341a1ab20be":  {
-                                                                                   "accountName":  "seed-account-60ed1f8a1341a1ab20be",
-                                                                                   "quantityUnits":  9061,
-                                                                                   "unitBasis":  "gold_equivalent21_centigram",
-                                                                                   "metalWacMinorPerStandardUnit":  6018.697384394658,
-                                                                                   "workmanshipWacMinorPerPhysicalUnit":  0.20488081725312146
-                                                                               },
-                                         "seed-account-abefcfd780de9b384dc5":  {
-                                                                                   "accountName":  "seed-account-abefcfd780de9b384dc5",
-                                                                                   "quantityUnits":  23465,
-                                                                                   "unitBasis":  "gold_equivalent21_centigram",
-                                                                                   "metalWacMinorPerStandardUnit":  6162.961176219902,
-                                                                                   "workmanshipWacMinorPerPhysicalUnit":  16.44972965073798
-                                                                               },
-                                         "seed-account-dd24b4d1f062d92a3e80":  {
-                                                                                   "accountName":  "seed-account-dd24b4d1f062d92a3e80",
-                                                                                   "quantityUnits":  287,
-                                                                                   "unitBasis":  "gold_equivalent21_centigram",
-                                                                                   "metalWacMinorPerStandardUnit":  6348.459930313589,
-                                                                                   "workmanshipWacMinorPerPhysicalUnit":  0.9131736526946108
-                                                                               },
-                                         "seed-account-d37d8b76e6ed91e88626":  {
-                                                                                   "accountName":  "seed-account-d37d8b76e6ed91e88626",
-                                                                                   "quantityUnits":  6512,
-                                                                                   "unitBasis":  "gold_equivalent21_centigram",
-                                                                                   "metalWacMinorPerStandardUnit":  6753.673986486487,
-                                                                                   "workmanshipWacMinorPerPhysicalUnit":  0.3935246117399316
-                                                                               },
-                                         "seed-account-3d2cf6d12174291e9009":  {
-                                                                                   "accountName":  "seed-account-3d2cf6d12174291e9009",
-                                                                                   "quantityUnits":  24246,
-                                                                                   "unitBasis":  "gold_equivalent21_centigram",
-                                                                                   "metalWacMinorPerStandardUnit":  6324.119813577498,
-                                                                                   "workmanshipWacMinorPerPhysicalUnit":  21.13719458293554
-                                                                               },
-                                         "seed-account-888be625b60c2a8405b9":  {
-                                                                                   "accountName":  "seed-account-888be625b60c2a8405b9",
-                                                                                   "quantityUnits":  3977,
-                                                                                   "unitBasis":  "gold_equivalent21_centigram",
-                                                                                   "metalWacMinorPerStandardUnit":  6802.134020618557,
-                                                                                   "workmanshipWacMinorPerPhysicalUnit":  0.04202586206896552
-                                                                               },
-                                         "seed-account-d6d361a10f6d7735f5a2":  {
-                                                                                   "accountName":  "seed-account-d6d361a10f6d7735f5a2",
-                                                                                   "quantityUnits":  1760,
-                                                                                   "unitBasis":  "gold_equivalent21_centigram",
-                                                                                   "metalWacMinorPerStandardUnit":  7338.770454545454,
-                                                                                   "workmanshipWacMinorPerPhysicalUnit":  0.8742077035592394
-                                                                               },
-                                         "seed-account-ea099bf0071894125ad3":  {
-                                                                                   "accountName":  "seed-account-ea099bf0071894125ad3",
-                                                                                   "quantityUnits":  14973,
-                                                                                   "unitBasis":  "gold_equivalent21_centigram",
-                                                                                   "metalWacMinorPerStandardUnit":  7167.847725906632,
-                                                                                   "workmanshipWacMinorPerPhysicalUnit":  0
-                                                                               },
-                                         "seed-account-ff66eba547be9e799aba":  {
-                                                                                   "accountName":  "seed-account-ff66eba547be9e799aba",
-                                                                                   "quantityUnits":  8398,
-                                                                                   "unitBasis":  "gold_equivalent21_centigram",
-                                                                                   "metalWacMinorPerStandardUnit":  6329.221362229102,
-                                                                                   "workmanshipWacMinorPerPhysicalUnit":  0
-                                                                               },
-                                         "seed-account-391695330f1733e03bb0":  {
-                                                                                   "accountName":  "seed-account-391695330f1733e03bb0",
-                                                                                   "quantityUnits":  3527,
-                                                                                   "unitBasis":  "gold_equivalent21_centigram",
-                                                                                   "metalWacMinorPerStandardUnit":  6929.648426424724,
-                                                                                   "workmanshipWacMinorPerPhysicalUnit":  0
-                                                                               },
-                                         "seed-account-7ac32db4e3484ce2dc22":  {
-                                                                                   "accountName":  "seed-account-7ac32db4e3484ce2dc22",
-                                                                                   "quantityUnits":  2999,
-                                                                                   "unitBasis":  "gold_equivalent21_centigram",
-                                                                                   "metalWacMinorPerStandardUnit":  7711.0040013337775,
-                                                                                   "workmanshipWacMinorPerPhysicalUnit":  0.0005702879954376961
-                                                                               },
-                                         "seed-account-d1216eb4076ccdf40e20":  {
-                                                                                   "accountName":  "seed-account-d1216eb4076ccdf40e20",
-                                                                                   "quantityUnits":  1833,
-                                                                                   "unitBasis":  "gold_equivalent21_centigram",
-                                                                                   "metalWacMinorPerStandardUnit":  6703.6633933442445,
-                                                                                   "workmanshipWacMinorPerPhysicalUnit":  0
-                                                                               },
-                                         "seed-account-87c0acf366b1f0c35e60":  {
-                                                                                   "accountName":  "seed-account-87c0acf366b1f0c35e60",
-                                                                                   "quantityUnits":  2200,
-                                                                                   "unitBasis":  "gold_equivalent21_centigram",
-                                                                                   "metalWacMinorPerStandardUnit":  6938.364545454546,
-                                                                                   "workmanshipWacMinorPerPhysicalUnit":  0
-                                                                               },
-                                         "seed-account-8bc82f32572189c8e128":  {
-                                                                                   "accountName":  "seed-account-8bc82f32572189c8e128",
-                                                                                   "quantityUnits":  5913,
-                                                                                   "unitBasis":  "gold_equivalent21_centigram",
-                                                                                   "metalWacMinorPerStandardUnit":  7006.928631828176,
-                                                                                   "workmanshipWacMinorPerPhysicalUnit":  0
-                                                                               },
-                                         "seed-account-feed1210d025ed84e443":  {
-                                                                                   "accountName":  "seed-account-feed1210d025ed84e443",
-                                                                                   "quantityUnits":  164488,
-                                                                                   "unitBasis":  "silver_centigram",
-                                                                                   "metalWacMinorPerStandardUnit":  58.37744394727883,
-                                                                                   "workmanshipWacMinorPerPhysicalUnit":  0.2254571762073829
-                                                                               },
-                                         "seed-account-5cce856398210bd05927":  {
-                                                                                   "accountName":  "seed-account-5cce856398210bd05927",
-                                                                                   "quantityUnits":  34256,
-                                                                                   "unitBasis":  "silver_centigram",
-                                                                                   "metalWacMinorPerStandardUnit":  55.409271368519384,
-                                                                                   "workmanshipWacMinorPerPhysicalUnit":  2.846216721158337
-                                                                               },
-                                         "seed-account-585a165916de021adb5a":  {
-                                                                                   "accountName":  "seed-account-585a165916de021adb5a",
-                                                                                   "quantityUnits":  67241,
-                                                                                   "unitBasis":  "silver_centigram",
-                                                                                   "metalWacMinorPerStandardUnit":  57.587959726952306,
-                                                                                   "workmanshipWacMinorPerPhysicalUnit":  0.21054118766823812
-                                                                               },
-                                         "seed-account-277ad17fa191c3353d9c":  {
-                                                                                   "accountName":  "seed-account-277ad17fa191c3353d9c",
-                                                                                   "quantityUnits":  77994,
-                                                                                   "unitBasis":  "silver_centigram",
-                                                                                   "metalWacMinorPerStandardUnit":  60,
-                                                                                   "workmanshipWacMinorPerPhysicalUnit":  0
-                                                                               },
-                                         "seed-account-733d11dcb5429d9b6bd3":  {
-                                                                                   "accountName":  "seed-account-733d11dcb5429d9b6bd3",
-                                                                                   "quantityUnits":  22712,
-                                                                                   "unitBasis":  "silver_centigram",
-                                                                                   "metalWacMinorPerStandardUnit":  47.37979922507925,
-                                                                                   "workmanshipWacMinorPerPhysicalUnit":  3.7989168721380766
-                                                                               },
-                                         "seed-account-2a2cf06601c9f559a0df":  {
-                                                                                   "accountName":  "seed-account-2a2cf06601c9f559a0df",
-                                                                                   "quantityUnits":  81588,
-                                                                                   "unitBasis":  "silver_centigram",
-                                                                                   "metalWacMinorPerStandardUnit":  60,
-                                                                                   "workmanshipWacMinorPerPhysicalUnit":  0
-                                                                               },
-                                         "seed-account-e27e33314fe25b6b461c":  {
-                                                                                   "accountName":  "seed-account-e27e33314fe25b6b461c",
-                                                                                   "quantityUnits":  882,
-                                                                                   "unitBasis":  "silver_centigram",
-                                                                                   "metalWacMinorPerStandardUnit":  60,
-                                                                                   "workmanshipWacMinorPerPhysicalUnit":  0
-                                                                               },
-                                         "seed-account-2da1e46de570300127c6":  {
-                                                                                   "accountName":  "seed-account-2da1e46de570300127c6",
-                                                                                   "quantityUnits":  42375,
-                                                                                   "unitBasis":  "silver_centigram",
-                                                                                   "metalWacMinorPerStandardUnit":  88.42477876106194,
-                                                                                   "workmanshipWacMinorPerPhysicalUnit":  0
-                                                                               },
-                                         "seed-account-c870314995b4c233c0d7":  {
-                                                                                   "accountName":  "seed-account-c870314995b4c233c0d7",
-                                                                                   "quantityUnits":  50000,
-                                                                                   "unitBasis":  "silver_centigram",
-                                                                                   "metalWacMinorPerStandardUnit":  133,
-                                                                                   "workmanshipWacMinorPerPhysicalUnit":  0
-                                                                               },
-                                         "seed-account-93c8c8cf9d87c00e1e88":  {
-                                                                                   "accountName":  "seed-account-93c8c8cf9d87c00e1e88",
-                                                                                   "quantityUnits":  78000,
-                                                                                   "unitBasis":  "accessory_milli_piece",
-                                                                                   "metalWacMinorPerStandardUnit":  0,
-                                                                                   "workmanshipWacMinorPerPhysicalUnit":  0
-                                                                               },
-                                         "seed-account-8d4a16e5eb12e1278df0":  {
-                                                                                   "accountName":  "seed-account-8d4a16e5eb12e1278df0",
-                                                                                   "quantityUnits":  108000,
-                                                                                   "unitBasis":  "accessory_milli_piece",
-                                                                                   "metalWacMinorPerStandardUnit":  0,
-                                                                                   "workmanshipWacMinorPerPhysicalUnit":  0
-                                                                               },
-                                         "seed-account-34b151012e0aaea0e188":  {
-                                                                                   "accountName":  "seed-account-34b151012e0aaea0e188",
-                                                                                   "quantityUnits":  2200,
-                                                                                   "unitBasis":  "accessory_milli_piece",
-                                                                                   "metalWacMinorPerStandardUnit":  0,
-                                                                                   "workmanshipWacMinorPerPhysicalUnit":  0
-                                                                               }
-                                     },
-    "expectedDeficitCount":  0,
-    "expectedDiagnosticCount":  0,
-    "expectedOverlayCount":  3,
-    "expectedOverlayQuantityUnits":  80,
-    "expectedOverlayQuantities":  {
-                                      "hiro-20260304-scrap-arabic-e21-002":  2,
-                                      "hiro-20260320-scrap-arabic-e21-076":  76,
-                                      "hiro-20260406-gouache-arabic-e21-002":  2
-                                  },
-    "expectedOverlayWac":  {
-                               "hiro-20260304-scrap-arabic-e21-002":  {
-                                                                          "metalWacBefore":  6850.206373292868,
-                                                                          "metalWacAfter":  6850.205748865355,
-                                                                          "workmanshipWacBefore":  0,
-                                                                          "workmanshipWacAfter":  0
-                                                                      },
-                               "hiro-20260320-scrap-arabic-e21-076":  {
-                                                                          "metalWacBefore":  22388.87252124646,
-                                                                          "metalWacAfter":  22388.871794871793,
-                                                                          "workmanshipWacBefore":  0,
-                                                                          "workmanshipWacAfter":  0
-                                                                      },
-                               "hiro-20260406-gouache-arabic-e21-002":  {
-                                                                            "metalWacBefore":  6301.616087751371,
-                                                                            "metalWacAfter":  6301.61594643944,
-                                                                            "workmanshipWacBefore":  0,
-                                                                            "workmanshipWacAfter":  0
-                                                                        }
-                           },
-    "expectedOrderingDiagnosticCount":  137,
-    "expectedChangedOrderingDiagnosticCount":  92,
-    "precisionPolicy":  {
-                            "moneyMinorUnits":  "exact_integer",
-                            "decimalMoneyToleranceEgp":  0.01,
-                            "scaledQuantityUnits":  "exact_integer",
-                            "decimalQuantityToleranceGrams":  0.000001,
-                            "wacMinorPerScaledUnitTolerance":  0.000001
-                        },
-    "generatedAt":  "2026-07-24T00:00:00+03:00",
-    "changeId":  "sanitize-golden-fixture-with-accounting-parity",
-    "updateReason":  "Remove raw import dependency and PII while preserving all Phase 5 accounting outputs.",
-    "explanatoryNote":  "The fixture and representational fingerprints changed because identifiers and labels were sanitized. COGS, Gross Profit, balances, diagnostics, deficits, and approved overlays are identical to v1.",
-    "transitionProof":  {
-                            "recordCountEqual":  true,
-                            "orderedEconomicInputsEqual":  true,
-                            "cogsEqual":  true,
-                            "grossProfitEqual":  true,
-                            "finalBalancesEqual":  true,
-                            "overlaysEqual":  true,
-                            "oldResultFingerprint":  "b2ace5e29ee7232db66616901a07e49ebb3b6b609b4190f16f63160f798dfc47",
-                            "newResultFingerprint":  "c349705c1fa99f48a3aeec36196cddb1b80ff4de4c9346576141277d73c9099c",
-                            "representationalHashChangedOnly":  true
-                        }
+  "baselineVersion": "phase5-cost-baseline-v2-sanitized",
+  "previousBaselineVersion": "phase5-cost-baseline-v1",
+  "fixtureVersion": "phase5-cost-fixture-v2-sanitized",
+  "datasetRecordCount": 2169,
+  "datasetFingerprint": "fnv1a-17e7dcf7",
+  "sanitizedFixtureSha256": "118c352748cf0496a4c44127423e85c47bdccf31b511b4033186f1d7c781d46b",
+  "expectedResultFingerprint": "ddc692a9ba3d41729e9854686a29d28a44efc3879c3c96b982c1999ca2737ae5",
+  "calculationRulesVersion": "makka-inventory-taxonomy-v1:phase5-wac-v1+historical-inventory-reconciliation-v1",
+  "approvedOverlayIds": [
+    "hiro-20260304-scrap-arabic-e21-002",
+    "hiro-20260320-scrap-arabic-e21-076",
+    "hiro-20260406-gouache-arabic-e21-002"
+  ],
+  "approvedOverlayAuditHashes": {
+    "hiro-20260304-scrap-arabic-e21-002": "e1b47ca05c4ef76cbfe2b761e75010d4e547d6cc94c7953d2f2c1c4c2f70f789",
+    "hiro-20260320-scrap-arabic-e21-076": "6381216544178ed04cdf4e6162ad6be3f765adb79b08f997e945e8ba1f9db1db",
+    "hiro-20260406-gouache-arabic-e21-002": "6fb8ff6ad906edf8b302a4f0792514144bbef2f5f41bfddcdc08eefa6f28e02b"
+  },
+  "expectedCogsMinor": 1198921464,
+  "expectedGrossProfitMinor": 135392036,
+  "expectedFinalAccountBalances": {
+    "seed-account-277ad17fa191c3353d9c": {
+      "accountName": "seed-account-277ad17fa191c3353d9c",
+      "quantityUnits": 77994,
+      "unitBasis": "silver_centigram",
+      "metalWacMinorPerStandardUnit": 60,
+      "workmanshipWacMinorPerPhysicalUnit": 0
+    },
+    "seed-account-2a2cf06601c9f559a0df": {
+      "accountName": "seed-account-2a2cf06601c9f559a0df",
+      "quantityUnits": 81588,
+      "unitBasis": "silver_centigram",
+      "metalWacMinorPerStandardUnit": 60,
+      "workmanshipWacMinorPerPhysicalUnit": 0
+    },
+    "seed-account-2da1e46de570300127c6": {
+      "accountName": "seed-account-2da1e46de570300127c6",
+      "quantityUnits": 42375,
+      "unitBasis": "silver_centigram",
+      "metalWacMinorPerStandardUnit": 69.4419587020649,
+      "workmanshipWacMinorPerPhysicalUnit": 0
+    },
+    "seed-account-34b151012e0aaea0e188": {
+      "accountName": "seed-account-34b151012e0aaea0e188",
+      "quantityUnits": 2200,
+      "unitBasis": "accessory_milli_piece",
+      "metalWacMinorPerStandardUnit": 0,
+      "workmanshipWacMinorPerPhysicalUnit": 0
+    },
+    "seed-account-391695330f1733e03bb0": {
+      "accountName": "seed-account-391695330f1733e03bb0",
+      "quantityUnits": 3527,
+      "unitBasis": "gold_equivalent21_centigram",
+      "metalWacMinorPerStandardUnit": 6799.63793592288,
+      "workmanshipWacMinorPerPhysicalUnit": 0
+    },
+    "seed-account-3d2cf6d12174291e9009": {
+      "accountName": "seed-account-3d2cf6d12174291e9009",
+      "quantityUnits": 24246,
+      "unitBasis": "gold_equivalent21_centigram",
+      "metalWacMinorPerStandardUnit": 6197.259176771427,
+      "workmanshipWacMinorPerPhysicalUnit": 21.080124465188643
+    },
+    "seed-account-585a165916de021adb5a": {
+      "accountName": "seed-account-585a165916de021adb5a",
+      "quantityUnits": 67241,
+      "unitBasis": "silver_centigram",
+      "metalWacMinorPerStandardUnit": 60,
+      "workmanshipWacMinorPerPhysicalUnit": 0.21054118766823812
+    },
+    "seed-account-5cce856398210bd05927": {
+      "accountName": "seed-account-5cce856398210bd05927",
+      "quantityUnits": 34256,
+      "unitBasis": "silver_centigram",
+      "metalWacMinorPerStandardUnit": 60,
+      "workmanshipWacMinorPerPhysicalUnit": 2.846216721158337
+    },
+    "seed-account-60ed1f8a1341a1ab20be": {
+      "accountName": "seed-account-60ed1f8a1341a1ab20be",
+      "quantityUnits": 9061,
+      "unitBasis": "gold_equivalent21_centigram",
+      "metalWacMinorPerStandardUnit": 6021.738770555126,
+      "workmanshipWacMinorPerPhysicalUnit": 0.2045024593265229
+    },
+    "seed-account-6b34c4189c5376f463c7": {
+      "accountName": "seed-account-6b34c4189c5376f463c7",
+      "quantityUnits": 15511,
+      "unitBasis": "gold_equivalent21_centigram",
+      "metalWacMinorPerStandardUnit": 6129.997743536845,
+      "workmanshipWacMinorPerPhysicalUnit": 0.33526746242263483
+    },
+    "seed-account-733d11dcb5429d9b6bd3": {
+      "accountName": "seed-account-733d11dcb5429d9b6bd3",
+      "quantityUnits": 22712,
+      "unitBasis": "silver_centigram",
+      "metalWacMinorPerStandardUnit": 60,
+      "workmanshipWacMinorPerPhysicalUnit": 3.7989168721380766
+    },
+    "seed-account-7a7da1fd500bce293e8b": {
+      "accountName": "seed-account-7a7da1fd500bce293e8b",
+      "quantityUnits": 11429,
+      "unitBasis": "gold_equivalent21_centigram",
+      "metalWacMinorPerStandardUnit": 6213.005862280164,
+      "workmanshipWacMinorPerPhysicalUnit": 11.529839556155345
+    },
+    "seed-account-7ac32db4e3484ce2dc22": {
+      "accountName": "seed-account-7ac32db4e3484ce2dc22",
+      "quantityUnits": 2999,
+      "unitBasis": "gold_equivalent21_centigram",
+      "metalWacMinorPerStandardUnit": 6622.179059686562,
+      "workmanshipWacMinorPerPhysicalUnit": 0
+    },
+    "seed-account-87c0acf366b1f0c35e60": {
+      "accountName": "seed-account-87c0acf366b1f0c35e60",
+      "quantityUnits": 2200,
+      "unitBasis": "gold_equivalent21_centigram",
+      "metalWacMinorPerStandardUnit": 6938.364545454546,
+      "workmanshipWacMinorPerPhysicalUnit": 0
+    },
+    "seed-account-888be625b60c2a8405b9": {
+      "accountName": "seed-account-888be625b60c2a8405b9",
+      "quantityUnits": 3977,
+      "unitBasis": "gold_equivalent21_centigram",
+      "metalWacMinorPerStandardUnit": 6238.673120442545,
+      "workmanshipWacMinorPerPhysicalUnit": 0.0047413793103448275
+    },
+    "seed-account-8bc82f32572189c8e128": {
+      "accountName": "seed-account-8bc82f32572189c8e128",
+      "quantityUnits": 5913,
+      "unitBasis": "gold_equivalent21_centigram",
+      "metalWacMinorPerStandardUnit": 7006.928631828176,
+      "workmanshipWacMinorPerPhysicalUnit": 0
+    },
+    "seed-account-8d4a16e5eb12e1278df0": {
+      "accountName": "seed-account-8d4a16e5eb12e1278df0",
+      "quantityUnits": 108000,
+      "unitBasis": "accessory_milli_piece",
+      "metalWacMinorPerStandardUnit": 0,
+      "workmanshipWacMinorPerPhysicalUnit": 0
+    },
+    "seed-account-93c8c8cf9d87c00e1e88": {
+      "accountName": "seed-account-93c8c8cf9d87c00e1e88",
+      "quantityUnits": 78000,
+      "unitBasis": "accessory_milli_piece",
+      "metalWacMinorPerStandardUnit": 0,
+      "workmanshipWacMinorPerPhysicalUnit": 0
+    },
+    "seed-account-960d86a1b65899e364b7": {
+      "accountName": "seed-account-960d86a1b65899e364b7",
+      "quantityUnits": 8635,
+      "unitBasis": "gold_equivalent21_centigram",
+      "metalWacMinorPerStandardUnit": 6065.623972206138,
+      "workmanshipWacMinorPerPhysicalUnit": 0.08009925558312656
+    },
+    "seed-account-abefcfd780de9b384dc5": {
+      "accountName": "seed-account-abefcfd780de9b384dc5",
+      "quantityUnits": 23465,
+      "unitBasis": "gold_equivalent21_centigram",
+      "metalWacMinorPerStandardUnit": 6153.845429362881,
+      "workmanshipWacMinorPerPhysicalUnit": 16.436796726581907
+    },
+    "seed-account-c870314995b4c233c0d7": {
+      "accountName": "seed-account-c870314995b4c233c0d7",
+      "quantityUnits": 50000,
+      "unitBasis": "silver_centigram",
+      "metalWacMinorPerStandardUnit": 133,
+      "workmanshipWacMinorPerPhysicalUnit": 0
+    },
+    "seed-account-cb5d499baa26a3db6f1c": {
+      "accountName": "seed-account-cb5d499baa26a3db6f1c",
+      "quantityUnits": 30559,
+      "unitBasis": "gold_equivalent21_centigram",
+      "metalWacMinorPerStandardUnit": 6117.637324519781,
+      "workmanshipWacMinorPerPhysicalUnit": 15.14250049089736
+    },
+    "seed-account-d1216eb4076ccdf40e20": {
+      "accountName": "seed-account-d1216eb4076ccdf40e20",
+      "quantityUnits": 1833,
+      "unitBasis": "gold_equivalent21_centigram",
+      "metalWacMinorPerStandardUnit": 6693.066012002182,
+      "workmanshipWacMinorPerPhysicalUnit": 0
+    },
+    "seed-account-d37d8b76e6ed91e88626": {
+      "accountName": "seed-account-d37d8b76e6ed91e88626",
+      "quantityUnits": 6512,
+      "unitBasis": "gold_equivalent21_centigram",
+      "metalWacMinorPerStandardUnit": 6184.519041769042,
+      "workmanshipWacMinorPerPhysicalUnit": 0.3881284548565412
+    },
+    "seed-account-d6d361a10f6d7735f5a2": {
+      "accountName": "seed-account-d6d361a10f6d7735f5a2",
+      "quantityUnits": 1760,
+      "unitBasis": "gold_equivalent21_centigram",
+      "metalWacMinorPerStandardUnit": 6221.024431818182,
+      "workmanshipWacMinorPerPhysicalUnit": 0.7064846416382252
+    },
+    "seed-account-dd24b4d1f062d92a3e80": {
+      "accountName": "seed-account-dd24b4d1f062d92a3e80",
+      "quantityUnits": 287,
+      "unitBasis": "gold_equivalent21_centigram",
+      "metalWacMinorPerStandardUnit": 6250.783972125436,
+      "workmanshipWacMinorPerPhysicalUnit": 0.9131736526946108
+    },
+    "seed-account-e27e33314fe25b6b461c": {
+      "accountName": "seed-account-e27e33314fe25b6b461c",
+      "quantityUnits": 882,
+      "unitBasis": "silver_centigram",
+      "metalWacMinorPerStandardUnit": 60,
+      "workmanshipWacMinorPerPhysicalUnit": 0
+    },
+    "seed-account-ea099bf0071894125ad3": {
+      "accountName": "seed-account-ea099bf0071894125ad3",
+      "quantityUnits": 14973,
+      "unitBasis": "gold_equivalent21_centigram",
+      "metalWacMinorPerStandardUnit": 6314.200360649169,
+      "workmanshipWacMinorPerPhysicalUnit": 0
+    },
+    "seed-account-f7259c51816b3eca60b0": {
+      "accountName": "seed-account-f7259c51816b3eca60b0",
+      "quantityUnits": 36385,
+      "unitBasis": "gold_equivalent21_centigram",
+      "metalWacMinorPerStandardUnit": 6203.5791947231,
+      "workmanshipWacMinorPerPhysicalUnit": 49.04226347531097
+    },
+    "seed-account-feed1210d025ed84e443": {
+      "accountName": "seed-account-feed1210d025ed84e443",
+      "quantityUnits": 164488,
+      "unitBasis": "silver_centigram",
+      "metalWacMinorPerStandardUnit": 60,
+      "workmanshipWacMinorPerPhysicalUnit": 0.2254571762073829
+    },
+    "seed-account-ff66eba547be9e799aba": {
+      "accountName": "seed-account-ff66eba547be9e799aba",
+      "quantityUnits": 8398,
+      "unitBasis": "gold_equivalent21_centigram",
+      "metalWacMinorPerStandardUnit": 6240.876756370564,
+      "workmanshipWacMinorPerPhysicalUnit": 0
+    }
+  },
+  "expectedDeficitCount": 0,
+  "expectedDiagnosticCount": 0,
+  "expectedOverlayCount": 3,
+  "expectedOverlayQuantityUnits": 80,
+  "expectedOverlayQuantities": {
+    "hiro-20260304-scrap-arabic-e21-002": 2,
+    "hiro-20260320-scrap-arabic-e21-076": 76,
+    "hiro-20260406-gouache-arabic-e21-002": 2
+  },
+  "expectedOverlayWac": {
+    "hiro-20260304-scrap-arabic-e21-002": {
+      "metalWacBefore": 6850.206373292868,
+      "metalWacAfter": 6850.205748865355,
+      "workmanshipWacBefore": 0,
+      "workmanshipWacAfter": 0
+    },
+    "hiro-20260320-scrap-arabic-e21-076": {
+      "metalWacBefore": 6813.354107648725,
+      "metalWacAfter": 6813.354312354312,
+      "workmanshipWacBefore": 0,
+      "workmanshipWacAfter": 0
+    },
+    "hiro-20260406-gouache-arabic-e21-002": {
+      "metalWacBefore": 6301.616087751371,
+      "metalWacAfter": 6301.61594643944,
+      "workmanshipWacBefore": 0,
+      "workmanshipWacAfter": 0
+    }
+  },
+  "expectedOrderingDiagnosticCount": 137,
+  "expectedChangedOrderingDiagnosticCount": 92,
+  "precisionPolicy": {
+    "moneyMinorUnits": "exact_integer",
+    "decimalMoneyToleranceEgp": 0.01,
+    "scaledQuantityUnits": "exact_integer",
+    "decimalQuantityToleranceGrams": 0.000001,
+    "wacMinorPerScaledUnitTolerance": 0.000001
+  },
+  "generatedAt": "2026-07-24T00:00:00+03:00",
+  "changeId": "accounting-engine-source-of-truth-2026-08-04",
+  "updateReason": "Rebuild invoice-derived WAC and relieve trader-delivery book value",
+  "explanatoryNote": "Corrected merchant receipt and delivery costing changed inventory WAC, COGS, gross profit, and downstream account balances. The sanitized fixture inputs and approved overlays remain unchanged.",
+  "transitionProof": {
+    "recordCountEqual": true,
+    "orderedEconomicInputsEqual": true,
+    "merchantReceiptDeliveryCostingCorrected": true,
+    "inventoryWacChanged": true,
+    "cogsEqual": false,
+    "grossProfitEqual": false,
+    "finalBalancesEqual": false,
+    "downstreamBalancesChanged": true,
+    "overlaysEqual": true,
+    "oldResultFingerprint": "b2ace5e29ee7232db66616901a07e49ebb3b6b609b4190f16f63160f798dfc47",
+    "newResultFingerprint": "c349705c1fa99f48a3aeec36196cddb1b80ff4de4c9346576141277d73c9099c",
+    "representationalHashChangedOnly": false
+  }
 }

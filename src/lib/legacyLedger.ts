@@ -177,11 +177,30 @@ const inventoryKind = (account: Account | undefined): 'gold' | 'silver' | 'acces
   account?.type === 'accessory' ? 'accessories' : metalFor(account) === 'silver' ? 'silver' : 'gold';
 const kindLabel = (kind: ReturnType<typeof inventoryKind>): string =>
   kind === 'gold' ? '\u0627\u0644\u0630\u0647\u0628' : kind === 'silver' ? '\u0627\u0644\u0641\u0636\u0629' : '\u0627\u0644\u0645\u0644\u062d\u0642\u0627\u062a';
-const virtualSalesRevenueFor = (account: Account | undefined): LegacyLedgerAccountMetadata => {
+const configuredCompanion = (
+  inventory: Account | undefined,
+  accounts: Account[],
+  role: 'sales' | 'cost_of_sales',
+): LegacyLedgerAccountMetadata | undefined => {
+  const configuredId = role === 'sales' ? inventory?.salesAccountId : inventory?.costOfSalesAccountId;
+  const account = accounts.find(candidate => candidate.id === configuredId)
+    ?? accounts.find(candidate => candidate.accountRole === role && candidate.linkedInventoryAccountId === inventory?.id);
+  if (!account) return undefined;
+  const accountGroup = groupFor(account.mainType);
+  return {
+    entityId: legacyLedgerEntityId(account), accountName: account.name, group: accountGroup,
+    description: descriptionFor(account), normalBalance: accountGroup === 'revenue' ? 'credit' : 'debit', sourceAccount: account,
+  };
+};
+const virtualSalesRevenueFor = (account: Account | undefined, accounts: Account[]): LegacyLedgerAccountMetadata => {
+  const configured = configuredCompanion(account, accounts, 'sales');
+  if (configured) return configured;
   const kind = inventoryKind(account);
   return virtualAccount(`system:income:sales-revenue:${kind}`, `\u0625\u064a\u0631\u0627\u062f \u0645\u0628\u064a\u0639\u0627\u062a ${kindLabel(kind)}`, 'revenue', '\u0625\u064a\u0631\u0627\u062f \u0645\u0628\u064a\u0639\u0627\u062a \u0645\u0648\u0644\u062f \u0645\u0631\u0629 \u0648\u0627\u062d\u062f\u0629');
 };
-const virtualCogsFor = (account: Account | undefined): LegacyLedgerAccountMetadata => {
+const virtualCogsFor = (account: Account | undefined, accounts: Account[]): LegacyLedgerAccountMetadata => {
+  const configured = configuredCompanion(account, accounts, 'cost_of_sales');
+  if (configured) return configured;
   const kind = inventoryKind(account);
   return virtualAccount(`system:income:cogs:${kind}`, `\u062a\u0643\u0644\u0641\u0629 \u0627\u0644\u0628\u0636\u0627\u0639\u0629 \u0627\u0644\u0645\u0628\u0627\u0639\u0629 - ${kindLabel(kind)}`, 'expenses', 'COGS \u0645\u0646 WAC');
 };
@@ -199,6 +218,14 @@ const ownsDimension = (account: Account | undefined, dimension: LegacyLedgerDime
   if (dimension === 'quantity') return account.type === 'accessory';
   return metalFor(account) === dimension;
 };
+
+const isOpeningInventoryContribution = (
+  entry: Entry,
+  debit: LegacyLedgerAccountMetadata,
+  credit: LegacyLedgerAccountMetadata,
+): boolean => isOpeningEntry(entry)
+  && isInventoryAccount(debit.sourceAccount)
+  && credit.group === 'equity';
 
 const legFrom = (
   entry: Entry,
@@ -298,7 +325,7 @@ const appendCostLegs = (
       return;
     }
     if (result.classification === 'sale') {
-      pushGenerated(entry, virtualCogsFor(sourceAccount), source, result.totalCogsMinor);
+      pushGenerated(entry, virtualCogsFor(sourceAccount, accounts), source, result.totalCogsMinor);
       return;
     }
     if (result.classification === 'shortage') {
@@ -360,11 +387,14 @@ export const buildLegacyLedgerLegs = (
     const metalAmount = metal === 'silver' ? positive(entry.weight) : metal === 'gold' ? positive(entry.arabicWeight) : 0;
     if (metal && metalAmount > 0) values.push([metal, metalAmount]);
     values.forEach(([dimension, amount]) => {
+      if (options.enableFinancialProjection && dimension === 'cash'
+        && isOpeningInventoryContribution(entry, debit, credit)) return;
+
       const projectedCredit = options.enableFinancialProjection
         && dimension === 'cash'
         && (entry.operationKind || '') === 'sale'
         && isInventoryAccount(creditAccount)
-          ? virtualSalesRevenueFor(creditAccount)
+          ? virtualSalesRevenueFor(creditAccount, accounts)
           : credit;
       if (ownsDimension(debitAccount, dimension, options.enableFinancialProjection === true))
         legs.push(legFrom(entry, debit, projectedCredit, 'debit', dimension, amount));

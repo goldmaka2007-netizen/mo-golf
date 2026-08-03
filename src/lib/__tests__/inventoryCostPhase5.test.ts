@@ -85,17 +85,17 @@ describe('Phase 5 component WAC engine', () => {
     expect(timeline.finalStates['gold-b'].metalWacMinorPerStandardUnit).toBe(200);
   });
 
-  it('capitalizes merchant metal at WAC and cash as workmanship once', () => {
+  it('capitalizes merchant metal at invoice price and cash as workmanship once', () => {
     const timeline = rebuild([
       entry({ id: 'opening', seq: 1, tx: 'قيد افتتاحي', operationKind: 'opening', debit: 'ذهب أ', debitAccountId: 'gold-a', credit: 'رأس المال', creditAccountId: 'equity', weight: '100' }),
-      entry({ id: 'merchant-receipt', seq: 2, date: '2026-01-02', tx: 'تاجر ذهب', debit: 'ذهب أ', debitAccountId: 'gold-a', credit: 'تاجر', creditAccountId: 'merchant', weight: '10', cash: '1000' }),
+      entry({ id: 'merchant-receipt', seq: 2, date: '2026-01-02', tx: 'تاجر ذهب', debit: 'ذهب أ', debitAccountId: 'gold-a', credit: 'تاجر', creditAccountId: 'merchant', weight: '10', cash: '1000', marketPrice: 120 }),
     ]);
 
     expect(timeline.valid).toBe(true);
     expect(timeline.finalStates['gold-a']).toMatchObject({
       standardizedQuantityUnits: 11000,
       actualPhysicalWeightUnits: 11000,
-      remainingMetalCostMinor: 1100000,
+      remainingMetalCostMinor: 1120000,
       remainingWorkmanshipCostMinor: 100000,
     });
     expect(timeline.finalStates['gold-a'].workmanshipWacMinorPerPhysicalUnit).toBeCloseTo(100000 / 11000);
@@ -104,16 +104,16 @@ describe('Phase 5 component WAC engine', () => {
   it('releases metal plus workmanship COGS and calculates invoice profit', () => {
     const timeline = rebuild([
       entry({ id: 'opening', seq: 1, tx: 'قيد افتتاحي', operationKind: 'opening', debit: 'ذهب أ', debitAccountId: 'gold-a', credit: 'رأس المال', creditAccountId: 'equity', weight: '100' }),
-      entry({ id: 'merchant-receipt', seq: 2, date: '2026-01-02', tx: 'تاجر ذهب', debit: 'ذهب أ', debitAccountId: 'gold-a', credit: 'تاجر', creditAccountId: 'merchant', weight: '10', cash: '1000' }),
+      entry({ id: 'merchant-receipt', seq: 2, date: '2026-01-02', tx: 'تاجر ذهب', debit: 'ذهب أ', debitAccountId: 'gold-a', credit: 'تاجر', creditAccountId: 'merchant', weight: '10', cash: '1000', marketPrice: 120 }),
       entry({ id: 'sale', seq: 3, date: '2026-01-03', tx: 'بيع ذهب', operationKind: 'sale', debit: 'الخزنة', debitAccountId: 'cash', credit: 'ذهب أ', creditAccountId: 'gold-a', weight: '11', cash: '2000' }),
     ]);
 
     expect(timeline.resultsByOperationId.sale).toMatchObject({
-      metalCogsMinor: 110000,
+      metalCogsMinor: 112000,
       workmanshipCogsMinor: 10000,
-      totalCogsMinor: 120000,
+      totalCogsMinor: 122000,
       saleAmountMinor: 200000,
-      profitMinor: 80000,
+      profitMinor: 78000,
     });
   });
 

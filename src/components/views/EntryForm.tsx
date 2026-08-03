@@ -30,6 +30,7 @@ import { validateEntryNumberingPolicy } from '../../lib/entryValidation';
 import { OperationSelector } from '../ui/OperationSelector';
 import { buildAccountRegistry } from '../../lib/accountRegistry';
 import { buildCanonicalPosting } from '../../lib/postingMatrix';
+import { validateAccountingPolicy } from '../../lib/accountingPolicy';
 
 export const normalizeAccessoryEntryPayload = <T extends { weight?: string; count?: string }>(entry: T, isAccessory: boolean): T => (
   isAccessory ? { ...entry, weight: entry.weight || '0', count: '0' } : entry
@@ -379,6 +380,12 @@ export const EntryForm = React.memo(() => {
       return;
     }
     Object.assign(entry, identity.value);
+
+    const accountingPolicyIssues = validateAccountingPolicy(entry, accountsDb);
+    if (accountingPolicyIssues.length > 0) {
+      setGlobalError(accountingPolicyIssues.map(issue => issue.message).join(' — '));
+      return;
+    }
 
     const numberingValidation = validateEntryNumberingPolicy(entry);
     if (!numberingValidation.valid) {

@@ -175,6 +175,13 @@ export interface Account {
   measurementDimension?: 'weight' | 'quantity';
   quantityStep?: number | string;
   isActive?: boolean;
+  /** Posting configuration only. Balances are always rebuilt from entries. */
+  dimensions?: Array<'cash' | 'gold' | 'silver' | 'quantity' | 'book_value'>;
+  accountRole?: 'standard' | 'inventory' | 'sales' | 'cost_of_sales' | 'system' | 'revaluation';
+  cloneSourceAccountId?: string;
+  linkedInventoryAccountId?: string;
+  salesAccountId?: string;
+  costOfSalesAccountId?: string;
 }
 
 export type AccountingDimension = 'cash' | 'gold' | 'silver';
