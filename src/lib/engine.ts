@@ -17,6 +17,7 @@ import { isOpeningEntry } from './openingEntry';
 import { SEED_ACCOUNTS } from '../migrationData';
 import { buildLegacyLedgerLegs } from './legacyLedger';
 import { resolveBalanceDirection } from './balanceDirection';
+import { applyRuntimeAccountOverride } from './runtimeAccountOverrides';
 
 export const KARAT_MULT: Record<string, number> = { '18': 18 / 21, '21': 1, '24': 24 / 21, silver: 1 };
 
@@ -531,15 +532,6 @@ const isIncludedBalanceEntry = (entry: Entry): boolean => {
 const naturalDebitSign = (mainType: CanonicalMainType | 'unclassified'): 1 | -1 =>
   ['liabilities', 'equity', 'revenue'].includes(mainType) ? -1 : 1;
 
-const explicitEntryMetal = (entry: Entry): ExplicitWeightedMetal | undefined => {
-  const raw = entry as Entry & Record<string, unknown>;
-  const metal = String(raw.metal ?? raw.metalType ?? raw.weightMetal ?? '').toLowerCase();
-  if (metal === 'gold' || metal === 'silver') return metal;
-  if (String(entry.karat ?? '').toLowerCase() === 'silver') return 'silver';
-  if (entry.karat === 18 || entry.karat === 21 || entry.karat === 24) return 'gold';
-  return undefined;
-};
-
 const canonicalEntryKey = (entry: Entry): string => {
   const operationNumber = entry.operationNo ?? entry.invoiceNumber ?? entry.seq ?? '';
   const entryId = entry.id ?? entry.legacyOperationId ?? entry.legacyOperationNo ?? '';
@@ -579,7 +571,7 @@ export function computeAccountBalances(
   const unclassifiedAccounts: AccountClassificationWarning[] = [];
   const classificationConflicts: AccountClassificationWarning[] = [];
   const warningKeys = new Set<string>();
-  const sortedAccounts = [...accounts].sort(compareAccounts);
+  const sortedAccounts = accounts.map(applyRuntimeAccountOverride).sort(compareAccounts);
   const byId = new Map(sortedAccounts.filter(account => account.id).map(account => [account.id as string, account]));
   const byName = new Map<string, Account[]>();
 
@@ -725,7 +717,6 @@ export function computeAccountBalances(
         ? debit.account
         : credit.account?.metal === 'gold' ? credit.account : undefined;
     const sharedGoldEquivalent = getEntryArabicWeight(entry, conversionAccount);
-    const movementMetal = explicitEntryMetal(entry);
 
     const apply = (
       resolved: { account?: Account; balance: AccountBalanceResult },
@@ -735,20 +726,19 @@ export function computeAccountBalances(
       const debitSign = naturalDebitSign(balance.mainType);
       const sign = side === 'debit' ? debitSign : -debitSign;
       const accountMovements = movements.get(balance.accountId)!;
-      if (cash !== 0) {
+      const isInventory = account?.is_inventory === true || balance.subType.startsWith('inventory_');
+      if (cash !== 0 && !isInventory) {
         balance.cashBalance += cash * sign;
         accountMovements.cash[side] += Math.abs(cash);
       }
-      const metal = balance.metal ?? movementMetal;
       const accountGoldEquivalent = sharedGoldEquivalent;
-      if (accountGoldEquivalent !== 0 && metal === 'gold') accountMovements.gold[side] += Math.abs(accountGoldEquivalent);
-      else if (weight !== 0 && metal === 'silver') accountMovements.silver[side] += Math.abs(weight);
+      if (accountGoldEquivalent !== 0 && balance.metal === 'gold') accountMovements.gold[side] += Math.abs(accountGoldEquivalent);
+      else if (weight !== 0 && balance.metal === 'silver') accountMovements.silver[side] += Math.abs(weight);
       if (count !== 0 && (account?.measurementDimension === 'quantity' || account?.type === 'accessory')) accountMovements.quantity[side] += Math.abs(count);
-      if (!balance.metal && metal) balance.metal = metal;
-      if ((weight !== 0 || accountGoldEquivalent !== 0) && metal === 'gold') {
+      if ((weight !== 0 || accountGoldEquivalent !== 0) && balance.metal === 'gold') {
         balance.goldActualBalance += weight * sign;
         balance.goldE21Balance += accountGoldEquivalent * sign;
-      } else if (weight !== 0 && metal === 'silver') {
+      } else if (weight !== 0 && balance.metal === 'silver') {
         balance.silverBalance += weight * sign;
       }
       if (count !== 0 && (account?.measurementDimension === 'quantity' || account?.type === 'accessory')) {

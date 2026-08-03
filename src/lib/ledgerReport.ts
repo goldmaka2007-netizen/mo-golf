@@ -5,6 +5,7 @@ import { balanceDirectionLabel, resolveBalanceDirection, resolveNormalBalance, t
 import { getDynamicAccountNature, getMetricActualValue } from '../utils/accountLogic';
 import { buildLegacyLedgerLegs, legacyLedgerEntityId, type LegacyLedgerBuildOptions } from './legacyLedger';
 import { splitLegsByPeriod } from './periodLegs';
+import { applyRuntimeAccountOverride } from './runtimeAccountOverrides';
 
 export type LedgerDimension = 'cash' | 'gold' | 'silver' | 'quantity';
 export type GoldDisplayMode = 'equivalent21' | 'original';
@@ -226,7 +227,8 @@ const canonicalSubTypeFor = (account: Account): string => {
   return legacySubTypes[account.subType] ?? account.subType;
 };
 
-export const getLedgerAccountGroupId = (account: Account): LedgerAccountGroupId => {
+export const getLedgerAccountGroupId = (rawAccount: Account): LedgerAccountGroupId => {
+  const account = applyRuntimeAccountOverride(rawAccount);
   const subType = canonicalSubTypeFor(account);
   if (subType === 'cash') return 'cash';
   if (subType === 'inventory_gold' && account.is_inventory === true) return 'inventory_gold';

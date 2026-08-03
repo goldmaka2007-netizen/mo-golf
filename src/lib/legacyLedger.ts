@@ -3,6 +3,7 @@ import { resolveOperationKind } from './engine';
 import { isValidAccountingEntry } from './canonicalAccounting';
 import type { InventoryCostTimeline, OperationCostResultV2 } from './inventoryCostTypes';
 import { isOpeningEntry } from './openingEntry';
+import { applyRuntimeAccountOverride } from './runtimeAccountOverrides';
 
 export type LegacyLedgerDimension = 'cash' | 'gold' | 'silver' | 'quantity';
 export type LegacyLedgerSide = 'debit' | 'credit';
@@ -170,6 +171,13 @@ const virtualShortageLoss = virtualAccount('system:income:inventory-shortage-los
 const isInventoryAccount = (account: Account | undefined): boolean =>
   !!account && (account.is_inventory === true || ['gold_product', 'gold_raw', 'gold_direct', 'silver', 'accessory'].includes(account.type ?? ''));
 
+const ownsDimension = (account: Account | undefined, dimension: LegacyLedgerDimension, financialProjection: boolean): boolean => {
+  if (!account) return true;
+  if (dimension === 'cash') return !isInventoryAccount(account) || financialProjection;
+  if (dimension === 'quantity') return account.type === 'accessory';
+  return metalFor(account) === dimension;
+};
+
 const legFrom = (
   entry: Entry,
   account: LegacyLedgerAccountMetadata,
@@ -227,7 +235,7 @@ export const buildLegacyLedgerLegs = (
   canonicalDefinitions: CanonicalAccountDefinition[] = [],
   options: LegacyLedgerBuildOptions = {},
 ): LegacyLedgerLeg[] => {
-  const index = buildIndex(accounts, canonicalDefinitions);
+  const index = buildIndex(accounts.map(applyRuntimeAccountOverride), canonicalDefinitions);
   const legs: LegacyLedgerLeg[] = [];
   entries.filter(isValidAccountingEntry).forEach(entry => {
     const debitAccount = (entry.debitAccountId ? index.byId.get(entry.debitAccountId) : undefined) ?? index.byName.get(normalize(entry.debit));
@@ -250,8 +258,10 @@ export const buildLegacyLedgerLegs = (
         && isInventoryAccount(creditAccount)
           ? virtualSalesRevenue
           : credit;
-      legs.push(legFrom(entry, debit, projectedCredit, 'debit', dimension, amount));
-      legs.push(legFrom(entry, projectedCredit, debit, 'credit', dimension, amount));
+      if (ownsDimension(debitAccount, dimension, options.enableFinancialProjection === true))
+        legs.push(legFrom(entry, debit, projectedCredit, 'debit', dimension, amount));
+      if (projectedCredit !== credit || ownsDimension(creditAccount, dimension, options.enableFinancialProjection === true))
+        legs.push(legFrom(entry, projectedCredit, debit, 'credit', dimension, amount));
     });
   });
   if (options.enableFinancialProjection) appendCostLegs(legs, accounts, index, options.costTimeline);

@@ -11,6 +11,7 @@ import {
 } from '../types';
 import { getEntryArabicWeight, parseCash, resolveOperationKind } from './engine';
 import { applyApprovedCanonicalEquityTaxonomy } from './canonicalEquityCatalog';
+import { applyRuntimeAccountOverride } from './runtimeAccountOverrides';
 
 export type AccountResolution =
   | { status: 'resolved'; account: CanonicalAccountDefinition; via: 'id' | 'alias' }
@@ -228,7 +229,8 @@ const mergeManual = (generated: CanonicalAccountDefinition, manual: CanonicalAcc
 export const buildAccountRegistry = (accounts: Account[], entries: Entry[] = [], manualDefinitions: CanonicalAccountDefinition[] = []): AccountRegistry => {
   const manualBySource = new Map(manualDefinitions.filter(item => item.sourceAccountId).map(item => [item.sourceAccountId!, item]));
   const manualByName = new Map(manualDefinitions.map(item => [normalizeAccountName(item.canonicalName), item]));
-  const definitions = accounts.filter(account => account.isActive !== false).map((account): CanonicalAccountDefinition => {
+  const definitions = accounts.filter(account => account.isActive !== false).map((rawAccount): CanonicalAccountDefinition => {
+    const account = applyRuntimeAccountOverride(rawAccount);
     const generated = applyApprovedCanonicalEquityTaxonomy(
       createDefinition(account, account.name, false, 'account_document'),
       account,
