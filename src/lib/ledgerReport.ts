@@ -6,6 +6,7 @@ import { getDynamicAccountNature, getMetricActualValue } from '../utils/accountL
 import { buildLegacyLedgerLegs, legacyLedgerEntityId, type LegacyLedgerBuildOptions } from './legacyLedger';
 import { splitLegsByPeriod } from './periodLegs';
 import { applyRuntimeAccountOverride } from './runtimeAccountOverrides';
+import { exposeInventoryLinkedAccounts, inventoryAccountDisplayName } from './inventoryAccountLinkage';
 
 export type LedgerDimension = 'cash' | 'gold' | 'silver' | 'quantity' | 'book_value';
 export type GoldDisplayMode = 'equivalent21' | 'original';
@@ -356,7 +357,8 @@ export const buildLedgerAccountSelection = (accounts: Account[], search = ''): L
   const query = search.trim();
   const selected = new Map<string, LedgerSelectableEntity>();
   const directDocumentByName = new Map<string, LedgerSelectableEntity>();
-  accounts.filter(account => account.isActive !== false).forEach((raw, index) => {
+  const selectableAccounts = exposeInventoryLinkedAccounts(accounts);
+  selectableAccounts.filter(account => account.isActive !== false).forEach((raw, index) => {
     const account = raw as AccountWithSource;
     const sourceEntityId = sourceEntityIdFor(account);
     const legacyName = normalizedId(account.name);
@@ -368,8 +370,10 @@ export const buildLedgerAccountSelection = (accounts: Account[], search = ''): L
     const adapterEntityId = normalizedId(account.ledgerEntityId ?? account.sourceEntityId ?? account.accountId ?? account.productId ?? account.merchantId ?? account.partyId);
     const identityKey = `${entityType}:entity:${adapterEntityId || sourceEntityId || legacyName}`;
     const nameKey = `${entityType}:name:${legacyName}`;
-    if (query && !account.name.includes(query)) return;
-    const candidate: LedgerSelectableEntity = { ledgerEntityId, sourceEntityId: sourceEntityId || legacyName, entityType, displayName: account.name, primaryGroup: getAccountGroup(account), account };
+    const displayName = inventoryAccountDisplayName(account);
+    if (query && !displayName.includes(query) && !account.name.includes(query)) return;
+    const selectableAccount = displayName === account.name ? account : { ...account, name: displayName };
+    const candidate: LedgerSelectableEntity = { ledgerEntityId, sourceEntityId: sourceEntityId || legacyName, entityType, displayName, primaryGroup: getAccountGroup(account), account: selectableAccount };
     const existing = selected.get(identityKey) ?? (!adapterEntityId ? directDocumentByName.get(nameKey) : undefined);
     if (existing && import.meta.env.DEV) {
       console.warn('Duplicate final ledger selection entity', [existing, candidate].map((item, pairIndex) => ({

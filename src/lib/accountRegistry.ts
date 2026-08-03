@@ -12,6 +12,7 @@ import {
 import { getEntryArabicWeight, parseCash, resolveOperationKind } from './engine';
 import { applyApprovedCanonicalEquityTaxonomy } from './canonicalEquityCatalog';
 import { applyRuntimeAccountOverride } from './runtimeAccountOverrides';
+import { exposeInventoryLinkedAccounts, inventoryAccountDisplayName } from './inventoryAccountLinkage';
 
 export type AccountResolution =
   | { status: 'resolved'; account: CanonicalAccountDefinition; via: 'id' | 'alias' }
@@ -227,14 +228,20 @@ const mergeManual = (generated: CanonicalAccountDefinition, manual: CanonicalAcc
 
 /** Builds the source of truth for the shadow path. Manual records always win. */
 export const buildAccountRegistry = (accounts: Account[], entries: Entry[] = [], manualDefinitions: CanonicalAccountDefinition[] = []): AccountRegistry => {
+  const linkedAccounts = exposeInventoryLinkedAccounts(accounts);
   const manualBySource = new Map(manualDefinitions.filter(item => item.sourceAccountId).map(item => [item.sourceAccountId!, item]));
   const manualByName = new Map(manualDefinitions.map(item => [normalizeAccountName(item.canonicalName), item]));
-  const definitions = accounts.filter(account => account.isActive !== false).map((rawAccount): CanonicalAccountDefinition => {
+  const definitions = linkedAccounts.filter(account => account.isActive !== false).map((rawAccount): CanonicalAccountDefinition => {
     const account = applyRuntimeAccountOverride(rawAccount);
+    const displayName = inventoryAccountDisplayName(account);
     const generated = applyApprovedCanonicalEquityTaxonomy(
-      createDefinition(account, account.name, false, 'account_document'),
+      createDefinition(account, displayName, false, 'account_document'),
       account,
     );
+    if (displayName !== account.name) {
+      generated.legacyNames = [...new Set([...generated.legacyNames, account.name])];
+      generated.aliases = [...new Set([...generated.aliases, account.name])];
+    }
     const manual = (account.id && manualBySource.get(account.id)) || manualByName.get(normalizeAccountName(account.name));
     if (!manual) return generated;
     const governed = generated.approvalStatus === 'approved'
@@ -268,7 +275,7 @@ export const buildAccountRegistry = (accounts: Account[], entries: Entry[] = [],
     };
   });
 
-  const knownIds = new Set(accounts.map(account => account.id).filter(Boolean));
+  const knownIds = new Set(linkedAccounts.map(account => account.id).filter(Boolean));
   const knownNames = new Set(definitions.flatMap(item => [...item.legacyNames, ...item.aliases]).map(normalizeAccountName));
   entries.forEach(entry => {
     (['debit', 'credit'] as const).forEach(side => {

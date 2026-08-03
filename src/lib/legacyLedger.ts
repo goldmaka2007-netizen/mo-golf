@@ -4,6 +4,7 @@ import { isValidAccountingEntry } from './canonicalAccounting';
 import type { InventoryCostTimeline } from './inventoryCostTypes';
 import { isOpeningEntry } from './openingEntry';
 import { applyRuntimeAccountOverride } from './runtimeAccountOverrides';
+import { exposeInventoryLinkedAccounts, inventoryAccountDisplayName } from './inventoryAccountLinkage';
 
 export type LegacyLedgerDimension = 'cash' | 'gold' | 'silver' | 'quantity' | 'book_value';
 export type LegacyLedgerSide = 'debit' | 'credit';
@@ -136,7 +137,7 @@ const metadataFor = (
       : `legacy-name:${normalize(rawName)}`;
   return {
     entityId,
-    accountName: account?.name ?? rawName,
+    accountName: account ? inventoryAccountDisplayName(account) : rawName,
     group,
     description: definition?.description || definition?.displayName || descriptionFor(account),
     normalBalance: definition?.normalBalanceByDimension.cash ?? (['liabilities', 'equity', 'revenue'].includes(group) ? 'credit' : 'debit'),
@@ -370,7 +371,8 @@ export const buildLegacyLedgerLegs = (
   canonicalDefinitions: CanonicalAccountDefinition[] = [],
   options: LegacyLedgerBuildOptions = {},
 ): LegacyLedgerLeg[] => {
-  const index = buildIndex(accounts.map(applyRuntimeAccountOverride), canonicalDefinitions);
+  const linkedAccounts = exposeInventoryLinkedAccounts(accounts.map(applyRuntimeAccountOverride));
+  const index = buildIndex(linkedAccounts, canonicalDefinitions);
   const legs: LegacyLedgerLeg[] = [];
   entries.filter(isValidAccountingEntry).forEach(entry => {
     const debitAccount = (entry.debitAccountId ? index.byId.get(entry.debitAccountId) : undefined) ?? index.byName.get(normalize(entry.debit));
@@ -390,20 +392,24 @@ export const buildLegacyLedgerLegs = (
       if (options.enableFinancialProjection && dimension === 'cash'
         && isOpeningInventoryContribution(entry, debit, credit)) return;
 
-      const projectedCredit = options.enableFinancialProjection
-        && dimension === 'cash'
-        && (entry.operationKind || '') === 'sale'
-        && isInventoryAccount(creditAccount)
-          ? virtualSalesRevenueFor(creditAccount, accounts)
+      const saleFromInventory = options.enableFinancialProjection
+        && resolveOperationKind(entry) === 'sale'
+        && isInventoryAccount(creditAccount);
+      const projectedCredit = saleFromInventory && dimension === 'cash'
+          ? virtualSalesRevenueFor(creditAccount, linkedAccounts)
           : credit;
-      if (ownsDimension(debitAccount, dimension, options.enableFinancialProjection === true))
-        legs.push(legFrom(entry, debit, projectedCredit, 'debit', dimension, amount));
+      const projectedDebit = saleFromInventory
+        && (dimension === 'gold' || dimension === 'silver' || dimension === 'quantity')
+          ? virtualSalesRevenueFor(creditAccount, linkedAccounts)
+          : debit;
+      if (projectedDebit !== debit || ownsDimension(debitAccount, dimension, options.enableFinancialProjection === true))
+        legs.push(legFrom(entry, projectedDebit, projectedCredit, 'debit', dimension, amount, projectedDebit !== debit ? 'generated' : 'historical'));
       if (projectedCredit !== credit || ownsDimension(creditAccount, dimension, options.enableFinancialProjection === true))
-        legs.push(legFrom(entry, projectedCredit, debit, 'credit', dimension, amount, projectedCredit !== credit ? 'generated' : 'historical'));
+        legs.push(legFrom(entry, projectedCredit, projectedDebit, 'credit', dimension, amount, projectedCredit !== credit ? 'generated' : 'historical'));
     });
   });
   if (options.enableFinancialProjection) {
-    appendCostLegs(legs, accounts, index, options.costTimeline, new Set(entries.map(operationId)));
+    appendCostLegs(legs, linkedAccounts, index, options.costTimeline, new Set(entries.map(operationId)));
     const unique = new Map<string, LegacyLedgerLeg>();
     legs.forEach(leg => { if (!unique.has(leg.deduplicationId)) unique.set(leg.deduplicationId, leg); });
     return [...unique.values()];

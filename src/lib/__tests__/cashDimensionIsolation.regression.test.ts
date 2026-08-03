@@ -29,14 +29,14 @@ describe('cash-only treasury and dimensional accounting regression', () => {
     expect(projected.filter(leg => leg.dimension === 'book_value').map(leg => [leg.entityId, leg.side, leg.amount])).toEqual([]); // WAC timeline is required for carrying value.
   });
 
-  it('projects sale revenue and WAC COGS exactly once while weight leaves inventory only', () => {
+  it('projects item sale revenue, analytical sold weight and WAC COGS exactly once', () => {
     const sale = entry({ id: 'sale', operationKind: 'sale', debit: cash.name, debitAccountId: cash.id, credit: gold.name, creditAccountId: gold.id, cash: '1000', weight: '2', arabicWeight: '2', karat: 21 });
     const timeline = { valid: true, results: [{ operationId: 'sale', classification: 'sale', entry: sale, sourceInventoryAccountId: 'gold', inventoryAccountId: 'gold', totalCogsMinor: 70000, adjustmentLossMinor: 0 }] } as unknown as InventoryCostTimeline;
     const legs = buildLegacyLedgerLegs([sale], accounts, [], { enableFinancialProjection: true, costTimeline: timeline });
-    expect(legs.filter(leg => leg.entityId === 'system:income:sales-revenue:gold' && leg.side === 'credit')).toHaveLength(1);
-    expect(legs.filter(leg => leg.entityId === 'system:income:cogs:gold' && leg.side === 'debit')).toHaveLength(1);
+    expect(legs.filter(leg => leg.entityId === 'account:gold::sales' && leg.dimension === 'cash' && leg.side === 'credit')).toHaveLength(1);
+    expect(legs.filter(leg => leg.entityId === 'account:gold::cogs' && leg.side === 'debit')).toHaveLength(1);
     expect(legs.filter(leg => leg.entityId === 'product:gold' && leg.dimension === 'book_value' && leg.side === 'credit' && leg.amount === 700)).toHaveLength(1);
-    expect(legs.filter(leg => leg.dimension === 'gold').map(leg => [leg.entityId, leg.side, leg.amount])).toEqual([['product:gold', 'credit', 2]]);
+    expect(legs.filter(leg => leg.dimension === 'gold').map(leg => [leg.entityId, leg.side, leg.amount])).toEqual([['account:gold::sales', 'debit', 2], ['product:gold', 'credit', 2]]);
   });
 
   it('classifies the two confirmed account IDs as Other Payables in their correct dimensions', () => {

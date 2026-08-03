@@ -36,8 +36,8 @@ describe('central accounting pipeline regression', () => {
   it('generates sale revenue, COGS, weight and inventory book-value exit once', () => {
     const cost = timeline();
     const legs = buildLegacyLedgerLegs([opening, receipt, sale], accounts, [], { enableFinancialProjection: true, costTimeline: cost }).filter(leg => leg.sourceEntryId === 'sale');
-    expect(legs.filter(leg => leg.entityId === 'system:income:sales-revenue:gold' && leg.side === 'credit')).toHaveLength(1);
-    expect(legs.filter(leg => leg.entityId === 'system:income:cogs:gold' && leg.side === 'debit')).toHaveLength(1);
+    expect(legs.filter(leg => leg.entityId === 'account:gold::sales' && leg.side === 'credit')).toHaveLength(1);
+    expect(legs.filter(leg => leg.entityId === 'account:gold::cogs' && leg.side === 'debit')).toHaveLength(1);
     expect(legs.filter(leg => leg.entityId === 'product:gold' && leg.dimension === 'gold' && leg.side === 'credit')).toHaveLength(1);
     expect(legs.filter(leg => leg.entityId === 'product:gold' && leg.dimension === 'book_value' && leg.side === 'credit')).toHaveLength(1);
   });
