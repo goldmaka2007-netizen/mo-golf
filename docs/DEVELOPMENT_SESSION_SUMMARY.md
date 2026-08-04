@@ -22,7 +22,7 @@ Treasury is EGP-only. Metal and accessories dimensions remain independent. WAC r
 - Focused policy/pipeline tests: 9/9 passed.
 - Report/accounting regressions: 43/43 passed.
 - Contract Guard, TypeScript, lint, production build, and git diff check: passed.
-- Build asset: `assets/index-BEk4es11.js`.
+- Final build asset: `assets/index-Du8Rx4DR.js`.
 
 ## Known limitations
 Sales returns, purchase returns, merchant receipts, customer payments, and mixed-category invoices were not invented or claimed as supported. The production verification used HTTP and the deployed static asset; no production Firestore test writes were made.
