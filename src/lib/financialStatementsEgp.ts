@@ -3,6 +3,7 @@ import { applyRuntimeAccountOverride } from './runtimeAccountOverrides';
 import { buildLegacyLedgerLegs, type LegacyLedgerLeg } from './legacyLedger';
 import type { InventoryCostKind, InventoryCostTimeline } from './inventoryCostTypes';
 import { buildAccountRegistry } from './accountRegistry';
+import { getEntryArabicWeight } from './engine';
 
 export interface FinancialStatementLine { id: string; label: string; amount: number; }
 export type StatementDimensionKind = 'gold' | 'silver' | 'accessory' | 'cash';
@@ -109,58 +110,156 @@ const groupLines = (legs: LegacyLedgerLeg[], normal: 'debit' | 'credit'): Financ
 
 const buildIncomeFromProjection = (
   allLegs: LegacyLedgerLeg[],
+  accounts: Account[],
   timeline: InventoryCostTimeline | null,
   startDate?: string,
   endDate?: string,
 ): EgpIncomeStatement => {
   const allPeriodLegs = allLegs.filter(leg => !leg.isOpening && inPeriod(leg.date, startDate, endDate));
   const period = allPeriodLegs.filter(financialLeg);
-  const revenue = groupLines(period.filter(leg => leg.group === 'revenue'), 'credit');
+  const revenueLegs = period.filter(leg => leg.group === 'revenue');
   const expenseLegs = period.filter(leg => leg.group === 'expenses');
-  const isCogs = (leg: LegacyLedgerLeg): boolean => leg.entityId.startsWith('system:income:cogs:') || leg.account.sourceAccount?.accountRole === 'cost_of_sales';
-  const rawCogsLines = groupLines(expenseLegs.filter(isCogs), 'debit');
+  const isCogs = (leg: LegacyLedgerLeg): boolean =>
+    leg.entityId.startsWith('system:income:cogs:')
+    || leg.account.sourceAccount?.accountRole === 'cost_of_sales';
+  const cogsLedgerLegs = expenseLegs.filter(isCogs);
   const operatingExpenses = groupLines(expenseLegs.filter(leg => !isCogs(leg)), 'debit');
 
-  const soldByInventory = new Map<string, { kind: InventoryCostKind; measure: number }>();
-  (timeline?.valid ? timeline.results : [])
-    .filter(result => result.classification === 'sale' && inPeriod(result.entry.date, startDate, endDate))
-    .forEach(result => {
-      const inventoryId = result.sourceInventoryAccountId || result.inventoryAccountId;
-      const state = inventoryId ? timeline?.finalStates[inventoryId] : undefined;
-      if (!inventoryId || !state) return;
-      const measure = state.kind === 'accessory'
-        ? (result.outgoingAccessoryQuantityUnits ?? 0) / 1000
+  const saleResults = (timeline?.valid ? timeline.results : [])
+    .filter(result => result.classification === 'sale' && inPeriod(result.entry.date, startDate, endDate));
+  const saleByOperationId = new Map(saleResults.map(result => [
+    result.operationId || result.entry.id || String(result.entry.seq ?? ''),
+    result,
+  ]));
+  const measureFor = (result: typeof saleResults[number], kind: InventoryCostKind): number =>
+    kind === 'accessory'
+      ? (result.outgoingAccessoryQuantityUnits ?? 0) / 1000
+      : kind === 'gold'
+        ? (result.outgoingStandardizedQuantityUnits ?? 0) > 0
+          ? (result.outgoingStandardizedQuantityUnits ?? 0) / 100
+          : getEntryArabicWeight(
+            result.entry,
+            accounts.find(account => account.id === (result.sourceInventoryAccountId || result.inventoryAccountId)),
+          )
         : (result.outgoingActualPhysicalWeightUnits ?? 0) / 100;
-      const current = soldByInventory.get(inventoryId);
-      soldByInventory.set(inventoryId, { kind: state.kind, measure: (current?.measure ?? 0) + measure });
+  const soldByInventory = new Map<string, { kind: InventoryCostKind; measure: number }>();
+  saleResults.forEach(result => {
+    const inventoryId = result.sourceInventoryAccountId || result.inventoryAccountId;
+    const state = inventoryId ? timeline?.finalStates[inventoryId] : undefined;
+    if (!inventoryId || !state) return;
+    const current = soldByInventory.get(inventoryId);
+    soldByInventory.set(inventoryId, {
+      kind: state.kind,
+      measure: (current?.measure ?? 0) + measureFor(result, state.kind),
+    });
+  });
+
+  interface QuantifiedGroup {
+    entityId: string;
+    label: string;
+    amount: number;
+    account?: Account;
+    inventoryId?: string;
+    kind: StatementDimensionKind;
+    operationIds: Set<string>;
+  }
+  const quantifyLegs = (
+    legs: LegacyLedgerLeg[],
+    role: 'sales' | 'cogs',
+    normal: 'debit' | 'credit',
+  ): QuantifiedFinancialStatementLine[] => {
+    const grouped = new Map<string, QuantifiedGroup>();
+    legs.forEach(leg => {
+      const result = saleByOperationId.get(leg.sourceEntryId);
+      const legAccount = leg.account.sourceAccount;
+      const inventoryId = result?.sourceInventoryAccountId
+        || result?.inventoryAccountId
+        || legAccount?.linkedInventoryAccountId;
+      const state = inventoryId ? timeline?.finalStates[inventoryId] : undefined;
+      const virtualKind = leg.entityId.endsWith(':gold')
+        ? 'gold'
+        : leg.entityId.endsWith(':silver')
+          ? 'silver'
+          : leg.entityId.endsWith(':accessories')
+            ? 'accessory'
+            : null;
+      const kind: StatementDimensionKind = state?.kind
+        ?? (legAccount?.metal === 'gold'
+          ? 'gold'
+          : legAccount?.metal === 'silver'
+            ? 'silver'
+            : virtualKind ?? 'cash');
+      const key = `${leg.entityId}|${inventoryId ?? kind}`;
+      const linkedAccount = legAccount ?? (inventoryId
+        ? accounts.find(account =>
+          account.accountRole === (role === 'sales' ? 'sales' : 'cost_of_sales')
+          && account.linkedInventoryAccountId === inventoryId)
+        : undefined);
+      const row = grouped.get(key) ?? {
+        entityId: leg.entityId,
+        label: leg.accountName,
+        amount: 0,
+        account: linkedAccount,
+        inventoryId,
+        kind,
+        operationIds: new Set<string>(),
+      };
+      row.amount += leg.side === normal ? leg.amount : -leg.amount;
+      if (result) row.operationIds.add(leg.sourceEntryId);
+      grouped.set(key, row);
     });
 
-  const quantify = (lines: FinancialStatementLine[], role: 'sales' | 'cogs'): QuantifiedFinancialStatementLine[] =>
-    lines.map(line => {
-      const entityLegs = allPeriodLegs.filter(leg => leg.entityId === line.id);
-      const account = entityLegs.find(leg => leg.account.sourceAccount)?.account.sourceAccount;
-      const inventoryId = account?.linkedInventoryAccountId;
-      const sold = inventoryId ? soldByInventory.get(inventoryId) : undefined;
-      const fallbackLeg = entityLegs.find(leg => ['gold', 'silver', 'quantity'].includes(leg.dimension));
-      const fallbackMeasure = fallbackLeg
-        ? Math.abs(entityLegs.filter(leg => leg.dimension === fallbackLeg.dimension).reduce((sum, leg) => sum + (leg.side === 'debit' ? leg.amount : -leg.amount), 0))
-        : 0;
-      const kind: StatementDimensionKind = sold?.kind
-        ?? (fallbackLeg?.dimension === 'gold' ? 'gold' : fallbackLeg?.dimension === 'silver' ? 'silver' : fallbackLeg?.dimension === 'quantity' ? 'accessory' : 'cash');
-      const measure = sold?.measure ?? fallbackMeasure;
-      const weight = kind === 'gold' || kind === 'silver' ? measure : null;
-      const quantity = kind === 'accessory' ? measure : null;
+    const entityCounts = new Map<string, number>();
+    grouped.forEach(row => entityCounts.set(row.entityId, (entityCounts.get(row.entityId) ?? 0) + 1));
+    return [...grouped.values()].map(row => {
+      let measure = 0;
+      row.operationIds.forEach(id => {
+        const result = saleByOperationId.get(id);
+        if (result && row.kind !== 'cash') measure += measureFor(result, row.kind);
+      });
+      if (measure === 0 && row.inventoryId) measure = soldByInventory.get(row.inventoryId)?.measure ?? 0;
+      if (measure === 0 && row.kind !== 'cash') {
+        const dimension = row.kind === 'accessory' ? 'quantity' : row.kind;
+        measure = Math.abs(allPeriodLegs
+          .filter(leg => leg.entityId === row.entityId && leg.dimension === dimension)
+          .reduce((sum, leg) => sum + (leg.side === 'debit' ? leg.amount : -leg.amount), 0));
+      }
+      const amount = roundMoney(row.amount);
+      const weight = row.kind === 'gold' || row.kind === 'silver' ? measure : null;
+      const quantity = row.kind === 'accessory' ? measure : null;
       const denominator = weight ?? quantity;
-      const unitPriceLabel = kind === 'cash'
+      const unitPriceLabel = row.kind === 'cash'
         ? null
         : role === 'sales'
-          ? (kind === 'accessory' ? '\u0645\u062a\u0648\u0633\u0637 \u0633\u0639\u0631 \u0628\u064a\u0639 \u0627\u0644\u0642\u0637\u0639\u0629' : '\u0645\u062a\u0648\u0633\u0637 \u0633\u0639\u0631 \u0628\u064a\u0639 \u0627\u0644\u062c\u0631\u0627\u0645')
-          : (kind === 'accessory' ? '\u0645\u062a\u0648\u0633\u0637 \u062a\u0643\u0644\u0641\u0629 \u0627\u0644\u0642\u0637\u0639\u0629 \u0627\u0644\u0645\u0628\u0627\u0639\u0629' : '\u0645\u062a\u0648\u0633\u0637 \u062a\u0643\u0644\u0641\u0629 \u0627\u0644\u062c\u0631\u0627\u0645 \u0627\u0644\u0645\u0628\u0627\u0639');
-      return { ...line, accountId: account?.id, kind, weight, quantity, unitPrice: deriveUnitPrice(line.amount, denominator), unitPriceLabel };
-    });
+          ? row.kind === 'gold'
+            ? 'متوسط سعر بيع الجرام العربي'
+            : row.kind === 'accessory'
+              ? 'متوسط سعر بيع القطعة'
+              : 'متوسط سعر بيع الجرام'
+          : row.kind === 'gold'
+            ? 'متوسط تكلفة الجرام العربي المباع'
+            : row.kind === 'accessory'
+              ? 'متوسط تكلفة القطعة المباعة'
+              : 'متوسط تكلفة الجرام المباع';
+      return {
+        id: (entityCounts.get(row.entityId) ?? 0) === 1
+          ? row.entityId
+          : `${row.entityId}:${row.inventoryId ?? row.kind}`,
+        label: row.label,
+        amount,
+        accountId: row.account?.id,
+        kind: row.kind,
+        weight,
+        quantity,
+        unitPrice: deriveUnitPrice(amount, denominator),
+        unitPriceLabel,
+      };
+    }).filter(row => row.amount > 0.0001).sort((a, b) => Math.abs(b.amount) - Math.abs(a.amount));
+  };
 
-  const revenueLines = quantify(revenue, 'sales');
-  const cogsLines = quantify(rawCogsLines, 'cogs');
+  const revenueLines = quantifyLegs(revenueLegs, 'sales', 'credit');
+  const cogsLines = quantifyLegs(cogsLedgerLegs, 'cogs', 'debit');
+  const revenue = revenueLines.map(({ id, label, amount }) => ({ id, label, amount }));
   const categories = (
     lines: QuantifiedFinancialStatementLine[],
     labels: Array<{ id: FinancialStatementCategory['id']; label: string }>,
@@ -171,38 +270,62 @@ const buildIncomeFromProjection = (
           : id === 'accessories' ? line.kind === 'accessory'
             : line.kind === 'cash');
     const amount = roundMoney(matching.reduce((sum, line) => sum + line.amount, 0));
-    const weight = id === 'gold' || id === 'silver' ? matching.reduce((sum, line) => sum + (line.weight ?? 0), 0) : null;
-    const quantity = id === 'accessories' ? matching.reduce((sum, line) => sum + (line.quantity ?? 0), 0) : null;
+    const weight = id === 'gold' || id === 'silver'
+      ? matching.reduce((sum, line) => sum + (line.weight ?? 0), 0)
+      : null;
+    const quantity = id === 'accessories'
+      ? matching.reduce((sum, line) => sum + (line.quantity ?? 0), 0)
+      : null;
     const denominator = weight ?? quantity;
     return {
-      id, label, lines: matching, amount, weight, quantity,
+      id,
+      label,
+      lines: matching,
+      amount,
+      weight,
+      quantity,
       unitPrice: deriveUnitPrice(amount, denominator),
       unitPriceLabel: matching.find(line => line.unitPriceLabel)?.unitPriceLabel ?? null,
     };
   });
   const revenueCategories = categories(revenueLines, [
-    { id: 'gold', label: '\u0645\u0628\u064a\u0639\u0627\u062a \u0627\u0644\u0630\u0647\u0628' },
-    { id: 'silver', label: '\u0645\u0628\u064a\u0639\u0627\u062a \u0627\u0644\u0641\u0636\u0629' },
-    { id: 'accessories', label: '\u0645\u0628\u064a\u0639\u0627\u062a \u0627\u0644\u0645\u0644\u062d\u0642\u0627\u062a' },
-    { id: 'other', label: '\u0625\u064a\u0631\u0627\u062f\u0627\u062a \u0623\u062e\u0631\u0649' },
+    { id: 'gold', label: 'مبيعات الذهب' },
+    { id: 'silver', label: 'مبيعات الفضة' },
+    { id: 'accessories', label: 'مبيعات الملحقات' },
+    { id: 'other', label: 'إيرادات أخرى' },
   ]);
   const cogsCategories = categories(cogsLines, [
-    { id: 'gold', label: '\u062a\u0643\u0644\u0641\u0629 \u0645\u0628\u064a\u0639\u0627\u062a \u0627\u0644\u0630\u0647\u0628' },
-    { id: 'silver', label: '\u062a\u0643\u0644\u0641\u0629 \u0645\u0628\u064a\u0639\u0627\u062a \u0627\u0644\u0641\u0636\u0629' },
-    { id: 'accessories', label: '\u062a\u0643\u0644\u0641\u0629 \u0645\u0628\u064a\u0639\u0627\u062a \u0627\u0644\u0645\u0644\u062d\u0642\u0627\u062a' },
-  ]);
+    { id: 'gold', label: 'تكلفة مبيعات الذهب' },
+    { id: 'silver', label: 'تكلفة مبيعات الفضة' },
+    { id: 'accessories', label: 'تكلفة مبيعات الملحقات' },
+    { id: 'other', label: 'تكلفة مبيعات أخرى / غير موزعة' },
+  ]).filter(category => category.id !== 'other' || category.amount !== 0);
   const revenueTotal = roundMoney(revenue.reduce((sum, line) => sum + line.amount, 0));
-  const cogs = roundMoney(rawCogsLines.reduce((sum, line) => sum + line.amount, 0));
+  const cogs = roundMoney(cogsLines.reduce((sum, line) => sum + line.amount, 0));
   const operatingExpensesTotal = roundMoney(operatingExpenses.reduce((sum, line) => sum + line.amount, 0));
   const soldWeight = {
     gold: revenueCategories.find(category => category.id === 'gold')?.weight ?? 0,
     silver: revenueCategories.find(category => category.id === 'silver')?.weight ?? 0,
   };
-  const soldQuantity = { accessories: revenueCategories.find(category => category.id === 'accessories')?.quantity ?? 0 };
+  const soldQuantity = {
+    accessories: revenueCategories.find(category => category.id === 'accessories')?.quantity ?? 0,
+  };
   const grossProfit = roundMoney(revenueTotal - cogs);
-  return { revenue, revenueCategories, revenueTotal, cogsLines, cogsCategories, cogs, grossProfit, operatingExpenses, operatingExpensesTotal, netProfit: roundMoney(grossProfit - operatingExpensesTotal), soldWeight, soldQuantity };
+  return {
+    revenue,
+    revenueCategories,
+    revenueTotal,
+    cogsLines,
+    cogsCategories,
+    cogs,
+    grossProfit,
+    operatingExpenses,
+    operatingExpensesTotal,
+    netProfit: roundMoney(grossProfit - operatingExpensesTotal),
+    soldWeight,
+    soldQuantity,
+  };
 };
-
 const balanceMap = (legs: LegacyLedgerLeg[], dimension?: LegacyLedgerLeg['dimension']): Map<string, { balance: number; leg: LegacyLedgerLeg }> => {
   const rows = new Map<string, { balance: number; leg: LegacyLedgerLeg }>();
   legs.filter(leg => !dimension || leg.dimension === dimension).forEach(leg => {
@@ -259,7 +382,7 @@ export const buildFinancialStatementsEgp = (entries: Entry[], rawAccounts: Accou
   });
 
   const inventory = Object.values(timeline?.finalStates ?? {}).map((state): InventoryStatementRow => {
-    const weight = state.kind === 'accessory' ? null : (state.actualPhysicalWeightUnits ?? state.standardizedQuantityUnits) / 100;
+    const weight = state.kind === 'accessory' ? null : state.kind === 'gold' ? state.standardizedQuantityUnits / 100 : state.actualPhysicalWeightUnits / 100;
     const quantity = state.kind === 'accessory' ? state.accessoryQuantityUnits / 1000 : null;
     const entityId = `product:${state.inventoryAccountId}`;
     const bookValue = roundMoney(bookBalances.get(entityId)?.balance ?? state.remainingTotalCostMinor / 100);
@@ -282,8 +405,8 @@ export const buildFinancialStatementsEgp = (entries: Entry[], rawAccounts: Accou
   const inventoryCategories = { gold: inventorySummary('gold'), silver: inventorySummary('silver'), accessory: inventorySummary('accessory') };
   const currentStart = options.incomeStartDate ?? (fiscalYear ? `${fiscalYear}-01-01` : undefined);
   const currentEnd = options.incomeEndDate ?? options.balanceEndDate;
-  const currentIncome = buildIncomeFromProjection(projectedLegs, timeline, currentStart, currentEnd);
-  const priorIncome = currentStart ? buildIncomeFromProjection(projectedLegs, timeline, undefined, previousDate(currentStart)) : { netProfit: 0 };
+  const currentIncome = buildIncomeFromProjection(projectedLegs, accounts, timeline, currentStart, currentEnd);
+  const priorIncome = currentStart ? buildIncomeFromProjection(projectedLegs, accounts, timeline, undefined, previousDate(currentStart)) : { netProfit: 0 };
   const capital = roundMoney(rawCapital); const retainedEarnings = roundMoney(rawRetainedEarnings + priorIncome.netProfit); const currentProfit = currentIncome.netProfit;
   const assets = { cash: roundMoney(cash), goldInventory, silverInventory, accessoriesInventory, receivables: roundMoney(receivables), total: 0 };
   assets.total = roundMoney(assets.cash + goldInventory + silverInventory + accessoriesInventory + assets.receivables);

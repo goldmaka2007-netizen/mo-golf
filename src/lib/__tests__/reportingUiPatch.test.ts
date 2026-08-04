@@ -31,13 +31,13 @@ const otherRevenue = entry({ id: 'other-revenue-entry', date: '2026-02-04', debi
 const rent = entry({ id: 'rent-entry', date: '2026-02-05', operationKind: 'expense', debit: accounts[6].name, debitAccountId: 'rent', credit: accounts[0].name, creditAccountId: 'cash', cash: '50' });
 const entries = [capitalCash, openingGold, openingSilver, openingAccessory, saleGold, saleSilver, saleAccessory, otherRevenue, rent];
 
-const result = (entryValue: Entry, classification: 'opening' | 'sale', inventoryId: string, kind: 'gold' | 'silver' | 'accessory', cogsMinor: number, actualUnits: number, accessoryUnits: number, incomingCost: number) => ({
+const result = (entryValue: Entry, classification: 'opening' | 'sale', inventoryId: string, kind: 'gold' | 'silver' | 'accessory', cogsMinor: number, standardizedUnits: number, accessoryUnits: number, incomingCost: number, physicalUnits = standardizedUnits) => ({
   operationId: entryValue.id!, classification, entry: entryValue, inventoryAccountId: inventoryId,
   sourceInventoryAccountId: classification === 'sale' ? inventoryId : undefined,
   incomingTotalCostMinor: incomingCost, outgoingTotalCostMinor: cogsMinor, totalCogsMinor: cogsMinor,
   saleAmountMinor: Math.round((Number(entryValue.cash) || 0) * 100), adjustmentLossMinor: 0, adjustmentGainMinor: 0,
-  incomingStandardizedQuantityUnits: 0, outgoingStandardizedQuantityUnits: kind === 'gold' ? actualUnits : 0,
-  incomingActualPhysicalWeightUnits: 0, outgoingActualPhysicalWeightUnits: kind === 'accessory' ? 0 : actualUnits,
+  incomingStandardizedQuantityUnits: 0, outgoingStandardizedQuantityUnits: kind === 'gold' ? standardizedUnits : 0,
+  incomingActualPhysicalWeightUnits: 0, outgoingActualPhysicalWeightUnits: kind === 'accessory' ? 0 : physicalUnits,
   incomingAccessoryQuantityUnits: 0, outgoingAccessoryQuantityUnits: accessoryUnits,
   incomingMetalCostMinor: 0, incomingWorkmanshipCostMinor: 0, outgoingMetalCostMinor: 0, outgoingWorkmanshipCostMinor: 0,
   metalCogsMinor: 0, workmanshipCogsMinor: 0, profitMinor: null,
@@ -48,12 +48,12 @@ const timeline = {
     result(openingGold, 'opening', 'gold', 'gold', 0, 0, 0, 100000),
     result(openingSilver, 'opening', 'silver', 'silver', 0, 0, 0, 50000),
     result(openingAccessory, 'opening', 'accessory', 'accessory', 0, 0, 0, 15000),
-    result(saleGold, 'sale', 'gold', 'gold', 40000, 400, 0, 0),
+    result(saleGold, 'sale', 'gold', 'gold', 40000, 350, 0, 0, 400),
     result(saleSilver, 'sale', 'silver', 'silver', 30000, 600, 0, 0),
     result(saleAccessory, 'sale', 'accessory', 'accessory', 6000, 0, 2000, 0),
   ],
   finalStates: {
-    gold: { inventoryAccountId: 'gold', displayName: accounts[2].name, kind: 'gold', standardizedQuantityUnits: 600, actualPhysicalWeightUnits: 600, accessoryQuantityUnits: 0, remainingTotalCostMinor: 60000 },
+    gold: { inventoryAccountId: 'gold', displayName: accounts[2].name, kind: 'gold', standardizedQuantityUnits: 500, actualPhysicalWeightUnits: 600, accessoryQuantityUnits: 0, remainingTotalCostMinor: 60000 },
     silver: { inventoryAccountId: 'silver', displayName: accounts[3].name, kind: 'silver', standardizedQuantityUnits: 400, actualPhysicalWeightUnits: 400, accessoryQuantityUnits: 0, remainingTotalCostMinor: 20000 },
     accessory: { inventoryAccountId: 'accessory', displayName: accounts[4].name, kind: 'accessory', standardizedQuantityUnits: 0, actualPhysicalWeightUnits: 0, accessoryQuantityUnits: 3000, remainingTotalCostMinor: 9000 },
   },
@@ -61,25 +61,25 @@ const timeline = {
 const report = () => buildFinancialStatementsEgp(entries, accounts, { timeline, incomeStartDate: '2026-01-01', incomeEndDate: '2026-12-31', balanceEndDate: '2026-12-31' });
 
 describe('targeted report drilldown patch', () => {
-  it('populates item COGS for all categories and reconciles exactly to total COGS', () => {
+  it('uses the gold COGS debit and sold 21K-equivalent weight for item and category averages', () => {
     const income = report().incomeStatement;
     expect(income.cogsCategories.map(category => [category.id, category.amount, category.weight, category.quantity, category.unitPrice])).toEqual([
-      ['gold', 400, 4, null, 100],
+      ['gold', 400, 3.5, null, 114.29],
       ['silver', 300, 6, null, 50],
       ['accessories', 60, null, 2, 30],
     ]);
     expect(income.cogsCategories.flatMap(category => category.lines).map(line => line.id)).toEqual(['account:gold-cogs', 'account:silver-cogs', 'account:accessory-cogs']);
-    expect(income.cogsCategories.reduce((sum, category) => sum + category.amount, 0)).toBe(income.cogs);
+    expect(income.cogsCategories.find(category => category.id === 'gold')?.lines[0]).toMatchObject({ amount: 400, weight: 3.5, unitPrice: 114.29 });
     expect(income.revenueCategories.reduce((sum, category) => sum + category.amount, 0)).toBe(income.revenueTotal);
     expect(report().balanceSheet.equity.currentProfit).toBe(income.netProfit);
     expect(income.operatingExpensesTotal).toBe(50);
     expect(deriveUnitPrice(100, 0.0009)).toBeNull();
   });
 
-  it('reconciles inventory children to category book value and compatible totals', () => {
+  it('reports gold inventory with 21K-equivalent rather than physical weight', () => {
     const balance = report().balanceSheet;
     expect(balance.inventory.map(row => [row.accountId, row.kind, row.bookValue, row.weight, row.quantity, row.averageBookCost])).toEqual([
-      ['gold', 'gold', 600, 6, null, 100],
+      ['gold', 'gold', 600, 5, null, 120],
       ['silver', 'silver', 200, 4, null, 50],
       ['accessory', 'accessory', 90, null, 3, 30],
     ]);
@@ -93,7 +93,13 @@ describe('targeted report drilldown patch', () => {
     expect(balance.balances.assetsLessLiabilitiesAndEquity).toBe(0);
   });
 
-  it('keeps one sibling accordion open and exposes inventory children to independent ledgers', () => {
+  it('reconciles every supported COGS leg with no unallocated amount and preserves controls', () => {
+    const statements = report();
+    const income = statements.incomeStatement;
+    expect(income.cogsCategories.some(category => category.id === 'other')).toBe(false);
+    expect(income.cogsCategories.reduce((sum, category) => sum + category.amount, 0)).toBe(income.cogs);
+    expect(statements.balanceSheet.balances.assetsLessLiabilitiesAndEquity).toBe(0);
+    expect(statements.balanceSheet.equity.currentProfit).toBe(income.netProfit);
     expect(toggleAccordionKey(null, 'gold')).toBe('gold');
     expect(toggleAccordionKey('gold', 'silver')).toBe('silver');
     expect(toggleAccordionKey('silver', 'silver')).toBeNull();

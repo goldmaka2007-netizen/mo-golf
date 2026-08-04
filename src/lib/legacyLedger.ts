@@ -326,7 +326,7 @@ const appendCostLegs = (
       return;
     }
     if (result.classification === 'sale') {
-      pushGenerated(entry, virtualCogsFor(sourceAccount, accounts), source, result.totalCogsMinor);
+      pushGenerated(entry, virtualCogsFor(sourceAccount ?? source.sourceAccount, accounts), source, result.totalCogsMinor);
       return;
     }
     if (result.classification === 'shortage') {
