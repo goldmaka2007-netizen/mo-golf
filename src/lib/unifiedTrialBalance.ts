@@ -3,6 +3,7 @@ import { BALANCE_ENGINE_VERSION } from './engine';
 import { arabicAccountLabel } from './accountLabels';
 import { buildLegacyLedgerLegs, type LegacyLedgerDimension, type LegacyLedgerLeg } from './legacyLedger';
 import type { InventoryCostTimeline } from './inventoryCostTypes';
+import { deriveUnitPrice } from './financialStatementsEgp';
 
 export interface UnifiedTrialDimension {
   debit: number;
@@ -20,6 +21,7 @@ export interface UnifiedTrialBalanceRow {
   silverBalance: number;
   quantityBalance: number;
   bookValue: UnifiedTrialDimension;
+  effectiveGramPrice: number | null;
   classificationWarning?: string;
 }
 export interface UnifiedTrialBalanceReport {
@@ -70,6 +72,15 @@ export const buildUnifiedTrialBalance = (
       : account?.canonicalSubType === 'unclassified' || account?.subType === 'unclassified'
         ? 'الحساب غير مصنف محاسبياً.'
         : undefined;
+    const bookValue = amounts(dimension('book_value'), normal);
+    const inventoryMetal = account?.is_inventory === true
+      ? account.metal === 'silver' || account.type === 'silver' ? 'silver'
+        : account.metal === 'gold' || ['gold_product', 'gold_raw', 'gold_direct'].includes(account.type ?? '') ? 'gold'
+          : null
+      : null;
+    const inventoryWeight = inventoryMetal === 'gold'
+      ? Math.abs(signedBalance(dimension('gold'), normal))
+      : inventoryMetal === 'silver' ? Math.abs(signedBalance(dimension('silver'), normal)) : null;
     return {
       entityId,
       accountName: first.accountName,
@@ -80,7 +91,8 @@ export const buildUnifiedTrialBalance = (
       goldBalance: signedBalance(dimension('gold'), normal),
       silverBalance: signedBalance(dimension('silver'), normal),
       quantityBalance: signedBalance(dimension('quantity'), normal),
-      bookValue: amounts(dimension('book_value'), normal),
+      bookValue,
+      effectiveGramPrice: inventoryMetal ? deriveUnitPrice(Math.abs(bookValue.balance), inventoryWeight) : null,
       classificationWarning: warning,
     };
   }).filter(row => row.cash.debit || row.cash.credit || row.goldBalance || row.silverBalance || row.quantityBalance || row.bookValue.debit || row.bookValue.credit)
@@ -104,7 +116,8 @@ export const buildUnifiedTrialBalance = (
 
 export const buildUnifiedTrialBalanceCsv = (report: UnifiedTrialBalanceReport): string => {
   const headers = ['الحساب', 'المجموعة', 'الطبيعة', 'مدين EGP', 'دائن EGP', 'رصيد EGP', 'ذهب مكافئ 21', 'فضة', 'كمية', 'مدين قيمة دفترية', 'دائن قيمة دفترية', 'رصيد قيمة دفترية', 'تحذير التصنيف'];
+  headers.splice(headers.length - 1, 0, 'سعر الجرام');
   const quote = (value: unknown) => `"${String(value ?? '').replace(/"/g, '""')}"`;
-  const lines = report.rows.map(row => [row.accountName, row.groupLabel, row.normalBalance === 'debit' ? 'مدين' : 'دائن', row.cash.debit, row.cash.credit, row.cash.balance, row.goldBalance, row.silverBalance, row.quantityBalance, row.bookValue.debit, row.bookValue.credit, row.bookValue.balance, row.classificationWarning ?? ''].map(quote).join(','));
+  const lines = report.rows.map(row => [row.accountName, row.groupLabel, row.normalBalance === 'debit' ? 'مدين' : 'دائن', row.cash.debit, row.cash.credit, row.cash.balance, row.goldBalance, row.silverBalance, row.quantityBalance, row.bookValue.debit, row.bookValue.credit, row.bookValue.balance, row.effectiveGramPrice ?? '', row.classificationWarning ?? ''].map(quote).join(','));
   return `\uFEFF${[headers.map(quote).join(','), ...lines].join('\r\n')}`;
 };

@@ -36,10 +36,10 @@ describe('invoice accounting policy', () => {
     expect(priced.map(issue => issue.code)).not.toContain('trader_invoice_price_missing');
   });
 
-  it('rejects a quantity dimension when neither account supports quantity', () => {
+  it('does not project a generic metal piece count as accessories quantity', () => {
     const issues = validateAccountingPolicy(entry({
       operationKind: 'expense', debit: '??????', debitAccountId: 'cash', credit: '????', creditAccountId: 'merchant', cash: '100', count: '1',
     }), accounts);
-    expect(issues.map(issue => issue.code)).toContain('invalid_account_dimension');
+    expect(issues.map(issue => issue.code)).not.toContain('invalid_account_dimension');
   });
 });

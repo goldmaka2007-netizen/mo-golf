@@ -6,6 +6,7 @@ import { buildDailyJournalReport, DailyJournalDiagnosticGroup, DailyJournalDimen
 import { cn } from '../../lib/utils';
 import { useAppStore } from '../../store';
 import { Entry } from '../../types';
+import { formatEgpNumber, formatQuantity, formatWeight } from '../../lib/formatting';
 
 const dimensions: { id: DailyJournalDimension; title: string; unit: string; icon: React.ElementType; accent: string }[] = [
   { id: 'gold', title: '\u062d\u0631\u0643\u0629 \u0627\u0644\u0630\u0647\u0628 (21)', unit: '\u062c\u0645', icon: Scale, accent: 'text-[#c9a84c]' },
@@ -15,7 +16,7 @@ const dimensions: { id: DailyJournalDimension; title: string; unit: string; icon
 
 const entryKey = (entry: Entry) => entry.id || String(entry.seq);
 const unique = (items: string[]) => [...new Set(items)].filter(Boolean);
-const amount = (value: number, dimension: DailyJournalDimension) => value.toLocaleString(undefined, dimension === 'cash' || dimension === 'quantity' ? { maximumFractionDigits: 0 } : { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+const amount = (value: number, dimension: DailyJournalDimension) => dimension === 'cash' ? formatEgpNumber(value) : dimension === 'quantity' ? formatQuantity(value, 0) : formatWeight(value, 2);
 export type DailyJournalExportRow = Record<string, string | number | undefined>;
 
 export const createDailyJournalWorkbook = async (summary: DailyJournalExportRow[], operations: DailyJournalExportRow[]) => {

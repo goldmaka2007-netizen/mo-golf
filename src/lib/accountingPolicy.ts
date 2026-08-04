@@ -45,13 +45,14 @@ export const validateAccountingPolicy = (entry: Partial<Entry>, accounts: Accoun
   }
 
   const dimensions: Array<'cash' | 'gold' | 'silver' | 'quantity'> = [];
+  const hasAccessoryAccount = [debit, credit].some(account => account.type === 'accessory');
   if (Math.abs(Number(entry.cash) || 0) > 0) dimensions.push('cash');
   const hasWeight = Math.abs(Number(entry.weight) || 0) > 0 || Math.abs(Number(entry.arabicWeight) || 0) > 0;
-  if (hasWeight) {
+  if (hasWeight && !hasAccessoryAccount) {
     if ([debit, credit].some(account => account.metal === 'silver' || account.type === 'silver')) dimensions.push('silver');
     else dimensions.push('gold');
   }
-  if (Math.abs(Number(entry.count) || 0) > 0) dimensions.push('quantity');
+  if (hasAccessoryAccount && Math.abs(Number(entry.count) || 0) > 0) dimensions.push('quantity');
   const allowed = [inferredDimensions(debit), inferredDimensions(credit)];
   dimensions.forEach(dimension => {
     if (!allowed.some(set => set.has(dimension))) {

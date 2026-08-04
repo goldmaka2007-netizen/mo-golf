@@ -56,6 +56,8 @@ describe('central accounting pipeline regression', () => {
     const trial = buildUnifiedTrialBalance(all, accounts, '2026-01-01', '2026-12-31', { timeline: cost });
     const statements = buildFinancialStatementsEgp(all, accounts, { timeline: cost, balanceEndDate: '2026-12-31' });
     expect(trial.financialBalanced).toBe(true);
+    expect(trial.rows.find(row => row.entityId === 'product:gold')?.effectiveGramPrice).toBeCloseTo(108.33, 2);
+    expect(trial.rows.find(row => row.entityId === 'account:cash')?.effectiveGramPrice).toBeNull();
     expect(statements.balanceSheet.balances.assetsLessLiabilitiesAndEquity).toBe(0);
     expect(statements.balanceSheet.assets.goldInventory).toBeGreaterThan(0);
     expect(statements.balanceSheet.liabilities.merchantGold).toBe(200);

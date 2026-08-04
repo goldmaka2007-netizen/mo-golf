@@ -58,12 +58,15 @@ export interface CanonicalPostingResult {
 
 const entryValues = (entry: Entry, debit?: CanonicalAccountDefinition, credit?: CanonicalAccountDefinition): Record<AccountTrackingDimension, number> => {
   const hasWeight = Number(entry.weight) > 0 || Number(entry.arabicWeight) > 0;
-  const metal = debit?.metal === 'gold' || credit?.metal === 'gold' ? 'gold' : debit?.metal === 'silver' || credit?.metal === 'silver' ? 'silver' : hasWeight ? 'gold' : null;
+  const hasAccessoryAccount = debit?.metal === 'accessory' || credit?.metal === 'accessory';
+  const metal = debit?.metal === 'gold' || credit?.metal === 'gold' ? 'gold' : debit?.metal === 'silver' || credit?.metal === 'silver' ? 'silver' : hasAccessoryAccount ? null : hasWeight ? 'gold' : null;
   return {
     cash: Math.abs(parseCash(entry)),
     gold: metal === 'gold' ? Math.abs(getEntryArabicWeight(entry, debit?.metal === 'gold' ? undefined : undefined)) : 0,
     silver: metal === 'silver' ? Math.abs(Number(entry.weight) || 0) : 0,
-    quantity: Math.abs(Number(entry.count) || 0),
+    // `count` is also operational invoice metadata for metal pieces. It becomes
+    // an accounting dimension only when an accessory account owns that dimension.
+    quantity: hasAccessoryAccount ? Math.abs(Number(entry.count) || 0) : 0,
   };
 };
 
