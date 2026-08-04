@@ -16,7 +16,7 @@ const dimensions: { id: DailyJournalDimension; title: string; unit: string; icon
 
 const entryKey = (entry: Entry) => entry.id || String(entry.seq);
 const unique = (items: string[]) => [...new Set(items)].filter(Boolean);
-const amount = (value: number, dimension: DailyJournalDimension) => dimension === 'cash' ? formatEgpNumber(value) : dimension === 'quantity' ? formatQuantity(value, 0) : formatWeight(value, 2);
+const amount = (value: number, dimension: DailyJournalDimension) => dimension === 'cash' ? formatEgpNumber(value) : dimension === 'quantity' ? formatQuantity(value, 3) : formatWeight(value, 2);
 export type DailyJournalExportRow = Record<string, string | number | undefined>;
 
 export const createDailyJournalWorkbook = async (summary: DailyJournalExportRow[], operations: DailyJournalExportRow[]) => {

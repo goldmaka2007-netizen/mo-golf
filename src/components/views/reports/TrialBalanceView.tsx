@@ -11,7 +11,7 @@ const yearStart = () => `${new Date().getFullYear()}-01-01`;
 const money = (value: number) => formatEgpNumber(value);
 export const formatTrialDisplayAmount = (value: number, dimension: LedgerDimension): string => {
   if (dimension === 'cash' || dimension === 'book_value') return formatEgpNumber(value);
-  if (dimension === 'quantity') return formatQuantity(value, 0);
+  if (dimension === 'quantity') return formatQuantity(value, 3);
   return formatWeight(value, 2);
 };
 

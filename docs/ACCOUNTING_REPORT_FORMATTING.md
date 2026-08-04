@@ -4,7 +4,7 @@ Date: 2026-08-04
 
 - EGP and Book Value: thousands separators, zero decimal digits; formatting never changes stored or aggregated precision.
 - Gold and silver: exactly two decimal places in accounting tables and mobile Trial Balance cards.
-- Accessories quantity: whole units in Trial Balance/Daily Journal presentation; underlying quantity precision remains unchanged.
+- Accessories quantity: integers display without redundant decimals; accounts using a fractional quantityStep preserve up to three decimal places.
 - Invalid numeric values: centralized formatters display a safe zero, never NaN or Infinity.
 - Legitimate zero: displayed numerically in dimension-specific formatting instead of being confused with missing data.
 - RTL/mobile: Trial Balance retains separate mobile cards, desktop horizontal scrolling, tabular numbers, and bottom safe-area spacing.

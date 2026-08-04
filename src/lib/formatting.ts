@@ -20,7 +20,8 @@ export const formatWeight = (value: number, digits = 2, includeUnit = false): st
   return includeUnit ? `${formatted} جم` : formatted;
 };
 
-export const formatQuantity = (value: number, digits = 3): string => formatDecimal(value, digits);
+export const formatQuantity = (value: number, digits = 3): string =>
+  (Number.isFinite(value) ? value : 0).toLocaleString('en-US', { minimumFractionDigits: 0, maximumFractionDigits: digits, useGrouping: false });
 export const formatPercent = (value: number, digits = 1): string => `${formatDecimal(value, digits)}%`;
 export const roundToInteger = (value: number): number => Math.round(value);
 export const formatInteger = (value: number, locale = 'en-US'): string => (Number.isFinite(value) ? value : 0).toLocaleString(locale, { maximumFractionDigits: 0 });
