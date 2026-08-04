@@ -2,7 +2,35 @@ import { useMemo } from 'react';
 import { format } from 'date-fns';
 import { useShallow } from 'zustand/react/shallow';
 import { useAppStore } from '../store';
-import { buildDashboardData } from '../lib/dashboardSelector';
+import {
+  buildDashboardData,
+  type BuildDashboardDataInput,
+  type DashboardData,
+} from '../lib/dashboardSelector';
+
+const sameDashboardInput = (left: BuildDashboardDataInput, right: BuildDashboardDataInput): boolean =>
+  left.entries === right.entries
+  && left.accounts === right.accounts
+  && left.canonicalDefinitions === right.canonicalDefinitions
+  && left.timeline === right.timeline
+  && left.goldPrice === right.goldPrice
+  && left.silverPrice === right.silverPrice
+  && left.today === right.today;
+
+export const createDashboardDataCache = (
+  build: (input: BuildDashboardDataInput) => DashboardData = buildDashboardData,
+) => {
+  let previousInput: BuildDashboardDataInput | null = null;
+  let previousResult: DashboardData | null = null;
+  return (input: BuildDashboardDataInput): DashboardData => {
+    if (previousInput && previousResult && sameDashboardInput(previousInput, input)) return previousResult;
+    previousInput = input;
+    previousResult = build(input);
+    return previousResult;
+  };
+};
+
+const getCachedDashboardData = createDashboardDataCache();
 
 export const useDashboardMetrics = () => {
   const {
@@ -22,7 +50,7 @@ export const useDashboardMetrics = () => {
   })));
 
   const today = format(new Date(), 'yyyy-MM-dd');
-  return useMemo(() => buildDashboardData({
+  return useMemo(() => getCachedDashboardData({
     entries,
     accounts,
     canonicalDefinitions,

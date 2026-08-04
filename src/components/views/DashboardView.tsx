@@ -30,6 +30,7 @@ import type {
   DashboardTone,
 } from '../../lib/dashboardSelector';
 import { useDashboardMetrics } from '../../hooks/useDashboardMetrics';
+import { MetalPriceEditor } from './MetalPriceEditor';
 
 const toneStyles: Record<DashboardTone, string> = {
   positive: 'border-emerald-500/20 bg-emerald-500/[0.07] text-emerald-300',
@@ -227,6 +228,8 @@ export const DashboardView = React.memo(({ refreshData }: { refreshData: () => v
           </div>
         )}
       </section>
+
+      <MetalPriceEditor />
 
       <section className="space-y-3">
         <SectionHeading title="لقطة النشاط" subtitle="المركز المالي والقيمة الدفترية الحالية" icon={Landmark} />
