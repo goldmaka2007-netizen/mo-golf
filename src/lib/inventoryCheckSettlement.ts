@@ -8,8 +8,7 @@ import { buildCanonicalPosting } from './postingMatrix';
 import { isGoldEquivalentEntry } from '../utils/accountLogic';
 import { isQuantityAlignedToStep } from './weightedAverageCost';
 import { buildOpeningCostConfig } from './openingCostConfig';
-import { rebuildInventoryCostTimeline } from './inventoryCostEngine';
-import { approvedHistoricalInventoryOverlaysForAccounts } from './historicalInventoryOverlay';
+import { rebuildRuntimeInventoryCostTimeline } from './costRecalculation';
 
 const EPSILON = 0.001;
 
@@ -200,9 +199,9 @@ export const prepareEntryForCentralSave = (args: {
 
   const pendingEntry = { ...entry, id: '__pending_inventory_check_settlement__' } as Entry;
   const openingConfig = buildOpeningCostConfig(args.openingCostConfig, args.accountsDb);
-  const costValidation = rebuildInventoryCostTimeline([...args.entries, pendingEntry], args.accountsDb, openingConfig, {
-    historicalInventoryOverlayDirectives: approvedHistoricalInventoryOverlaysForAccounts(args.accountsDb),
-  });
+  const costValidation = rebuildRuntimeInventoryCostTimeline(
+    [...args.entries, pendingEntry], args.accountsDb, openingConfig,
+  );
   if (!costValidation.valid) {
     const diagnostic = costValidation.diagnostics[0];
     return { ok: false, message: `رفض محرك التكلفة: ${diagnostic?.code || 'unknown'} - ${diagnostic?.message || 'تعذر اعتماد تكلفة العملية.'}` };

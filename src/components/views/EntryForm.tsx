@@ -20,9 +20,7 @@ import { FormInput } from '../ui/FormInput';
 import { buildGoldEquivalent21Audit, canCalculateGoldEquivalent21, inferGoldKaratFromMultiplier } from '../../lib/goldEquivalent';
 import { isQuantityAlignedToStep } from '../../lib/weightedAverageCost';
 import { buildOpeningCostConfig } from '../../lib/openingCostConfig';
-import { rebuildInventoryCostTimeline } from '../../lib/inventoryCostEngine';
-import { approvedHistoricalInventoryOverlaysForAccounts } from '../../lib/historicalInventoryOverlay';
-import { areOperationWritesLocked } from '../../lib/costRecalculation';
+import { areOperationWritesLocked, rebuildRuntimeInventoryCostTimeline } from '../../lib/costRecalculation';
 import { isGoldEquivalentEntry } from '../../utils/accountLogic';
 import { AccountSearchSelect } from '../ui/AccountSearchSelect';
 import { resolveEntryIdentity } from '../../lib/entryIdentity';
@@ -428,10 +426,10 @@ export const EntryForm = React.memo(() => {
       }
 
       const pendingEntry = { ...entry, id: '__pending_cost_validation__' } as Entry;
-      const openingConfig = buildOpeningCostConfig(openingCostConfig);
-      const costValidation = rebuildInventoryCostTimeline([...entries, pendingEntry], accountsDb, openingConfig, {
-        historicalInventoryOverlayDirectives: approvedHistoricalInventoryOverlaysForAccounts(accountsDb),
-      });
+      const openingConfig = buildOpeningCostConfig(openingCostConfig, accountsDb);
+      const costValidation = rebuildRuntimeInventoryCostTimeline(
+        [...entries, pendingEntry], accountsDb, openingConfig,
+      );
       if (!costValidation.valid) {
         const diagnostic = costValidation.diagnostics[0];
         setGlobalError(`رفض محرك التكلفة: ${diagnostic?.code || 'unknown'} — ${diagnostic?.message || 'تعذر اعتماد تكلفة العملية.'}`);

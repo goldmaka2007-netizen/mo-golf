@@ -1,0 +1,38 @@
+/** Read-only 2026-08-04 account-master snapshot; test evidence, never a write source. */
+export const PRODUCTION_INVENTORY_ACCOUNT_IDS_IN_SEED_ORDER = [
+  'U6X8UkgUtmW6IILjweHf',
+  'tXxy0jkvo88t2LbUrI6n',
+  'oXUbK6JY3UUhxK3vVDEv',
+  'Z1YfVICFOjcJHfKJZkgj',
+  'k4bvNkT3FT1ECays7fhB',
+  'EzQZrpKfDBpByr1vNg8Z',
+  'kAKpW0Dcjhr4l8GdsuWu',
+  'amoaoPtnY2mV317ddYZG',
+  'hZ8JC9CxMM5j9LVsoBrJ',
+  'ov1WToy8RTSPm4HrF1Uo',
+  '9BaLBdF6nuIWeShC8qW3',
+  'nMWVuJxd5T9Jz6mFfcze',
+  '58qlqZTfPxPIN9lvYcXI',
+  '0TZN9o9A2qoZhtdzOVU3',
+  'oQlWP1di0KCBunB7TnWb',
+  'OaSpep4LP8iqleL1BkAx',
+  'UbcF1uC5BAB8BWQR2kpK',
+  'O5YOL6B9WF91qcskgfbr',
+  'K3JmA5ool9nXqFUrNqwZ',
+  '3VqSd1NWi2QQLkKl7Nwi',
+  'auEeE0Yg4KAtW4HPyxvZ',
+  'EfiCEUGgZpTTJXlPMCHD',
+  '09qdBCNEiu9JxX4N6JnK',
+  'ala2gb4ivgGrqeFL6fxc',
+  'ymRoI4SoeUoimPQwJXGR',
+  'rlcnFp7ytgt8TIcSljrL',
+  '9TJOctVgSE80e7Y8RkZx',
+  'ALgcjH5wXjKnFjDUOJyR',
+  'k7z5nLFb010mrGuXFL0f',
+  'PpmQLB2mGjcuPGRiwHQN',
+  'htmUArWB0J6l9WiZRplj',
+  'NJ5SdpStbaXLfGDdwQOO',
+] as const;
+
+export const REPORTED_SILVER_BAND_ACCOUNT_ID =
+  PRODUCTION_INVENTORY_ACCOUNT_IDS_IN_SEED_ORDER[22];

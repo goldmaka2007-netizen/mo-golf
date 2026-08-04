@@ -1,4 +1,5 @@
 import type { Account, Entry } from '../types';
+import type { InventoryRuntimeBinding } from './inventoryCostTypes';
 import { SEED_ACCOUNTS } from '../migrationData';
 import {
   CURRENT_DATASET_INVENTORY_BINDINGS,
@@ -66,13 +67,14 @@ const normalizedKarat = (value: Account['karat']): number | null => {
 const inventoryMetadataMatches = (
   actual: Account,
   expected: ExpectedInventoryAccount,
+  requireCanonicalName = true,
 ): boolean => {
   const definition = INVENTORY_COST_TAXONOMY.find(
     item => item.taxonomyKey === expected.taxonomyKey,
   );
   if (!definition) return false;
   const actualKind = actual.type === 'accessory' ? 'accessory' : actual.metal;
-  return actual.name === expected.seed.name
+  return (!requireCanonicalName || actual.name === expected.seed.name)
     && actual.mainType === expected.seed.mainType
     && actual.subType === expected.seed.subType
     && actual.balanceNature === expected.seed.balanceNature
@@ -113,6 +115,7 @@ export interface RuntimeCostAccountResolutionAudit {
 export interface RuntimeCostInputResolution {
   entries: Entry[];
   accounts: Account[];
+  bindings: InventoryRuntimeBinding[];
   audit: RuntimeCostAccountResolutionAudit[];
   errors: string[];
 }
@@ -130,6 +133,8 @@ export const resolveRuntimeCostAccountInputs = (
   const errors: string[] = [];
   const audit: RuntimeCostAccountResolutionAudit[] = [];
   const stableIdByInventoryName = new Map<string, string>();
+  const resolvedIdByRuntimeId = new Map<string, string>();
+  const bindings: InventoryRuntimeBinding[] = [];
   const seenStableIds = new Set<string>();
 
   const resolvedAccounts = accounts.map(account => {
@@ -145,8 +150,11 @@ export const resolveRuntimeCostAccountInputs = (
       }
       seenStableIds.add(stableBinding.inventoryAccountId);
       stableIdByInventoryName.set(account.name, stableBinding.inventoryAccountId);
+      resolvedIdByRuntimeId.set(account.id!, stableBinding.inventoryAccountId);
+      bindings.push(stableBinding);
       return { ...account };
     }
+    if (account.cloneSourceAccountId) return { ...account };
     const expected = expectedInventoryByName.get(account.name);
     if (!expected) {
       errors.push(`Unknown inventory account name: ${account.name}`);
@@ -169,6 +177,8 @@ export const resolveRuntimeCostAccountInputs = (
       taxonomyKey: expected.taxonomyKey,
       evidence: 'exact_versioned_name_and_inventory_metadata',
     });
+    resolvedIdByRuntimeId.set(account.id!, expected.stableAccountId);
+    bindings.push({ inventoryAccountId: expected.stableAccountId, taxonomyKey: expected.taxonomyKey as InventoryRuntimeBinding['taxonomyKey'] });
     return {
       ...account,
       id: expected.stableAccountId,
@@ -176,18 +186,34 @@ export const resolveRuntimeCostAccountInputs = (
     } as Account;
   });
 
-  const expectedStableIds = new Set(
-    CURRENT_DATASET_INVENTORY_BINDINGS.map(binding => binding.inventoryAccountId),
-  );
-  for (const binding of CURRENT_DATASET_INVENTORY_BINDINGS) {
-    if (!seenStableIds.has(binding.inventoryAccountId)) {
-      errors.push(`Missing runtime inventory account for stable accountId: ${binding.inventoryAccountId}`);
+  const resolvedAccountsWithClones = resolvedAccounts.map(account => {
+    if (!account.is_inventory || !account.id || !account.cloneSourceAccountId) return account;
+    const resolvedSourceId = resolvedIdByRuntimeId.get(account.cloneSourceAccountId);
+    const sourceBinding = bindings.find(binding => binding.inventoryAccountId === resolvedSourceId);
+    const sourceExpected = [...expectedInventoryByName.values()].find(item =>
+      item.stableAccountId === resolvedSourceId);
+    if (!resolvedSourceId || !sourceBinding || !sourceExpected
+      || !inventoryMetadataMatches(account, sourceExpected, false)) {
+      errors.push(`Inventory clone source is unknown or incompatible: ${account.id}`);
+      return account;
     }
-  }
+    if (bindings.some(binding => binding.inventoryAccountId === account.id)) {
+      errors.push(`Duplicate inventory runtime binding: ${account.id}`);
+      return account;
+    }
+    bindings.push({ inventoryAccountId: account.id, taxonomyKey: sourceBinding.taxonomyKey });
+    resolvedIdByRuntimeId.set(account.id, account.id);
+    stableIdByInventoryName.set(account.name, account.id);
+    return { ...account };
+  });
+
+  const expectedStableIds = new Set(bindings.map(binding => binding.inventoryAccountId));
 
   const resolvedEntries = entries.map(entry => {
-    const debitStableId = stableIdByInventoryName.get(entry.debit);
-    const creditStableId = stableIdByInventoryName.get(entry.credit);
+    const debitStableId = (entry.debitAccountId ? resolvedIdByRuntimeId.get(entry.debitAccountId) : undefined)
+      ?? stableIdByInventoryName.get(entry.debit);
+    const creditStableId = (entry.creditAccountId ? resolvedIdByRuntimeId.get(entry.creditAccountId) : undefined)
+      ?? stableIdByInventoryName.get(entry.credit);
     if (debitStableId && entry.debitAccountId
       && !expectedStableIds.has(entry.debitAccountId)
       && !audit.some(item => item.legacyAccountId === entry.debitAccountId
@@ -209,8 +235,53 @@ export const resolveRuntimeCostAccountInputs = (
 
   return {
     entries: resolvedEntries,
-    accounts: resolvedAccounts,
+    accounts: resolvedAccountsWithClones,
+    bindings,
     audit,
     errors: [...new Set(errors)],
   };
+};
+
+export interface SupportedInvoiceInventoryAccountCoverage {
+  emittedAccountId: string;
+  accountName: string;
+  resolvedCostAccountId: string;
+  taxonomyKey: InventoryRuntimeBinding['taxonomyKey'];
+  kind: 'gold' | 'silver' | 'accessory';
+}
+
+/**
+ * Guardrail comparing every active inventory account the invoice UI can emit
+ * with the bindings accepted by the canonical runtime cost resolver.
+ */
+export const auditSupportedInvoiceInventoryAccountCoverage = (
+  accounts: readonly Account[],
+): { coverage: SupportedInvoiceInventoryAccountCoverage[]; errors: string[] } => {
+  const activeInventory = accounts.filter(account =>
+    account.is_inventory && account.isActive !== false && !!account.id);
+  const resolution = resolveRuntimeCostAccountInputs([], accounts);
+  const stableByLegacy = new Map(resolution.audit.map(item => [
+    item.legacyAccountId, item.resolvedStableAccountId,
+  ]));
+  const coverage = activeInventory.flatMap(account => {
+    const resolvedCostAccountId = stableByLegacy.get(account.id!)
+      ?? (resolution.bindings.some(binding => binding.inventoryAccountId === account.id)
+        ? account.id! : undefined);
+    const binding = resolution.bindings.find(item =>
+      item.inventoryAccountId === resolvedCostAccountId);
+    const definition = binding ? INVENTORY_COST_TAXONOMY.find(item =>
+      item.taxonomyKey === binding.taxonomyKey) : undefined;
+    if (!resolvedCostAccountId || !binding || !definition) return [];
+    return [{
+      emittedAccountId: account.id!,
+      accountName: account.name,
+      resolvedCostAccountId,
+      taxonomyKey: binding.taxonomyKey,
+      kind: definition.kind,
+    }];
+  });
+  const coveredIds = new Set(coverage.map(item => item.emittedAccountId));
+  const missing = activeInventory.filter(account => !coveredIds.has(account.id!))
+    .map(account => `Invoice inventory account is not recognized by Cost/WAC: ${account.id}`);
+  return { coverage, errors: [...new Set([...resolution.errors, ...missing])] };
 };

@@ -20,6 +20,8 @@ import type {
   InventoryCostTimeline,
   Phase5OpeningCostConfig,
 } from './inventoryCostTypes';
+import { INVENTORY_COST_CALCULATION_VERSION } from './inventoryCostTypes';
+import type { RebuildInventoryCostOptions } from './inventoryCostEngine';
 import { resolveRuntimeCostAccountInputs } from './runtimeCostAccountResolver';
 import { resolveApprovedOpeningCostConfig } from './approvedCostDatasetConfig';
 
@@ -40,24 +42,93 @@ const hashString = (value: string): string => {
   }
   return `fnv1a-${(hash >>> 0).toString(16).padStart(8, '0')}`;
 };
-
-const kindByBoundAccountId = new Map(
-  CURRENT_DATASET_INVENTORY_BINDINGS.map(binding => {
-    const definition = INVENTORY_COST_TAXONOMY.find(item => item.taxonomyKey === binding.taxonomyKey);
-    return [binding.inventoryAccountId, definition?.kind] as const;
-  }),
+const inventoryKindByAccountId = (
+  bindings = CURRENT_DATASET_INVENTORY_BINDINGS,
+): ReadonlyMap<string, 'gold' | 'silver' | 'accessory' | undefined> => new Map(
+  bindings.map(binding => [
+    binding.inventoryAccountId,
+    INVENTORY_COST_TAXONOMY.find(item => item.taxonomyKey === binding.taxonomyKey)?.kind,
+  ]),
 );
 
-const boundInventoryAccountIds = new Set(
-  CURRENT_DATASET_INVENTORY_BINDINGS.map(binding => binding.inventoryAccountId),
-);
+const defaultInventoryKindByAccountId = inventoryKindByAccountId();
 
-const prepareCostInputs = (entries: Entry[], accounts: Account[]) => {
-  const needsLegacyResolution = accounts.some(account =>
-    account.is_inventory && (!account.id || !boundInventoryAccountIds.has(account.id)));
-  return needsLegacyResolution
-    ? resolveRuntimeCostAccountInputs(entries, accounts)
-    : { entries, accounts, audit: [], errors: [] };
+
+
+export const prepareRuntimeInventoryCostInputs = (
+  entries: Entry[],
+  accounts: Account[],
+) => resolveRuntimeCostAccountInputs(entries, accounts);
+
+const emptyInvalidTimeline = (message: string): InventoryCostTimeline => ({
+  calculationVersion: INVENTORY_COST_CALCULATION_VERSION,
+  orderedOperationIds: [], results: [], resultsByOperationId: {}, finalStates: {},
+  diagnostics: [{ code: 'unknown_inventory_account', message }],
+  orderingDiagnostics: [], historicalInventoryOverlays: [], valid: false,
+});
+
+const restoreRuntimeInventoryIds = (
+  timeline: InventoryCostTimeline,
+  entries: readonly Entry[],
+  audit: readonly { legacyAccountId: string; resolvedStableAccountId: string }[],
+): InventoryCostTimeline => {
+  if (audit.length === 0) return timeline;
+  const runtimeIdByStableId = new Map(
+    audit.map(item => [item.resolvedStableAccountId, item.legacyAccountId]),
+  );
+  const runtimeId = (value?: string): string | undefined =>
+    value ? runtimeIdByStableId.get(value) ?? value : undefined;
+  const originalEntryById = new Map(entries.map(entry => [getPhase5OperationId(entry), entry]));
+  const results = timeline.results.map(result => ({
+    ...result,
+    entry: { ...(originalEntryById.get(result.operationId) ?? result.entry) },
+    inventoryAccountId: runtimeId(result.inventoryAccountId),
+    sourceInventoryAccountId: runtimeId(result.sourceInventoryAccountId),
+    destinationInventoryAccountId: runtimeId(result.destinationInventoryAccountId),
+  }));
+  const finalStates = Object.fromEntries(Object.entries(timeline.finalStates).map(([accountId, state]) => {
+    const restoredId = runtimeId(accountId) ?? accountId;
+    return [restoredId, { ...state, inventoryAccountId: restoredId }];
+  }));
+  return {
+    ...timeline,
+    results,
+    resultsByOperationId: Object.fromEntries(results.map(result => [result.operationId, result])),
+    finalStates,
+    diagnostics: timeline.diagnostics.map(item => ({
+      ...item, inventoryAccountId: runtimeId(item.inventoryAccountId),
+    })),
+    orderingDiagnostics: timeline.orderingDiagnostics.map(item => ({
+      ...item, inventoryAccountId: runtimeId(item.inventoryAccountId) ?? item.inventoryAccountId,
+    })),
+    historicalInventoryOverlays: timeline.historicalInventoryOverlays.map(item => ({
+      ...item,
+      stableInventoryAccountId:
+        runtimeId(item.stableInventoryAccountId) ?? item.stableInventoryAccountId,
+    })),
+  };
+};
+
+/** Canonical runtime path shared by invoice validation and all WAC/report consumers. */
+export const rebuildRuntimeInventoryCostTimeline = (
+  entries: Entry[],
+  accounts: Account[],
+  openingConfig: Phase5OpeningCostConfig = {},
+  options: RebuildInventoryCostOptions = {},
+): InventoryCostTimeline => {
+  const prepared = prepareRuntimeInventoryCostInputs(entries, accounts);
+  if (prepared.errors.length > 0) return emptyInvalidTimeline(prepared.errors[0]);
+  const timeline = rebuildInventoryCostTimeline(
+    prepared.entries, prepared.accounts, openingConfig,
+    {
+      ...options,
+      historicalInventoryOverlayDirectives:
+        options.historicalInventoryOverlayDirectives
+        ?? approvedHistoricalInventoryOverlaysForAccounts(prepared.accounts),
+      bindings: prepared.bindings,
+    },
+  );
+  return restoreRuntimeInventoryIds(timeline, entries, prepared.audit);
 };
 
 const comparableTimestamp = (value: any): string => {
@@ -69,13 +140,17 @@ const comparableTimestamp = (value: any): string => {
   return '';
 };
 
-const entryCostFingerprint = (entry: Entry) => {
-  const inventoryAccountId = kindByBoundAccountId.has(entry.debitAccountId || '')
+const entryCostFingerprint = (
+  entry: Entry,
+  kindByAccountId = defaultInventoryKindByAccountId,
+) => {
+  const inventoryAccountId = kindByAccountId.has(entry.debitAccountId || '')
     ? entry.debitAccountId
-    : kindByBoundAccountId.has(entry.creditAccountId || '')
+    : kindByAccountId.has(entry.creditAccountId || '')
       ? entry.creditAccountId
       : undefined;
-  const inventoryKind = inventoryAccountId ? kindByBoundAccountId.get(inventoryAccountId) : undefined;
+  const inventoryKind = inventoryAccountId
+    ? kindByAccountId.get(inventoryAccountId) : undefined;
   return {
     id: getPhase5OperationId(entry),
     date: entry.date,
@@ -94,8 +169,6 @@ const entryCostFingerprint = (entry: Entry) => {
     karat: entry.karat,
     multiplier: entry.multiplier,
     goldEquivalent21Snapshot: entry.goldEquivalent21Snapshot,
-    // Piece count is a cost input only for accessories. Gold/silver count-only
-    // edits therefore do not invalidate or rebuild the cost timeline.
     count: inventoryKind === 'accessory' ? entry.count : undefined,
   };
 };
@@ -122,7 +195,7 @@ export const createCostInputRevision = (
   accounts: Account[],
   openingConfig: Phase5OpeningCostConfig,
 ): string => {
-  const prepared = prepareCostInputs(entries, accounts);
+  const prepared = prepareRuntimeInventoryCostInputs(entries, accounts);
   const openingResolution = resolveApprovedOpeningCostConfig(
     prepared.entries,
     openingConfig,
@@ -136,7 +209,7 @@ export const createCostInputRevision = (
     historicalInventoryOverlayVersion: HISTORICAL_INVENTORY_OVERLAY_VERSION,
     historicalInventoryOverlays: APPROVED_HISTORICAL_INVENTORY_OVERLAY_DIRECTIVES,
   },
-  entries: [...prepared.entries].sort(compareEntriesForPhase5Cost).map(entryCostFingerprint),
+  entries: [...prepared.entries].sort(compareEntriesForPhase5Cost).map(entry => entryCostFingerprint(entry, inventoryKindByAccountId(prepared.bindings))),
   accounts: [...prepared.accounts].sort((left, right) => String(left.id).localeCompare(String(right.id))).map(accountCostFingerprint),
   resolverErrors: prepared.errors,
 }));
@@ -169,7 +242,7 @@ export const executeCostCalculationRun = (args: {
   startedAt?: string;
 }): CostCalculationRun => {
   const startedAt = args.startedAt ?? new Date().toISOString();
-  const prepared = prepareCostInputs(args.entries, args.accounts);
+  const prepared = prepareRuntimeInventoryCostInputs(args.entries, args.accounts);
   const openingResolution = resolveApprovedOpeningCostConfig(
     prepared.entries,
     args.openingConfig,
@@ -190,7 +263,7 @@ export const executeCostCalculationRun = (args: {
       },
     };
   }
-  const timeline = rebuildInventoryCostTimeline(
+  const stableTimeline = rebuildInventoryCostTimeline(
     prepared.entries,
     prepared.accounts,
     openingResolution.config,
@@ -198,8 +271,10 @@ export const executeCostCalculationRun = (args: {
       historicalInventoryOverlayDirectives:
         approvedHistoricalInventoryOverlaysForAccounts(prepared.accounts),
       calculationGenerationId: args.generationId,
+      bindings: prepared.bindings,
     },
   );
+  const timeline = restoreRuntimeInventoryIds(stableTimeline, args.entries, prepared.audit);
   if (!timeline.valid) {
     return {
       generationId: args.generationId,
