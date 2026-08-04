@@ -4,6 +4,11 @@ export interface FormatNumberOptions {
   locale?: string;
 }
 
+export const EGP_CURRENCY_LABEL = '\u062c.\u0645' as const;
+
+export const formatEgpAmount = (value: number, maximumFractionDigits = 2): string =>
+  `${(Number.isFinite(value) ? value : 0).toLocaleString('ar-EG', { maximumFractionDigits })} ${EGP_CURRENCY_LABEL}`;
+
 export const formatDecimal = (value: number, digits = 2, locale = 'en-US'): string =>
   (Number.isFinite(value) ? value : 0).toLocaleString(locale, { minimumFractionDigits: digits, maximumFractionDigits: digits, useGrouping: false });
 

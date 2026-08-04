@@ -2,10 +2,12 @@ import type { Account, CanonicalAccountDefinition, Entry } from '../types';
 import { applyRuntimeAccountOverride } from './runtimeAccountOverrides';
 import { buildLegacyLedgerLegs, type LegacyLedgerLeg } from './legacyLedger';
 import type { InventoryCostKind, InventoryCostTimeline } from './inventoryCostTypes';
+import { buildAccountRegistry } from './accountRegistry';
 
 export interface FinancialStatementLine { id: string; label: string; amount: number; }
 export type StatementDimensionKind = 'gold' | 'silver' | 'accessory' | 'cash';
 export interface QuantifiedFinancialStatementLine extends FinancialStatementLine {
+  accountId?: string;
   kind: StatementDimensionKind;
   weight: number | null;
   quantity: number | null;
@@ -37,6 +39,7 @@ export interface EgpIncomeStatement {
   soldQuantity: { accessories: number };
 }
 export interface InventoryStatementRow {
+  accountId: string;
   kind: InventoryCostKind;
   label: string;
   weight: number | null;
@@ -49,6 +52,7 @@ export interface InventoryStatementRow {
 export interface InventoryCategorySummary { kind: InventoryCostKind; bookValue: number; weight: number | null; quantity: number | null; averageBookCost: number | null; }
 export interface MerchantLiabilityStatementRow {
   id: string;
+  accountId: string;
   label: string;
   metal: 'gold' | 'silver' | null;
   equivalent21Weight: number;
@@ -152,7 +156,7 @@ const buildIncomeFromProjection = (
         : role === 'sales'
           ? (kind === 'accessory' ? '\u0645\u062a\u0648\u0633\u0637 \u0633\u0639\u0631 \u0628\u064a\u0639 \u0627\u0644\u0642\u0637\u0639\u0629' : '\u0645\u062a\u0648\u0633\u0637 \u0633\u0639\u0631 \u0628\u064a\u0639 \u0627\u0644\u062c\u0631\u0627\u0645')
           : (kind === 'accessory' ? '\u0645\u062a\u0648\u0633\u0637 \u062a\u0643\u0644\u0641\u0629 \u0627\u0644\u0642\u0637\u0639\u0629 \u0627\u0644\u0645\u0628\u0627\u0639\u0629' : '\u0645\u062a\u0648\u0633\u0637 \u062a\u0643\u0644\u0641\u0629 \u0627\u0644\u062c\u0631\u0627\u0645 \u0627\u0644\u0645\u0628\u0627\u0639');
-      return { ...line, kind, weight, quantity, unitPrice: deriveUnitPrice(line.amount, denominator), unitPriceLabel };
+      return { ...line, accountId: account?.id, kind, weight, quantity, unitPrice: deriveUnitPrice(line.amount, denominator), unitPriceLabel };
     });
 
   const revenueLines = quantify(revenue, 'sales');
@@ -210,8 +214,9 @@ const balanceMap = (legs: LegacyLedgerLeg[], dimension?: LegacyLedgerLeg['dimens
 };
 
 export const buildFinancialStatementsEgp = (entries: Entry[], rawAccounts: Account[], options: BuildFinancialStatementsEgpOptions = {}): FinancialStatementsEgp => {
-  const accounts = rawAccounts.map(applyRuntimeAccountOverride);
   const canonicalDefinitions = options.canonicalDefinitions ?? [];
+  const registry = buildAccountRegistry(rawAccounts.map(applyRuntimeAccountOverride), entries, canonicalDefinitions);
+  const accounts = registry.expandedAccounts;
   const timeline = options.timeline?.valid ? options.timeline : null;
   const balanceEntries = entries.filter(entry => !options.balanceEndDate || entry.date <= options.balanceEndDate);
   const projectedLegs = buildLegacyLedgerLegs(balanceEntries, accounts, canonicalDefinitions, { enableFinancialProjection: true, costTimeline: timeline });
@@ -235,6 +240,7 @@ export const buildFinancialStatementsEgp = (entries: Entry[], rawAccounts: Accou
         const metal = account.metal === 'silver' ? 'silver' : account.metal === 'gold' ? 'gold' : null;
         merchantRows.set(entityId, {
           id: entityId,
+          accountId: account.id ?? entityId,
           label: leg.accountName,
           metal,
           equivalent21Weight: Math.max(0, -(goldBalances.get(entityId)?.balance ?? 0)),
@@ -259,7 +265,8 @@ export const buildFinancialStatementsEgp = (entries: Entry[], rawAccounts: Accou
     const bookValue = roundMoney(bookBalances.get(entityId)?.balance ?? state.remainingTotalCostMinor / 100);
     const marketPrice = state.kind === 'gold' ? options.goldPriceEgp : state.kind === 'silver' ? options.silverPriceEgp : null;
     const marketValue = weight !== null && marketPrice !== null && marketPrice !== undefined && Number.isFinite(marketPrice) ? roundMoney(weight * marketPrice) : null;
-    return { kind: state.kind, label: state.displayName, weight, quantity, bookValue, marketValue, unrealizedDifference: marketValue === null ? null : roundMoney(marketValue - bookValue), averageBookCost: deriveUnitPrice(bookValue, weight ?? quantity) };
+    const account = registry.expandedAccounts.find(item => item.id === state.inventoryAccountId);
+    return { accountId: state.inventoryAccountId, kind: state.kind, label: account?.name ?? state.displayName, weight, quantity, bookValue, marketValue, unrealizedDifference: marketValue === null ? null : roundMoney(marketValue - bookValue), averageBookCost: deriveUnitPrice(bookValue, weight ?? quantity) };
   });
   const inventoryTotal = (kind: InventoryCostKind): number => roundMoney(inventory.filter(row => row.kind === kind).reduce((sum, row) => sum + row.bookValue, 0));
   const goldInventory = inventoryTotal('gold'); const silverInventory = inventoryTotal('silver'); const accessoriesInventory = inventoryTotal('accessory');

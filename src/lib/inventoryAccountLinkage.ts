@@ -48,23 +48,35 @@ const derivedCompanion = (inventory: Account & { id: string }, role: InventoryCo
 
 const configuredCompanion = (inventory: Account, accounts: Account[], role: InventoryCompanionRole): Account | undefined => {
   const configuredId = role === 'sales' ? inventory.salesAccountId : inventory.costOfSalesAccountId;
-  return accounts.find(candidate => !!configuredId && candidate.id === configuredId)
+  const configured = accounts.find(candidate => !!configuredId && candidate.id === configuredId)
     ?? accounts.find(candidate => candidate.accountRole === role && candidate.linkedInventoryAccountId === inventory.id);
+  if (!configured) return undefined;
+  return {
+    ...configured,
+    accountRole: role,
+    linkedInventoryAccountId: inventory.id,
+    dimensions: configured.dimensions ?? companionDimensions(inventory, role),
+  };
 };
 
 /** Read-only compatibility registry; stored account documents are never mutated. */
 export const exposeInventoryLinkedAccounts = (sourceAccounts: Account[]): Account[] => {
   const additions: Account[] = [];
   const linkedIds = new Map<string, { sales: string; cost_of_sales: string }>();
+  const linkedCompanions = new Map<string, Account>();
   sourceAccounts.forEach(inventory => {
     if (!isLinkedInventoryAccount(inventory) || !inventory.id) return;
     const sales = configuredCompanion(inventory, sourceAccounts, 'sales') ?? derivedCompanion(inventory as Account & { id: string }, 'sales');
     const costOfSales = configuredCompanion(inventory, sourceAccounts, 'cost_of_sales') ?? derivedCompanion(inventory as Account & { id: string }, 'cost_of_sales');
     linkedIds.set(inventory.id, { sales: sales.id!, cost_of_sales: costOfSales.id! });
+    linkedCompanions.set(sales.id!, sales);
+    linkedCompanions.set(costOfSales.id!, costOfSales);
     if (!sourceAccounts.some(account => account.id === sales.id)) additions.push(sales);
     if (!sourceAccounts.some(account => account.id === costOfSales.id)) additions.push(costOfSales);
   });
   const accounts = sourceAccounts.map(account => {
+    const companion = account.id ? linkedCompanions.get(account.id) : undefined;
+    if (companion) return companion;
     const linkage = account.id ? linkedIds.get(account.id) : undefined;
     return linkage ? { ...account, accountRole: 'inventory' as const, salesAccountId: linkage.sales, costOfSalesAccountId: linkage.cost_of_sales } : account;
   });

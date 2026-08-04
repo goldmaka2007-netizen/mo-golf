@@ -36,6 +36,7 @@ export const ReportsView = React.memo(() => {
   const [selected, setSelected] = useState<ReportId | null>(
     view === 'reports' ? null : reportsTab,
   );
+  const [ledgerAccountId, setLedgerAccountId] = useState<string | null>(null);
   const startDate = format(new Date(new Date().getFullYear(), 0, 1), 'yyyy-MM-dd');
   const endDate = format(new Date(), 'yyyy-MM-dd');
   const filteredEntries = useMemo(() => entries.filter(e => e.date >= startDate && e.date <= endDate), [entries, startDate, endDate]);
@@ -51,6 +52,10 @@ export const ReportsView = React.memo(() => {
     setReportsTab(id);
     setSelected(id);
     window.history.pushState({ makkaReport: id }, '', window.location.href);
+  };
+  const openLedger = (accountId: string) => {
+    setLedgerAccountId(accountId);
+    open('ledger');
   };
   const back = () => {
     setSelected(null);
@@ -70,11 +75,11 @@ export const ReportsView = React.memo(() => {
   return <section className="space-y-3 pb-24" dir="rtl">
     <button type="button" onClick={back} className="flex items-center gap-1 text-sm font-bold text-[#c9a84c]"><ChevronRight className="h-5 w-5" /> رجوع إلى التقارير</button>
     <h2 className="text-lg font-black text-[#f5f1e8]">{title}</h2>
-    {selected === 'ledger' && <GeneralLedgerView entries={entries} />}
+    {selected === 'ledger' && <GeneralLedgerView entries={entries} initialAccountId={ledgerAccountId} />}
     {selected === 'trial' && <TrialBalanceView entries={balanceEntries} />}
-    {selected === 'income' && <IncomeStatementView entries={filteredEntries} />}
+    {selected === 'income' && <IncomeStatementView entries={filteredEntries} onOpenLedger={openLedger} />}
     {selected === 'equity' && <EquityStatementView entries={filteredEntries} />}
-    {selected === 'balance' && <BalanceSheetView entries={balanceEntries} />}
+    {selected === 'balance' && <BalanceSheetView entries={balanceEntries} onOpenLedger={openLedger} />}
     {selected === 'inventory' && <InventoryCheckView />}
     {selected === 'lifecycle' && <Phase5CostReportView initialSection="inventory" />}
     {selected === 'profit-analysis' && <Phase5CostReportView initialSection="profit" />}
@@ -82,6 +87,6 @@ export const ReportsView = React.memo(() => {
     {selected === 'monthly' && <MonthlyReportView entries={entries} onNavigate={target => open(target)} />}
     {selected === 'scrap' && <ScrapAnalysisView entries={filteredEntries} allEntries={entries} />}
     {selected === 'final' && <FinalReportView entries={filteredEntries} balanceEntries={balanceEntries} />}
-    {selected === 'financial-statements' && <FinancialStatementsView incomeEntries={filteredEntries} balanceEntries={balanceEntries} />}
+    {selected === 'financial-statements' && <FinancialStatementsView incomeEntries={filteredEntries} balanceEntries={balanceEntries} onOpenLedger={openLedger} />}
   </section>;
 });

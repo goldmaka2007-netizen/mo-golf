@@ -2,17 +2,22 @@ import { describe, expect, it } from 'vitest';
 import type { Account, Entry } from '../../types';
 import { buildAccountRegistry } from '../accountRegistry';
 import { buildFinancialStatementsEgp, deriveUnitPrice } from '../financialStatementsEgp';
+import { EGP_CURRENCY_LABEL, formatEgpAmount } from '../formatting';
+import { toggleAccordionKey } from '../../components/views/reports/EgpIncomeStatementView';
 import type { InventoryCostTimeline } from '../inventoryCostTypes';
 import { buildLedgerAccountSelection, buildLedgerReport } from '../ledgerReport';
 
 const accounts: Account[] = [
   { id: 'cash', name: '\u0627\u0644\u062e\u0632\u0646\u0629', mainType: 'asset', subType: '\u0646\u0642\u062f\u064a\u0629', balanceNature: 'cash', type: 'cash', userId: 'u' },
   { id: 'capital', name: '\u0631\u0623\u0633 \u0627\u0644\u0645\u0627\u0644', mainType: 'equity', subType: '\u0631\u0623\u0633 \u0627\u0644\u0645\u0627\u0644', balanceNature: 'cash', type: 'other', userId: 'u' },
-  { id: 'gold', name: '\u062e\u0627\u062a\u0645 \u0630\u0647\u0628 21', mainType: 'asset', subType: '\u0645\u062e\u0632\u0648\u0646 \u0630\u0647\u0628', balanceNature: 'gold', type: 'gold_product', metal: 'gold', is_inventory: true, karat: '21', userId: 'u' },
-  { id: 'silver', name: '\u062e\u0627\u062a\u0645 \u0641\u0636\u0629', mainType: 'asset', subType: '\u0645\u062e\u0632\u0648\u0646 \u0641\u0636\u0629', balanceNature: 'silver', type: 'silver', metal: 'silver', is_inventory: true, karat: 'silver', userId: 'u' },
-  { id: 'accessory', name: '\u0639\u0644\u0628\u0629 \u0625\u0643\u0633\u0633\u0648\u0627\u0631', mainType: 'asset', subType: '\u0645\u062e\u0632\u0648\u0646 \u0645\u0644\u062d\u0642\u0627\u062a', balanceNature: 'quantity', type: 'accessory', is_inventory: true, userId: 'u' },
+  { id: 'gold', name: '\u062e\u0627\u062a\u0645 \u0630\u0647\u0628 21', mainType: 'asset', subType: '\u0645\u062e\u0632\u0648\u0646 \u0630\u0647\u0628', balanceNature: 'gold', type: 'gold_product', metal: 'gold', is_inventory: true, karat: '21', costOfSalesAccountId: 'gold-cogs', userId: 'u' },
+  { id: 'silver', name: '\u062e\u0627\u062a\u0645 \u0641\u0636\u0629', mainType: 'asset', subType: '\u0645\u062e\u0632\u0648\u0646 \u0641\u0636\u0629', balanceNature: 'silver', type: 'silver', metal: 'silver', is_inventory: true, karat: 'silver', costOfSalesAccountId: 'silver-cogs', userId: 'u' },
+  { id: 'accessory', name: '\u0639\u0644\u0628\u0629 \u0625\u0643\u0633\u0633\u0648\u0627\u0631', mainType: 'asset', subType: '\u0645\u062e\u0632\u0648\u0646 \u0645\u0644\u062d\u0642\u0627\u062a', balanceNature: 'quantity', type: 'accessory', is_inventory: true, costOfSalesAccountId: 'accessory-cogs', userId: 'u' },
   { id: 'other-revenue', name: '\u0625\u064a\u0631\u0627\u062f \u062e\u062f\u0645\u0627\u062a', mainType: 'revenue', subType: '\u0625\u064a\u0631\u0627\u062f\u0627\u062a \u0623\u062e\u0631\u0649', balanceNature: 'cash', type: 'other', userId: 'u' },
   { id: 'rent', name: '\u0625\u064a\u062c\u0627\u0631', mainType: 'expenses', subType: '\u0645\u0635\u0631\u0648\u0641\u0627\u062a \u062a\u0634\u063a\u064a\u0644', balanceNature: 'cash', type: 'other', userId: 'u' },
+  { id: 'gold-cogs', name: 'Gold item COGS', mainType: 'expenses', subType: 'COGS', balanceNature: 'book_value', type: 'other', userId: 'u' },
+  { id: 'silver-cogs', name: 'Silver item COGS', mainType: 'expenses', subType: 'COGS', balanceNature: 'book_value', type: 'other', userId: 'u' },
+  { id: 'accessory-cogs', name: 'Accessory item COGS', mainType: 'expenses', subType: 'COGS', balanceNature: 'book_value', type: 'other', userId: 'u' },
 ];
 const entry = (patch: Partial<Entry>): Entry => ({ tx: '\u0639\u0645\u0644\u064a\u0629', debit: '', credit: '', date: '2026-01-01', cash: '0', weight: '0', count: '0', arabicWeight: '0', notes: '', userId: 'u', ...patch });
 const capitalCash = entry({ id: 'capital-cash', debit: '\u0627\u0644\u062e\u0632\u0646\u0629', debitAccountId: 'cash', credit: '\u0631\u0623\u0633 \u0627\u0644\u0645\u0627\u0644', creditAccountId: 'capital', cash: '1000' });
@@ -55,46 +60,61 @@ const timeline = {
 } as unknown as InventoryCostTimeline;
 const report = () => buildFinancialStatementsEgp(entries, accounts, { timeline, incomeStartDate: '2026-01-01', incomeEndDate: '2026-12-31', balanceEndDate: '2026-12-31' });
 
-describe('reporting UI patch', () => {
-  it('groups per-item revenue and COGS into gold, silver, accessories and other categories', () => {
+describe('targeted report drilldown patch', () => {
+  it('populates item COGS for all categories and reconciles exactly to total COGS', () => {
     const income = report().incomeStatement;
-    expect(income.revenueCategories.map(category => [category.id, category.amount])).toEqual([['gold', 500], ['silver', 300], ['accessories', 120], ['other', 80]]);
-    expect(income.cogsCategories.map(category => [category.id, category.amount])).toEqual([['gold', 400], ['silver', 300], ['accessories', 60]]);
-    expect(income.operatingExpensesTotal).toBe(50);
-  });
-
-  it('derives row and subtotal unit prices from EGP divided by compatible totals and suppresses zero denominators', () => {
-    const income = report().incomeStatement;
-    expect(income.revenueCategories.map(category => [category.id, category.weight, category.quantity, category.unitPrice])).toEqual([
-      ['gold', 4, null, 125], ['silver', 6, null, 50], ['accessories', null, 2, 60], ['other', null, null, null],
+    expect(income.cogsCategories.map(category => [category.id, category.amount, category.weight, category.quantity, category.unitPrice])).toEqual([
+      ['gold', 400, 4, null, 100],
+      ['silver', 300, 6, null, 50],
+      ['accessories', 60, null, 2, 30],
     ]);
-    expect(income.cogsCategories.map(category => category.unitPrice)).toEqual([100, 50, 30]);
-    expect(deriveUnitPrice(100, 0)).toBeNull();
+    expect(income.cogsCategories.flatMap(category => category.lines).map(line => line.id)).toEqual(['account:gold-cogs', 'account:silver-cogs', 'account:accessory-cogs']);
+    expect(income.cogsCategories.reduce((sum, category) => sum + category.amount, 0)).toBe(income.cogs);
+    expect(income.revenueCategories.reduce((sum, category) => sum + category.amount, 0)).toBe(income.revenueTotal);
+    expect(report().balanceSheet.equity.currentProfit).toBe(income.netProfit);
+    expect(income.operatingExpensesTotal).toBe(50);
     expect(deriveUnitPrice(100, 0.0009)).toBeNull();
   });
 
-  it('shows ending inventory dimensions and aggregate-derived book cost without changing the balance equation', () => {
+  it('reconciles inventory children to category book value and compatible totals', () => {
     const balance = report().balanceSheet;
-    expect(balance.inventory.map(row => [row.kind, row.bookValue, row.weight, row.quantity, row.averageBookCost])).toEqual([
-      ['gold', 600, 6, null, 100], ['silver', 200, 4, null, 50], ['accessory', 90, null, 3, 30],
+    expect(balance.inventory.map(row => [row.accountId, row.kind, row.bookValue, row.weight, row.quantity, row.averageBookCost])).toEqual([
+      ['gold', 'gold', 600, 6, null, 100],
+      ['silver', 'silver', 200, 4, null, 50],
+      ['accessory', 'accessory', 90, null, 3, 30],
     ]);
-    expect(balance.inventoryCategories.gold).toMatchObject({ bookValue: 600, weight: 6, averageBookCost: 100 });
+    for (const kind of ['gold', 'silver', 'accessory'] as const) {
+      const rows = balance.inventory.filter(row => row.kind === kind);
+      const summary = balance.inventoryCategories[kind];
+      expect(rows.reduce((sum, row) => sum + row.bookValue, 0)).toBe(summary.bookValue);
+      expect(rows.reduce((sum, row) => sum + (row.weight ?? row.quantity ?? 0), 0)).toBe(summary.weight ?? summary.quantity);
+      expect(summary.averageBookCost).toBe(deriveUnitPrice(summary.bookValue, summary.weight ?? summary.quantity));
+    }
     expect(balance.balances.assetsLessLiabilitiesAndEquity).toBe(0);
   });
 
-  it('resolves derived Sales and COGS accounts from the expanded registry and opens independent ledgers', () => {
+  it('keeps one sibling accordion open and exposes inventory children to independent ledgers', () => {
+    expect(toggleAccordionKey(null, 'gold')).toBe('gold');
+    expect(toggleAccordionKey('gold', 'silver')).toBe('silver');
+    expect(toggleAccordionKey('silver', 'silver')).toBeNull();
     const registry = buildAccountRegistry(accounts, entries);
-    const sales = registry.expandedAccounts.find(account => account.id === 'gold::sales');
-    const cogs = registry.expandedAccounts.find(account => account.id === 'gold::cogs');
-    expect(sales?.linkedInventoryAccountId).toBe('gold');
-    expect(cogs?.linkedInventoryAccountId).toBe('gold');
+    const inventoryId = report().balanceSheet.inventory[0].accountId;
     const selectableIds = buildLedgerAccountSelection(registry.expandedAccounts).flatMap(group => group.accounts.map(item => item.account.id));
-    expect(selectableIds).toEqual(expect.arrayContaining(['gold::sales', 'gold::cogs']));
-    const salesLedger = buildLedgerReport(entries, registry.expandedAccounts, sales!, 'cash', '2026-01-01', '2026-12-31', [], { enableFinancialProjection: true, costTimeline: timeline });
-    const cogsLedger = buildLedgerReport(entries, registry.expandedAccounts, cogs!, 'book_value', '2026-01-01', '2026-12-31', [], { enableFinancialProjection: true, costTimeline: timeline });
-    expect(salesLedger.rows.map(row => row.entry.id)).toEqual(['sale-gold']);
+    expect(selectableIds).toContain(inventoryId);
+    const inventory = registry.expandedAccounts.find(account => account.id === inventoryId)!;
+    const ledger = buildLedgerReport(entries, registry.expandedAccounts, inventory, 'book_value', '2026-01-01', '2026-12-31', [], { enableFinancialProjection: true, costTimeline: timeline });
+    expect(ledger.rows.map(row => row.entry.id)).toEqual(['sale-gold']);
+    expect(ledger.closingBalance).toBe(600);
+    const cogsAccountId = report().incomeStatement.cogsCategories[0].lines[0].accountId!;
+    expect(cogsAccountId).toBe('gold-cogs');
+    const cogsAccount = registry.expandedAccounts.find(account => account.id === cogsAccountId)!;
+    const cogsLedger = buildLedgerReport(entries, registry.expandedAccounts, cogsAccount, 'book_value', '2026-01-01', '2026-12-31', [], { enableFinancialProjection: true, costTimeline: timeline });
     expect(cogsLedger.rows.map(row => row.entry.id)).toEqual(['sale-gold']);
-    expect(sales!.id).not.toBe('gold');
-    expect(cogs!.id).not.toBe('gold');
+  });
+
+  it('renders the central Arabic currency label without escaped Unicode text', () => {
+    expect(EGP_CURRENCY_LABEL).toBe('\u062c.\u0645');
+    expect(formatEgpAmount(1250)).toContain('\u062c.\u0645');
+    expect(formatEgpAmount(1250)).not.toMatch(/(?:\\u|u)062c|(?:\\u|u)0645/);
   });
 });

@@ -10,9 +10,11 @@ type FinancialStatementTab = 'income' | 'balance';
 export const FinancialStatementsView = React.memo(({
   incomeEntries,
   balanceEntries,
+  onOpenLedger,
 }: {
   incomeEntries: Entry[];
   balanceEntries: Entry[];
+  onOpenLedger?: (accountId: string) => void;
 }) => {
   const [activeTab, setActiveTab] = useState<FinancialStatementTab>('income');
 
@@ -43,8 +45,8 @@ export const FinancialStatementsView = React.memo(({
         </button>
       </div>
 
-      {activeTab === 'income' && <EgpIncomeStatementView entries={incomeEntries} />}
-      {activeTab === 'balance' && <EgpBalanceSheetView entries={balanceEntries} />}
+      {activeTab === 'income' && <EgpIncomeStatementView entries={incomeEntries} onOpenLedger={onOpenLedger} />}
+      {activeTab === 'balance' && <EgpBalanceSheetView entries={balanceEntries} onOpenLedger={onOpenLedger} />}
     </div>
   );
 });

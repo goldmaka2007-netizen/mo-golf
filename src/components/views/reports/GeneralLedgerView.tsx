@@ -11,9 +11,9 @@ const yearStart = () => `${new Date().getFullYear()}-01-01`;
 const labels: Record<LedgerDimension, string> = { cash: 'نقدية', gold: 'ذهب', silver: 'فضة', quantity: 'عدد', book_value: 'القيمة الدفترية' };
 const original = (row: LedgerRow, value: number, dimension: LedgerDimension, mode: GoldDisplayMode) => mode === 'original' && dimension === 'gold' && row.originalWeight !== undefined && row.karat ? `${formatLedgerAmount(row.originalWeight, 'gold')} — عيار ${row.karat}` : formatLedgerAmount(value, dimension);
 
-export const GeneralLedgerView = React.memo(({ entries }: { entries: Entry[]; startDate?: string; endDate?: string }) => {
+export const GeneralLedgerView = React.memo(({ entries, initialAccountId }: { entries: Entry[]; initialAccountId?: string | null; startDate?: string; endDate?: string }) => {
   const { accountsDb, canonicalAccounts, costCalculationRun } = useAppStore();
-  const [accountKey, setAccountKey] = useState<string | null>(null);
+  const [accountKey, setAccountKey] = useState<string | null>(initialAccountId ?? null);
   const [search, setSearch] = useState('');
   const [expanded, setExpanded] = useState<Set<string>>(new Set());
   const accounts = useMemo(() => {
