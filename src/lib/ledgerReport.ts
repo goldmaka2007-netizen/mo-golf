@@ -3,7 +3,7 @@ import { Account, AccountNature, CanonicalAccountDefinition, Entry } from '../ty
 import { compareBalanceEntries, computePeriodAccountBalances, getEntryArabicWeight, getMerchantMetals, type AccountBalanceResult, type PeriodAccountBalancesResult } from './engine';
 import { balanceDirectionLabel, resolveBalanceDirection, resolveNormalBalance, type NormalBalanceSide } from './balanceDirection';
 import { getDynamicAccountNature, getMetricActualValue } from '../utils/accountLogic';
-import { buildLegacyLedgerLegs, legacyLedgerEntityId, type LegacyLedgerBuildOptions } from './legacyLedger';
+import { buildLegacyLedgerLegs, legacyLedgerEntityId, type LegacyLedgerBuildOptions, type LegacyLedgerLeg } from './legacyLedger';
 import { splitLegsByPeriod } from './periodLegs';
 import { applyRuntimeAccountOverride } from './runtimeAccountOverrides';
 import { exposeInventoryLinkedAccounts, inventoryAccountDisplayName } from './inventoryAccountLinkage';
@@ -79,9 +79,33 @@ const originalWeightFor = (entry: Entry, dimension: LedgerDimension, accounts: A
 
 /** The only user-facing operation identifier in the persisted model is invoiceNumber. */
 export const getVisibleOperationNumber = (entry: Entry): string => entry.invoiceNumber || String(entry.seq || '');
+const INVENTORY_ADJUSTMENT_BOOK_VALUE_ENTITIES = new Set([
+  'system:income:inventory-surplus-gain',
+  'system:income:inventory-shortage-loss',
+]);
+
+/** Exposes an existing WAC adjustment counterpart on the historical adjustment account that owns its weight leg. */
+const ledgerLegsForAccount = (legs: LegacyLedgerLeg[], account: Account): LegacyLedgerLeg[] => {
+  const entityId = legacyLedgerEntityId(account);
+  const direct = legs.filter(leg => leg.entityId === entityId);
+  const directBookValueKeys = new Set(direct
+    .filter(leg => leg.dimension === 'book_value')
+    .map(leg => `${leg.sourceEntryId}:${leg.side}`));
+  const analyticalKeys = new Set(direct
+    .filter(leg => leg.dimension === 'gold')
+    .map(leg => `${leg.sourceEntryId}:${leg.side}`));
+  const adjustmentBookValue = legs.filter(leg => {
+    if (leg.dimension !== 'book_value' || leg.origin !== 'generated' || leg.bookValueSource !== 'wac') return false;
+    if (!INVENTORY_ADJUSTMENT_BOOK_VALUE_ENTITIES.has(leg.entityId)) return false;
+    const key = `${leg.sourceEntryId}:${leg.side}`;
+    return analyticalKeys.has(key) && !directBookValueKeys.has(key);
+  });
+  return [...direct, ...adjustmentBookValue];
+};
 
 export const getAvailableDimensions = (account: Account, entries: Entry[], accounts: Account[], canonicalDefinitions: CanonicalAccountDefinition[] = [], options: LegacyLedgerBuildOptions = {}): LedgerDimension[] => {
-  const historical = new Set(buildLegacyLedgerLegs(entries, accounts, canonicalDefinitions, { ...options, enableFinancialProjection: true }).filter(leg => leg.entityId === legacyLedgerEntityId(account)).map(leg => leg.dimension));
+  const allLegs = buildLegacyLedgerLegs(entries, accounts, canonicalDefinitions, { ...options, enableFinancialProjection: true });
+  const historical = new Set(ledgerLegsForAccount(allLegs, account).map(leg => leg.dimension));
   const configured: LedgerDimension[] = [];
   if (account.type === 'merchant') configured.push('cash', ...getMerchantMetals(account, entries, accounts));
   else if (account.type === 'cash') configured.push('cash');
@@ -133,9 +157,9 @@ export const buildLedgerReport = (
   options: LedgerReportBuildOptions = {},
 ): LedgerReport => {
   const balancePeriod = options.balancePeriod ?? computePeriodAccountBalances(entries, accounts, startDate, endDate);
-  const entityId = legacyLedgerEntityId(account);
-  const legs = buildLegacyLedgerLegs(entries, accounts, canonicalDefinitions, { ...options, enableFinancialProjection: true })
-    .filter(leg => leg.entityId === entityId && leg.dimension === dimension)
+  const allLegs = buildLegacyLedgerLegs(entries, accounts, canonicalDefinitions, { ...options, enableFinancialProjection: true });
+  const legs = ledgerLegsForAccount(allLegs, account)
+    .filter(leg => leg.dimension === dimension)
     .sort((a, b) => compareBalanceEntries(a.entry, b.entry) || a.side.localeCompare(b.side, 'en'));
   const normalBalance = legs[0]?.account.normalBalance ?? resolveNormalBalance({ account });
   const signed = (side: 'debit' | 'credit', amount: number): number =>
