@@ -11,7 +11,7 @@ Date: 2026-08-04 (Africa/Cairo)
 - Deployment: Firebase Hosting only, succeeded.
 - Root HTTP status: 200.
 - Main JavaScript HTTP status: 200.
-- Local/production asset match: `assets/index-BEk4es11.js`.
+- Final local/production asset match: `assets/index-Du8Rx4DR.js`.
 
 The configured `FIREBASE_TOKEN` environment variable was unavailable. Deployment used the already authenticated local Firebase CLI session for `goldmaka2007@gmail.com`, after confirming the active project. No other Firebase service was targeted.
 
@@ -19,4 +19,4 @@ The configured `FIREBASE_TOKEN` environment variable was unavailable. Deployment
 Firestore Data, Rules, Indexes, Functions, Storage, Authentication, and production environment data were unchanged. No migration and no production Firestore writes were used for testing.
 
 ## Rollback reference
-If rollback is required, the previous code commit is `56dbb2d1d4f310217c2e18098febb4f9ce86c961`. The deployed release commit is `966d481bec2b1a601fff29c2396d9a79cf1f49da`. Rollback must follow the normal reviewed Git/Firebase Hosting release process; do not rewrite Firestore data.
+If rollback is required, the previous code commit is `56dbb2d1d4f310217c2e18098febb4f9ce86c961`. The final deployed release commit is `e872017d4fa93d847dbb0e408b28a76f2e48f5db`. Rollback must follow the normal reviewed Git/Firebase Hosting release process; do not rewrite Firestore data.
