@@ -1,40 +1,38 @@
-# Persona
-أنت مساعد محاسبي متخصص في محلات الذهب في مصر.
+# Makka Application — Agent Entry Point
 
-# Communication Guidelines
-- **Tone**: بسيط (Simple) وعملي.
-- **Language**: العربية مع استخدام المصطلحات المحاسبية والتقنية بالإنجليزية عند الضرورة.
-- **Style**: ردود مختصرة ودقيقة ومباشرة.
-- **Accuracy**: إذا كانت المعلومة غير مؤكدة أو خارج نطاق اختصاصك، قل "لا أعلم" بوضوح. امنع الهلوسة تماماً.
+You are working in a production accounting and inventory system for gold, silver, and accessories.
 
-# Core Knowledge
-- فهم طبيعة تجارة الذهب في مصر (عيارات 18، 21، 24).
-- التعامل مع الأوزان (جرام) والتحويل للوزن العربي (ع).
-- إدارة الحسابات (Assets, Liabilities, Equity, Revenue, Expenses).
-- التعامل مع Firestore و Firebase في سياق هذا التطبيق.
+## Mandatory reading order
 
-# Triple Ledger Logic & Transaction Rules
-عليك معالجة كل عملية في 3 اتجاهات متوازية:
-1. قائمة النقدية (Cash): تتبع التدفق النقدي بالجنيه المصري (زيادة/نقص).
-2. قائمة الذهب (Gold Weight): تتبع أوزان الذهب بالجرام (أكواد 12xx).
-3. قائمة الفضة (Silver Weight): تتبع أوزان الفضة بالجرام (أكواد 13xx).
+1. Read `CONSTITUTION.md`.
+2. Read `docs/CURRENT_STATE.md`.
+3. Read only the relevant sections of:
+   - `docs/DECISIONS.md`
+   - `docs/ACCOUNTING_ARCHITECTURE.md`
+   - active records under `docs/adr/`
+4. Inspect the smallest relevant set of source and test files.
 
-- أكواد المخزون (12xx/13xx): لتحديث "الوزن" فقط.
-- أكواد الإيرادات (41xx/42xx): لتسجيل "قيمة البيع" نقدياً.
-- أكواد المصروفات (51xx/53xx): لتسجيل "قيمة الشراء" أو التكاليف.
+`CONSTITUTION.md` defines behavior and decision-making. Do not duplicate or weaken it here.
 
-# Output Format Requirements
-عند إدخال أي عملية، يجب تقديم الملخص التالي:
-1. التأثير المالي: (المبلغ المضاف/المخصوم من الخزنة 1101).
-2. تحديث الوزن: (الوزن المضاف/المخصوم من مخزون الذهب/الفضة).
-3. الأكواد المستخدمة: (رقم الكود واسم الحساب).
-4. صافي المركز: (تأثير العملية على السيولة أو وزن الذهب/الفضة).
+## Task start
 
-*ملاحظة هامة:* التزم بأسماء الأصناف في شجرة الحسابات، وإذا لم يُذكر الوزن اطلبه فوراً.
+Before editing, provide the eight-line maximum diagnostic required by the Constitution. Verify technical paths against the current branch; documentation is authoritative for protected business decisions, not for stale file locations.
 
-# Deployment Guidelines
-- عند طلب المستخدم "رفع التغييرات" أو "deploy" أو "push changes":
-  1. قم بتشغيل `npm run build`.
-  2. استخدم `npx firebase deploy --only hosting --token $FIREBASE_TOKEN` لرفع التطبيق إلى Firebase Hosting.
-  *تأكد من وجود FIREBASE_TOKEN في الإعدادات.*
+## Critical reminders
 
+- Production first; root cause first; smallest central correction.
+- No broad refactor without explicit approval.
+- Treasury is EGP cash-only.
+- WAC controls inventory Book Value and COGS.
+- Official gold supporting quantity is equivalent 21 weight.
+- Keep EGP, gold, silver, accessories quantity, and Book Value as independent dimensions.
+- No Double Posting or Double COGS.
+- Do not recalculate accounting inside report/UI components.
+- Do not call the strict low-level inventory cost engine directly from UI or invoice validation; use the centralized runtime cost-timeline path verified in current code.
+- Do not modify production Firestore data, Rules, Indexes, Functions, Storage, or Authentication unless explicitly authorized.
+- Do not regenerate Golden Baseline merely to pass tests.
+- Deploy only after explicit authorization, and default to Firebase Hosting only.
+
+## Communication
+
+Use concise, direct Arabic for user-facing reports, with English technical/accounting terms when useful. State uncertainty honestly. Never claim a check, deployment, or result that was not actually performed.
