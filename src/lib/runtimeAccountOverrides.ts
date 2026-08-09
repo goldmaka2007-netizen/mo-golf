@@ -5,12 +5,13 @@ import type { Account } from '../types';
 const overrides: Record<string, Partial<Account>> = {
   CGuSD99FTGDiX3fdfuCc: {
     mainType: 'liabilities',
-    subType: 'other_due',
+    subType: 'merchant_gold',
     balanceNature: 'gold',
     canonicalMainType: 'liabilities',
-    canonicalSubType: 'other_due',
+    canonicalSubType: 'merchant_gold',
     merchantDirection: 'payable',
     metal: 'gold',
+    type: 'merchant',
     is_inventory: false,
   },
   SyBsRKWdl1nwbJDPsXM7: {

@@ -4,6 +4,8 @@ import { arabicAccountLabel } from './accountLabels';
 import { buildLegacyLedgerLegs, type LegacyLedgerDimension, type LegacyLedgerLeg } from './legacyLedger';
 import type { InventoryCostTimeline } from './inventoryCostTypes';
 import { deriveUnitPrice } from './financialStatementsEgp';
+import { buildMerchantMetalPositionTimeline } from './merchantGoldLiability';
+import { applyRuntimeAccountOverride } from './runtimeAccountOverrides';
 
 export interface UnifiedTrialDimension {
   debit: number;
@@ -60,11 +62,23 @@ export const buildUnifiedTrialBalance = (
     costTimeline: options.timeline,
   });
   const included = projected.filter(leg => leg.date < startDate || leg.date <= endDate);
+  const merchantTimeline = buildMerchantMetalPositionTimeline(
+    entries.filter(entry => entry.date <= endDate),
+    accounts.map(applyRuntimeAccountOverride),
+    options.timeline,
+  );
   const byEntity = new Map<string, LegacyLedgerLeg[]>();
   included.forEach(leg => byEntity.set(leg.entityId, [...(byEntity.get(leg.entityId) ?? []), leg]));
-  const rows = [...byEntity.entries()].map(([entityId, legs]): UnifiedTrialBalanceRow => {
+  const buildRow = (
+    entityId: string,
+    legs: LegacyLedgerLeg[],
+    groupOverride?: LegacyLedgerLeg['group'],
+    normalOverride?: 'debit' | 'credit',
+    accountNameOverride?: string,
+  ): UnifiedTrialBalanceRow => {
     const first = legs[0];
-    const normal = first.account.normalBalance;
+    const normal = normalOverride ?? first.account.normalBalance;
+    const group = groupOverride ?? first.group;
     const dimension = (value: LegacyLedgerDimension) => legs.filter(leg => leg.dimension === value);
     const account = first.account.sourceAccount;
     const warning = !account && !entityId.startsWith('system:')
@@ -83,9 +97,9 @@ export const buildUnifiedTrialBalance = (
       : inventoryMetal === 'silver' ? Math.abs(signedBalance(dimension('silver'), normal)) : null;
     return {
       entityId,
-      accountName: first.accountName,
-      group: first.group,
-      groupLabel: arabicAccountLabel(first.group),
+      accountName: accountNameOverride ?? first.accountName,
+      group,
+      groupLabel: arabicAccountLabel(group),
       normalBalance: normal,
       cash: amounts(dimension('cash'), normal),
       goldBalance: signedBalance(dimension('gold'), normal),
@@ -95,6 +109,25 @@ export const buildUnifiedTrialBalance = (
       effectiveGramPrice: inventoryMetal ? deriveUnitPrice(Math.abs(bookValue.balance), inventoryWeight) : null,
       classificationWarning: warning,
     };
+  };
+  const rows = [...byEntity.entries()].flatMap(([entityId, legs]): UnifiedTrialBalanceRow[] => {
+    const account = legs[0].account.sourceAccount;
+    const state = account?.id ? merchantTimeline.finalStates[account.id] : undefined;
+    if (!state) return [buildRow(entityId, legs)];
+    const metalLegs = legs.filter(leg => leg.dimension !== 'cash');
+    const cashLegs = legs.filter(leg => leg.dimension === 'cash');
+    const out: UnifiedTrialBalanceRow[] = [];
+    if (metalLegs.length > 0) {
+      const group = state.positionSide === 'receivable' ? 'assets' : state.positionSide === 'payable' ? 'liabilities' : legs[0].group;
+      const normal = state.positionSide === 'receivable' ? 'debit' : state.positionSide === 'payable' ? 'credit' : legs[0].account.normalBalance;
+      out.push(buildRow(`${entityId}:metal`, metalLegs, group, normal, `${legs[0].accountName} — ${state.metal === 'gold' ? 'ذهب' : 'فضة'}`));
+    }
+    if (cashLegs.length > 0) {
+      const cashSigned = cashLegs.reduce((sum, leg) => sum + (leg.side === 'debit' ? leg.amount : -leg.amount), 0);
+      const group = cashSigned >= 0 ? 'assets' : 'liabilities';
+      out.push(buildRow(`${entityId}:cash`, cashLegs, group, cashSigned >= 0 ? 'debit' : 'credit', `${legs[0].accountName} — نقدية`));
+    }
+    return out;
   }).filter(row => row.cash.debit || row.cash.credit || row.goldBalance || row.silverBalance || row.quantityBalance || row.bookValue.debit || row.bookValue.credit)
     .sort((a, b) => ['assets', 'liabilities', 'equity', 'revenue', 'expenses'].indexOf(a.group) - ['assets', 'liabilities', 'equity', 'revenue', 'expenses'].indexOf(b.group) || a.accountName.localeCompare(b.accountName, 'ar'));
   const financial = included.filter(leg => leg.dimension === 'cash' || leg.dimension === 'book_value');

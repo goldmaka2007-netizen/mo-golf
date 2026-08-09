@@ -81,11 +81,20 @@ const buildDimension = (
     const { value, actualValue } = dimensionValues(balance, metric);
     if (value === 0 && actualValue === 0) return;
 
+    const isMerchantMetalDimension = balance.isMerchant
+      && ((metric === 'gold' && balance.metal === 'gold') || (metric === 'silver' && balance.metal === 'silver'));
+    const economicMainType = isMerchantMetalDimension
+      ? balance.actualMerchantDirection === 'receivable' ? 'assets'
+        : balance.actualMerchantDirection === 'payable' ? 'liabilities'
+          : balance.mainType
+      : balance.mainType;
+    const displayValue = isMerchantMetalDimension ? Math.abs(value) : value;
+    const displayActualValue = isMerchantMetalDimension ? Math.abs(actualValue) : actualValue;
     const detail: FinancialPositionDetail = {
       accountId: balance.accountId,
       name: balance.accountName,
-      val: cleanForDisplay(value),
-      actualVal: cleanForDisplay(actualValue),
+      val: cleanForDisplay(displayValue),
+      actualVal: cleanForDisplay(displayActualValue),
       countVal: 0,
     };
 
@@ -94,19 +103,19 @@ const buildDimension = (
       return;
     }
 
-    const target = balance.mainType === 'assets' ? assetsCats
-      : balance.mainType === 'liabilities' ? liabilitiesCats
-        : balance.mainType === 'equity' ? equityCats
+    const target = economicMainType === 'assets' ? assetsCats
+      : economicMainType === 'liabilities' ? liabilitiesCats
+        : economicMainType === 'equity' ? equityCats
           : null;
     if (!target) return;
 
     const categoryName = balance.subType;
     if (!target[categoryName]) target[categoryName] = { total: 0, totalCount: 0, details: [] };
     target[categoryName].details.push(detail);
-    target[categoryName].total += value;
-    if (balance.mainType === 'assets') totalAssets += value;
-    else if (balance.mainType === 'liabilities') totalLiabilities += value;
-    else totalEquity += value;
+    target[categoryName].total += displayValue;
+    if (economicMainType === 'assets') totalAssets += displayValue;
+    else if (economicMainType === 'liabilities') totalLiabilities += displayValue;
+    else totalEquity += displayValue;
   });
 
   const periodResult = equityResult.netProfit;

@@ -123,11 +123,11 @@ A supported purchase produces:
 
 A pure inventory transfer preserves total approved quantity and Book Value unless a separately approved gain/loss event exists. It must not manufacture revenue or COGS.
 
-A merchant-to-merchant gold transfer is not an inventory transfer: it preserves total merchant-liability carrying value, does not move physical inventory, and does not create profit or loss.
+A merchant-to-merchant metal transfer is not an inventory transfer: it preserves total merchant carrying value algebraically across signed payable/receivable positions, does not move physical inventory, and does not create profit or loss. Gold and silver use independent carrying-value pools.
 
-### Merchant gold settlement
+### Merchant metal settlement
 
-Physical gold settlement debits the merchant liability at Merchant Liability WAC and credits inventory at Inventory WAC. A positive difference credits `مكاسب تسوية التزامات الذهب`; a negative difference debits `خسائر تسوية التزامات الذهب`. Cash/workmanship settlement with Treasury remains cash-only.
+Physical settlement releases the current merchant payable or receivable at its own Merchant Metal WAC and moves physical inventory at Inventory WAC. Crossing zero closes the old side and establishes the excess on the new side at the immutable operation basis. The difference is realized immediately in the metal-specific settlement gain/loss account. Gold and silver never share WAC state; cash/workmanship settlement with Treasury remains cash-only.
 
 ### Inventory increase / shortage
 

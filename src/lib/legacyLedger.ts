@@ -207,8 +207,12 @@ const virtualCogsFor = (account: Account | undefined, accounts: Account[]): Lega
   return virtualAccount(`system:income:cogs:${kind}`, `\u062a\u0643\u0644\u0641\u0629 \u0627\u0644\u0628\u0636\u0627\u0639\u0629 \u0627\u0644\u0645\u0628\u0627\u0639\u0629 - ${kindLabel(kind)}`, 'expenses', 'COGS \u0645\u0646 WAC');
 };
 const virtualShortageLoss = virtualAccount('system:income:inventory-shortage-loss', '\u062e\u0633\u0627\u0626\u0631 \u062a\u0633\u0648\u064a\u0629 \u0639\u062c\u0632 \u0627\u0644\u0645\u062e\u0632\u0648\u0646', 'expenses', '\u062e\u0633\u0627\u0631\u0629 \u0639\u062c\u0632 \u0645\u0646 \u0627\u0644\u0645\u062a\u0648\u0633\u0637 \u0627\u0644\u0645\u0631\u062c\u062d');
-const virtualSettlementGain = virtualAccount('system:income:gold-settlement-gain', '\u0645\u0643\u0627\u0633\u0628 \u062a\u0633\u0648\u064a\u0629 \u0627\u0644\u062a\u0632\u0627\u0645\u0627\u062a \u0627\u0644\u0630\u0647\u0628', 'revenue', '\u0641\u0631\u0642 Merchant Liability WAC \u0639\u0646 Inventory WAC');
-const virtualSettlementLoss = virtualAccount('system:income:gold-settlement-loss', '\u062e\u0633\u0627\u0626\u0631 \u062a\u0633\u0648\u064a\u0629 \u0627\u0644\u062a\u0632\u0627\u0645\u0627\u062a \u0627\u0644\u0630\u0647\u0628', 'expenses', '\u0641\u0631\u0642 Merchant Liability WAC \u0639\u0646 Inventory WAC');
+const virtualSettlementGainFor = (metal: 'gold' | 'silver' | null): LegacyLedgerAccountMetadata => metal === 'silver'
+  ? virtualAccount('system:income:silver-settlement-gain', '\u0645\u0643\u0627\u0633\u0628 \u062a\u0633\u0648\u064a\u0629 \u0627\u0644\u062a\u0632\u0627\u0645\u0627\u062a \u0627\u0644\u0641\u0636\u0629', 'revenue', '\u0641\u0631\u0642 Merchant Silver WAC \u0639\u0646 Inventory Silver WAC')
+  : virtualAccount('system:income:gold-settlement-gain', '\u0645\u0643\u0627\u0633\u0628 \u062a\u0633\u0648\u064a\u0629 \u0627\u0644\u062a\u0632\u0627\u0645\u0627\u062a \u0627\u0644\u0630\u0647\u0628', 'revenue', '\u0641\u0631\u0642 Merchant Gold WAC \u0639\u0646 Inventory Gold WAC');
+const virtualSettlementLossFor = (metal: 'gold' | 'silver' | null): LegacyLedgerAccountMetadata => metal === 'silver'
+  ? virtualAccount('system:income:silver-settlement-loss', '\u062e\u0633\u0627\u0626\u0631 \u062a\u0633\u0648\u064a\u0629 \u0627\u0644\u062a\u0632\u0627\u0645\u0627\u062a \u0627\u0644\u0641\u0636\u0629', 'expenses', '\u0641\u0631\u0642 Merchant Silver WAC \u0639\u0646 Inventory Silver WAC')
+  : virtualAccount('system:income:gold-settlement-loss', '\u062e\u0633\u0627\u0626\u0631 \u062a\u0633\u0648\u064a\u0629 \u0627\u0644\u062a\u0632\u0627\u0645\u0627\u062a \u0627\u0644\u0630\u0647\u0628', 'expenses', '\u0641\u0631\u0642 Merchant Gold WAC \u0639\u0646 Inventory Gold WAC');
 
 const isInventoryAccount = (account: Account | undefined): boolean =>
   !!account && (account.is_inventory === true || ['gold_product', 'gold_raw', 'gold_direct', 'silver', 'accessory'].includes(account.type ?? ''));
@@ -336,6 +340,8 @@ const appendCostLegs = (
         pushOne(entry, destination, counterpart, 'debit', result.incomingTotalCostMinor);
         const receipt = merchantLiability.movementsByOperationId[result.operationId || operationId(entry)];
         pushOne(entry, counterpart, destination, 'credit', receipt?.carryingValueMinor ?? 0, 'carrying_value');
+        pushOne(entry, virtualSettlementGainFor(receipt?.metal ?? null), counterpart, 'credit', receipt?.settlementGainMinor ?? 0, 'carrying_value');
+        pushOne(entry, virtualSettlementLossFor(receipt?.metal ?? null), destination, 'debit', receipt?.settlementLossMinor ?? 0, 'carrying_value');
       }
       return;
     }
@@ -360,10 +366,10 @@ const appendCostLegs = (
       const merchant = metadataFor(entry, 'debit', index);
       const settlement = merchantLiability.movementsByOperationId[result.operationId || operationId(entry)];
       if (!settlement || settlement.kind !== 'weight_settlement') return;
-      pushOne(entry, merchant, source, 'debit', settlement.merchantLiabilityReleasedValueMinor, 'carrying_value');
+      pushOne(entry, merchant, source, 'debit', settlement.merchantDebitValueMinor, 'carrying_value');
       pushOne(entry, source, merchant, 'credit', settlement.inventoryBookValueReleasedMinor, 'wac');
-      pushOne(entry, virtualSettlementGain, merchant, 'credit', settlement.settlementGainMinor, 'carrying_value');
-      pushOne(entry, virtualSettlementLoss, source, 'debit', settlement.settlementLossMinor, 'carrying_value');
+      pushOne(entry, virtualSettlementGainFor(settlement.metal), merchant, 'credit', settlement.settlementGainMinor, 'carrying_value');
+      pushOne(entry, virtualSettlementLossFor(settlement.metal), source, 'debit', settlement.settlementLossMinor, 'carrying_value');
     }
   });
 

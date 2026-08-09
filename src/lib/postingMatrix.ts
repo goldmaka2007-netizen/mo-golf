@@ -1,5 +1,5 @@
 import { AccountingOperationKind, AccountTrackingDimension, CanonicalAccountDefinition, Entry } from '../types';
-import { getEntryArabicWeight, parseCash, resolveMerchantGoldOperationSemantic, resolveOperationKind } from './engine';
+import { getEntryArabicWeight, parseCash, resolveMerchantMetalOperationSemantic, resolveOperationKind } from './engine';
 import { AccountRegistry } from './accountRegistry';
 
 export interface PostingPolicy {
@@ -89,7 +89,7 @@ export const buildCanonicalPosting = (entry: Entry, registry: AccountRegistry): 
   });
   const debit = debitResolution.status === 'resolved' ? debitResolution.account : undefined;
   const credit = creditResolution.status === 'resolved' ? creditResolution.account : undefined;
-  const merchantSemantic = resolveMerchantGoldOperationSemantic(entry, debit, credit);
+  const merchantSemantic = resolveMerchantMetalOperationSemantic(entry, debit, credit);
   ([['debit', debit], ['credit', credit]] as const).forEach(([side, account]) => {
     if (account && !account.allowedOperationKinds.includes(operationKind)) issues.push({ code: 'operation_not_allowed', side, message: `الحساب ${account.displayName} غير مسموح في عملية ${operationKind}` });
   });
@@ -115,9 +115,9 @@ export const buildCanonicalPosting = (entry: Entry, registry: AccountRegistry): 
     operationId: entry.id || String(entry.seq), operationKind,
     debitAccountId: debit?.id, creditAccountId: credit?.id,
     dimensions, values,
-    inventoryImpact: merchantSemantic === 'gold_liability_receipt' || merchantSemantic === 'gold_weight_settlement'
+    inventoryImpact: merchantSemantic.kind === 'receipt' || merchantSemantic.kind === 'weight_settlement'
       ? true
-      : merchantSemantic === 'cash_settlement' || merchantSemantic === 'merchant_transfer' || merchantSemantic === 'gold_liability_opening'
+      : merchantSemantic.kind === 'cash_settlement' || merchantSemantic.kind === 'merchant_transfer' || merchantSemantic.kind === 'opening'
         ? false
         : policy.affectsInventory && !![debit, credit].some(account => account?.isInventory),
     merchantImpact: policy.affectsMerchant && !![debit, credit].some(account => account?.isMerchant),

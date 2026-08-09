@@ -61,17 +61,30 @@ export interface MerchantLiabilityStatementRow {
   silverWeight: number;
   bookValue: number;
   cashPayable: number;
+  cashReceivable: number;
   averageEgpPerGram: number | null;
+  positionSide: 'payable' | 'receivable' | 'settled';
 }
 export interface ReconciliationWarning {
-  code: 'merchant_gold_zero_weight_book_value';
+  code: 'merchant_metal_zero_weight_book_value';
   accountId: string;
   accountName: string;
   goldBalance: number;
   bookValueBalance: number;
 }
 export interface EgpBalanceSheet {
-  assets: { cash: number; goldInventory: number; silverInventory: number; accessoriesInventory: number; receivables: number; total: number };
+  assets: {
+    cash: number;
+    goldInventory: number;
+    silverInventory: number;
+    accessoriesInventory: number;
+    receivables: number;
+    merchantMetalReceivables: number;
+    merchantGoldReceivables: number;
+    merchantSilverReceivables: number;
+    merchantReceivableDetails: MerchantLiabilityStatementRow[];
+    total: number;
+  };
   liabilities: {
     merchant: number;
     merchantGold: number;
@@ -364,15 +377,18 @@ export const buildFinancialStatementsEgp = (entries: Entry[], rawAccounts: Accou
   const silverBalances = balanceMap(projectedLegs, 'silver');
   const merchantLiabilityTimeline = buildMerchantGoldLiabilityTimeline(balanceEntries, accounts, timeline);
   const reconciliationWarnings: ReconciliationWarning[] = accounts.filter(account =>
-    account.type === 'merchant' && (account.metal === 'gold' || account.canonicalSubType === 'merchant_gold')).flatMap(account => {
+    account.type === 'merchant' && (account.metal === 'gold' || account.metal === 'silver'
+      || account.canonicalSubType === 'merchant_gold' || account.canonicalSubType === 'merchant_silver')).flatMap(account => {
     const entityId = account.id ? `merchant:${account.id}` : `legacy-name:${account.name}`;
-    const goldBalance = roundMoney(goldBalances.get(entityId)?.balance ?? 0);
+    const metalBalance = roundMoney(account.metal === 'silver'
+      ? silverBalances.get(entityId)?.balance ?? 0
+      : goldBalances.get(entityId)?.balance ?? 0);
     const bookValueBalance = roundMoney(bookBalances.get(entityId)?.balance ?? 0);
-    return Math.abs(goldBalance) <= 0.000001 && Math.abs(bookValueBalance) > 0.0001 ? [{
-      code: 'merchant_gold_zero_weight_book_value' as const,
+    return Math.abs(metalBalance) <= 0.000001 && Math.abs(bookValueBalance) > 0.0001 ? [{
+      code: 'merchant_metal_zero_weight_book_value' as const,
       accountId: account.id ?? entityId,
       accountName: account.name,
-      goldBalance,
+      goldBalance: account.metal === 'gold' ? metalBalance : 0,
       bookValueBalance,
     }] : [];
   });
@@ -380,36 +396,21 @@ export const buildFinancialStatementsEgp = (entries: Entry[], rawAccounts: Accou
 
 
   let cash = 0; let receivables = 0; let rawCapital = 0; let rawRetainedEarnings = 0; let otherLiabilities = 0;
-  const merchantRows = new Map<string, MerchantLiabilityStatementRow>();
+  const isMerchantMetalAccount = (account?: Account): boolean => !!account && account.type === 'merchant'
+    && (account.metal === 'gold' || account.metal === 'silver'
+      || account.canonicalSubType === 'merchant_gold' || account.canonicalSubType === 'merchant_silver');
   financialBalances.forEach(({ balance, leg }, entityId) => {
     const account = leg.account.sourceAccount;
     if (account?.is_inventory) return;
+    // Metal merchants are classified below from the signed economic
+    // projection, independently for metal carrying value and cash.
+    if (isMerchantMetalAccount(account)) return;
     if (leg.group === 'assets') {
       if (account?.type === 'cash') cash += balance; else receivables += balance;
       return;
     }
     if (leg.group === 'liabilities') {
-      if (account?.type === 'merchant' || account?.metal === 'gold' || account?.metal === 'silver' || account?.canonicalSubType === 'merchant_gold' || account?.canonicalSubType === 'merchant_silver') {
-        const metal = account.metal === 'silver' ? 'silver' : account.metal === 'gold' ? 'gold' : null;
-        const equivalent21Weight = -(goldBalances.get(entityId)?.balance ?? 0);
-        const silverWeight = -(silverBalances.get(entityId)?.balance ?? 0);
-        const bookValue = -(bookBalances.get(entityId)?.balance ?? 0);
-        const cashPayable = -(cashBalances.get(entityId)?.balance ?? 0);
-        const merchantGoldState = account.id ? merchantLiabilityTimeline.finalStates[account.id] : undefined;
-        merchantRows.set(entityId, {
-          id: entityId,
-          accountId: account.id ?? entityId,
-          label: leg.accountName,
-          metal,
-          equivalent21Weight,
-          silverWeight,
-          bookValue,
-          cashPayable,
-          averageEgpPerGram: metal === 'gold' && merchantGoldState
-            ? merchantGoldState.goldLiabilityWacMinorPerE21Unit
-            : deriveUnitPrice(bookValue, metal === 'silver' ? silverWeight : equivalent21Weight),
-        });
-      } else otherLiabilities += -balance;
+      otherLiabilities += -balance;
       return;
     }
     if (leg.group === 'equity') {
@@ -445,9 +446,58 @@ export const buildFinancialStatementsEgp = (entries: Entry[], rawAccounts: Accou
   const currentIncome = buildIncomeFromProjection(projectedLegs, accounts, timeline, currentStart, currentEnd);
   const priorIncome = currentStart ? buildIncomeFromProjection(projectedLegs, accounts, timeline, undefined, previousDate(currentStart)) : { netProfit: 0 };
   const capital = roundMoney(rawCapital); const retainedEarnings = roundMoney(rawRetainedEarnings + priorIncome.netProfit); const currentProfit = currentIncome.netProfit;
-  const assets = { cash: roundMoney(cash), goldInventory, silverInventory, accessoriesInventory, receivables: roundMoney(receivables), total: 0 };
+  const payableRows: MerchantLiabilityStatementRow[] = [];
+  const receivableRows: MerchantLiabilityStatementRow[] = [];
+  const seenMerchantIds = new Set<string>();
+  accounts.filter(isMerchantMetalAccount).forEach(account => {
+    const accountId = account.id ?? `legacy-name:${account.name}`;
+    if (seenMerchantIds.has(accountId)) return;
+    seenMerchantIds.add(accountId);
+    const entityId = account.id ? `merchant:${account.id}` : `legacy-name:${account.name}`;
+    const state = merchantLiabilityTimeline.finalStates[accountId];
+    const metal = state?.metal ?? (account.metal === 'silver' ? 'silver' : 'gold');
+    const cashBalance = cashBalances.get(entityId)?.balance ?? 0;
+    const base = {
+      id: entityId,
+      accountId,
+      label: account.name,
+      metal,
+      equivalent21Weight: metal === 'gold' ? Math.abs(state?.signedQuantity ?? 0) : 0,
+      silverWeight: metal === 'silver' ? Math.abs(state?.signedQuantity ?? 0) : 0,
+      averageEgpPerGram: state?.currentWacMinorPerUnit ?? null,
+    };
+    const cashPayable = Math.max(0, -cashBalance);
+    const cashReceivable = Math.max(0, cashBalance);
+    if ((state?.payableBookValueMinor ?? 0) > 0 || cashPayable > 0) payableRows.push({
+      ...base,
+      bookValue: (state?.payableBookValueMinor ?? 0) / 100,
+      cashPayable,
+      cashReceivable: 0,
+      positionSide: state?.positionSide ?? 'settled',
+    });
+    if ((state?.receivableBookValueMinor ?? 0) > 0 || cashReceivable > 0) receivableRows.push({
+      ...base,
+      bookValue: (state?.receivableBookValueMinor ?? 0) / 100,
+      cashPayable: 0,
+      cashReceivable,
+      positionSide: state?.positionSide ?? 'settled',
+    });
+  });
+  payableRows.sort((a, b) => a.label.localeCompare(b.label, 'ar'));
+  receivableRows.sort((a, b) => a.label.localeCompare(b.label, 'ar'));
+  const merchantGoldReceivables = roundMoney(receivableRows.filter(row => row.metal === 'gold').reduce((sum, row) => sum + row.bookValue, 0));
+  const merchantSilverReceivables = roundMoney(receivableRows.filter(row => row.metal === 'silver').reduce((sum, row) => sum + row.bookValue, 0));
+  const merchantCashReceivables = roundMoney(receivableRows.reduce((sum, row) => sum + row.cashReceivable, 0));
+  const merchantMetalReceivables = roundMoney(merchantGoldReceivables + merchantSilverReceivables);
+  receivables = roundMoney(receivables + merchantMetalReceivables + merchantCashReceivables);
+  const assets = {
+    cash: roundMoney(cash), goldInventory, silverInventory, accessoriesInventory,
+    receivables: roundMoney(receivables), merchantMetalReceivables,
+    merchantGoldReceivables, merchantSilverReceivables,
+    merchantReceivableDetails: receivableRows, total: 0,
+  };
   assets.total = roundMoney(assets.cash + goldInventory + silverInventory + accessoriesInventory + assets.receivables);
-  const details = [...merchantRows.values()].sort((a, b) => a.label.localeCompare(b.label, 'ar'));
+  const details = payableRows;
   const merchantGold = roundMoney(details.filter(row => row.metal === 'gold').reduce((sum, row) => sum + row.bookValue, 0));
   const merchantSilver = roundMoney(details.filter(row => row.metal === 'silver').reduce((sum, row) => sum + row.bookValue, 0));
   const merchantCash = roundMoney(details.reduce((sum, row) => sum + row.cashPayable, 0));

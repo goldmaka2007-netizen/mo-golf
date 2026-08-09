@@ -168,6 +168,8 @@ const entryCostFingerprint = (
     arabicWeight: entry.arabicWeight,
     karat: entry.karat,
     multiplier: entry.multiplier,
+    marketPrice: entry.marketPrice,
+    invoiceOfficialPricePerGramEgp: entry.invoiceOfficialPricePerGramEgp,
     goldEquivalent21Snapshot: entry.goldEquivalent21Snapshot,
     count: inventoryKind === 'accessory' ? entry.count : undefined,
   };

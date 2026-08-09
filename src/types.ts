@@ -64,6 +64,12 @@ export interface Entry {
   clientName?: string;
   clientPhone?: string;
   marketPrice?: number;
+  /**
+   * Immutable official metal price per gram in EGP. For gold this is always
+   * the Gold-21 basis applied to E21; for silver it is the Silver-999 basis
+   * applied to physical grams. Historical backfill writes only this field.
+   */
+  invoiceOfficialPricePerGramEgp?: number;
   goldEquivalent21Snapshot?: GoldEquivalent21Snapshot;
   goldEquivalent21LegacyComparison?: GoldEquivalent21LegacyComparison;
   userId: string;

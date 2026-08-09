@@ -30,7 +30,7 @@ import {
   type SupportedGoldKarat,
 } from './goldEquivalent';
 import { isOpeningEntry } from './openingEntry';
-import { resolveMerchantGoldOperationSemantic } from './engine';
+import { resolveMerchantMetalOperationSemantic } from './engine';
 
 const MAX_SAFE_BIGINT = BigInt(Number.MAX_SAFE_INTEGER);
 const ACCESSORY_SCALE = 1000;
@@ -607,10 +607,10 @@ const classify = (
   debitAccount?: Account,
   creditAccount?: Account,
 ): InventoryCostOperationClassification => {
-  const merchantSemantic = resolveMerchantGoldOperationSemantic(entry, debitAccount, creditAccount);
-  if (merchantSemantic === 'gold_liability_receipt') return 'merchant_receipt';
-  if (merchantSemantic === 'gold_weight_settlement') return 'merchant_delivery';
-  if (merchantSemantic === 'cash_settlement' || merchantSemantic === 'merchant_transfer' || merchantSemantic === 'gold_liability_opening') return 'non_cost';
+  const merchantSemantic = resolveMerchantMetalOperationSemantic(entry, debitAccount, creditAccount);
+  if (merchantSemantic.kind === 'receipt') return 'merchant_receipt';
+  if (merchantSemantic.kind === 'weight_settlement') return 'merchant_delivery';
+  if (merchantSemantic.kind === 'cash_settlement' || merchantSemantic.kind === 'merchant_transfer' || merchantSemantic.kind === 'opening') return 'non_cost';
   if (entry.tx === 'تاجر ذهب' || entry.tx === 'تاجر فضة') return 'merchant_receipt';
   if (entry.tx === 'حساب تاجر ذهب' || entry.tx === 'حساب تاجر فضة') {
     return creditInventory ? 'merchant_delivery' : 'non_cost';
@@ -1108,7 +1108,12 @@ export const rebuildInventoryCostTimeline = (
           // invoice gold price. Making charges remain a separate cost
           // component. Existing inventory WAC must never replace invoice
           // consideration; WAC is recalculated only after this receipt.
-          if (Number.isFinite(entry.marketPrice) && Number(entry.marketPrice) > 0) {
+          if (Number.isFinite(entry.invoiceOfficialPricePerGramEgp) && Number(entry.invoiceOfficialPricePerGramEgp) > 0) {
+            // Normalized immutable snapshots: Gold-21 applies to E21 and
+            // Silver-999 applies to physical silver grams.
+            metalCost = Math.round(Number(entry.invoiceOfficialPricePerGramEgp) * quantity.standardizedUnits);
+            if (!Number.isSafeInteger(metalCost)) fail('invalid_amount', 'Merchant official metal principal overflow', entry, state.inventoryAccountId);
+          } else if (Number.isFinite(entry.marketPrice) && Number(entry.marketPrice) > 0) {
             metalCost = Math.round(Number(entry.marketPrice) * quantity.physicalUnits);
             if (!Number.isSafeInteger(metalCost)) fail('invalid_amount', 'Merchant metal principal overflow', entry, state.inventoryAccountId);
           } else if (state.standardizedQuantityUnits > 0 && state.remainingMetalCostMinor > 0) {

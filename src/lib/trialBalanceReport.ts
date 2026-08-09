@@ -34,7 +34,11 @@ const split = (signedDebitBalance: number): [number, number] => {
   const resolved = splitBalanceByDirection({ signedBalance: signedDebitBalance, normalBalance: 'debit' });
   return [resolved.debit, resolved.credit];
 };
-const groupFor = (balance: AccountBalanceResult): TrialBalanceGroupId => balance.mainType === 'expense' ? 'expenses' : balance.mainType;
+const groupFor = (balance: AccountBalanceResult): TrialBalanceGroupId => {
+  if (balance.isMerchant && balance.actualMerchantDirection === 'receivable') return 'assets';
+  if (balance.isMerchant && balance.actualMerchantDirection === 'payable') return 'liabilities';
+  return balance.mainType === 'expense' ? 'expenses' : balance.mainType;
+};
 const entityIdFor = (balance: AccountBalanceResult): string => balance.isMerchant ? `merchant:${balance.accountId}` : balance.subType.startsWith('inventory_') ? `product:${balance.accountId}` : `account:${balance.accountId}`;
 const rawBalanceFor = (balance: AccountBalanceResult, dimension: LedgerDimension): number => {
   const value = dimension === 'cash' ? balance.cashBalance

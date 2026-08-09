@@ -42,7 +42,7 @@ export const isMerchantWeightAccount = (account?: Account | null): boolean => {
   return getMerchantMetadataMetal(account) !== undefined;
 };
 
-type MerchantMetal = 'gold' | 'silver';
+export type MerchantMetal = 'gold' | 'silver';
 type AccountWithLegacyMetal = Account & Record<string, unknown>;
 
 export const getMerchantMetadataMetal = (account?: Account | null): MerchantMetal | undefined => {
@@ -177,6 +177,12 @@ export type MerchantGoldOperationSemantic =
   | 'merchant_transfer'
   | 'none';
 
+export type MerchantMetalOperationKind = 'opening' | 'receipt' | 'weight_settlement' | 'cash_settlement' | 'merchant_transfer' | 'none';
+export interface MerchantMetalOperationSemantic {
+  kind: MerchantMetalOperationKind;
+  metal: MerchantMetal | null;
+}
+
 export interface OperationAccountSemanticEvidence {
   type?: string | null;
   metal?: string | null;
@@ -187,45 +193,76 @@ export interface OperationAccountSemanticEvidence {
   isMerchant?: boolean;
 }
 
-const isSemanticGoldMerchant = (account?: OperationAccountSemanticEvidence): boolean =>
+const semanticMetal = (account?: OperationAccountSemanticEvidence): MerchantMetal | null => {
+  if (account?.metal === 'gold' || account?.canonicalSubType === 'merchant_gold') return 'gold';
+  if (account?.metal === 'silver' || account?.canonicalSubType === 'merchant_silver') return 'silver';
+  return null;
+};
+
+const isSemanticMerchant = (account?: OperationAccountSemanticEvidence, metal?: MerchantMetal): boolean =>
   !!account
   && (account.type === 'merchant' || account.isMerchant === true || account.entityType === 'merchant')
-  && (account.metal === 'gold' || account.canonicalSubType === 'merchant_gold');
+  && !!semanticMetal(account)
+  && (!metal || semanticMetal(account) === metal);
 
-const isSemanticGoldInventory = (account?: OperationAccountSemanticEvidence): boolean =>
+const isSemanticInventory = (account: OperationAccountSemanticEvidence | undefined, metal: MerchantMetal): boolean =>
   !!account
   && (account.is_inventory === true || account.isInventory === true)
-  && account.metal !== 'silver';
+  && (metal === 'silver' ? account.metal === 'silver' : account.metal !== 'silver');
 
 const isSemanticCash = (account?: OperationAccountSemanticEvidence): boolean =>
   !!account && (account.type === 'cash' || account.canonicalSubType === 'cash' || account.entityType === 'cash');
 
-/** Central economic split for merchant gold operations. Account metadata supplied
+/** Central economic split for signed merchant-metal operations. Account metadata supplied
  * by the caller is authoritative; legacy labels are used only when metadata is
  * unavailable and the stored amounts make the variant unambiguous. */
+export const resolveMerchantMetalOperationSemantic = (
+  entry: Entry,
+  debit?: OperationAccountSemanticEvidence,
+  credit?: OperationAccountSemanticEvidence,
+): MerchantMetalOperationSemantic => {
+  const cash = Math.abs(parseCash(entry));
+  const debitMetal = semanticMetal(debit);
+  const creditMetal = semanticMetal(credit);
+  const metal = debitMetal ?? creditMetal;
+  const quantity = metal === 'silver'
+    ? Math.abs(parseWeight(entry.weight))
+    : Math.abs(getEntryArabicWeight(entry));
+  const debitMerchant = isSemanticMerchant(debit, metal ?? undefined);
+  const creditMerchant = isSemanticMerchant(credit, metal ?? undefined);
+
+  if (metal && isOpeningEntry(entry) && creditMerchant && quantity > 0) return { kind: 'opening', metal };
+  if (metal && isOpeningEntry(entry) && debitMerchant && quantity > 0) return { kind: 'opening', metal };
+  if (metal && isSemanticInventory(debit, metal) && creditMerchant && quantity > 0) return { kind: 'receipt', metal };
+  if (metal && debitMerchant && isSemanticInventory(credit, metal) && quantity > 0) return { kind: 'weight_settlement', metal };
+  if (metal && debitMerchant && creditMerchant && debitMetal === creditMetal && quantity > 0 && cash === 0) return { kind: 'merchant_transfer', metal };
+  if (((isSemanticMerchant(debit) && isSemanticCash(credit)) || (isSemanticMerchant(credit) && isSemanticCash(debit)))
+    && cash > 0 && quantity === 0) return { kind: 'cash_settlement', metal };
+
+  const legacyMerchantSettlement = ['\u062d\u0633\u0627\u0628 \u062a\u0627\u062c\u0631 \u0630\u0647\u0628', '\u062d\u0633\u0627\u0628 \u062a\u0627\u062c\u0631 \u0641\u0636\u0629'].includes(entry.tx)
+    || entry.operationKind === 'merchant_settlement';
+  if (!debit && !credit && legacyMerchantSettlement) {
+    const legacyMetal: MerchantMetal = entry.tx.includes('\u0641\u0636\u0629') ? 'silver' : 'gold';
+    const legacyQuantity = legacyMetal === 'silver' ? Math.abs(parseWeight(entry.weight)) : Math.abs(getEntryArabicWeight(entry));
+    if (legacyQuantity > 0 && cash === 0) return { kind: 'weight_settlement', metal: legacyMetal };
+    if (cash > 0 && legacyQuantity === 0) return { kind: 'cash_settlement', metal: legacyMetal };
+  }
+  return { kind: 'none', metal };
+};
+
+/** @deprecated Compatibility adapter for existing gold-only consumers. */
 export const resolveMerchantGoldOperationSemantic = (
   entry: Entry,
   debit?: OperationAccountSemanticEvidence,
   credit?: OperationAccountSemanticEvidence,
 ): MerchantGoldOperationSemantic => {
-  const quantity = Math.abs(getEntryArabicWeight(entry));
-  const cash = Math.abs(parseCash(entry));
-  const debitMerchant = isSemanticGoldMerchant(debit);
-  const creditMerchant = isSemanticGoldMerchant(credit);
-
-  if (isOpeningEntry(entry) && creditMerchant && quantity > 0) return 'gold_liability_opening';
-  if (isSemanticGoldInventory(debit) && creditMerchant && quantity > 0) return 'gold_liability_receipt';
-  if (debitMerchant && isSemanticGoldInventory(credit) && quantity > 0) return 'gold_weight_settlement';
-  if (debitMerchant && creditMerchant && quantity > 0 && cash === 0) return 'merchant_transfer';
-  if (((debitMerchant && isSemanticCash(credit)) || (creditMerchant && isSemanticCash(debit)))
-    && cash > 0 && quantity === 0) return 'cash_settlement';
-
-  const legacyMerchantSettlement = ['\u062d\u0633\u0627\u0628 \u062a\u0627\u062c\u0631 \u0630\u0647\u0628'].includes(entry.tx)
-    || entry.operationKind === 'merchant_settlement';
-  if (!debit && !credit && legacyMerchantSettlement) {
-    if (quantity > 0 && cash === 0) return 'gold_weight_settlement';
-    if (cash > 0 && quantity === 0) return 'cash_settlement';
-  }
+  const semantic = resolveMerchantMetalOperationSemantic(entry, debit, credit);
+  if (semantic.metal !== 'gold') return semantic.kind === 'cash_settlement' ? 'cash_settlement' : 'none';
+  if (semantic.kind === 'opening') return 'gold_liability_opening';
+  if (semantic.kind === 'receipt') return 'gold_liability_receipt';
+  if (semantic.kind === 'weight_settlement') return 'gold_weight_settlement';
+  if (semantic.kind === 'merchant_transfer') return 'merchant_transfer';
+  if (semantic.kind === 'cash_settlement') return 'cash_settlement';
   return 'none';
 };
 
@@ -233,9 +270,9 @@ export const affectsInventory = (entry: Entry, accounts: Account[] = []): boolea
   const index = accounts.length > 0 ? buildAccountIndex(accounts) : undefined;
   const debit = index ? resolveAccount(entry, 'debit', index) : undefined;
   const credit = index ? resolveAccount(entry, 'credit', index) : undefined;
-  const semantic = resolveMerchantGoldOperationSemantic(entry, debit, credit);
-  if (semantic === 'gold_liability_receipt' || semantic === 'gold_weight_settlement') return true;
-  if (semantic === 'cash_settlement' || semantic === 'merchant_transfer' || semantic === 'gold_liability_opening') return false;
+  const semantic = resolveMerchantMetalOperationSemantic(entry, debit, credit);
+  if (semantic.kind === 'receipt' || semantic.kind === 'weight_settlement') return true;
+  if (semantic.kind === 'cash_settlement' || semantic.kind === 'merchant_transfer' || semantic.kind === 'opening') return false;
   const kind = resolveOperationKind(entry);
   return ['opening', 'purchase', 'sale', 'transfer', 'tifeet', 'adjustment', 'merchant_settlement'].includes(kind);
 };

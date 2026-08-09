@@ -1,7 +1,8 @@
 # ADR-006 — Merchant Gold Liability Carrying-Value WAC
 
-**Status:** Active
+**Status:** Superseded
 **Date:** 2026-08-09
+**Superseded by:** ADR-007
 
 ## Problem
 

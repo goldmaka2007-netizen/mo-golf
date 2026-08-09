@@ -66,6 +66,6 @@ Simple technical metadata may be updated with a task. Accounting or architectura
 
 Every delivery reports root cause, changed files, verification, data/Firebase impact, remaining risks, deployment status, and one of: Completed, Partially Completed, or Blocked.
 
-## D-017 — Merchant gold liabilities use a separate carrying-value WAC
+## D-017 — Merchant metal positions are signed and use separate carrying-value pools
 
-Gold merchant E21 weight, gold-liability Book Value, and cash/workmanship are separate dimensions. New gold liabilities use the approved operation-date price source; merchant transfers carry source Merchant Liability WAC without revaluation; physical settlement releases Merchant Liability WAC and Inventory WAC independently, with the difference recognized only as gold-liability settlement gain or loss.
+Each merchant gold position is signed in E21 and each merchant silver position is signed in physical grams. Positive positions are payables; negative positions are merchant-metal receivables. Gold, silver, inventory, and merchant cash/workmanship remain independent dimensions and WAC pools. New positions use the approved immutable operation basis; opening entries use Settings opening cost. Merchant transfers preserve carrying value without inventory or P&L. Physical settlements release merchant carrying value and Inventory WAC independently, recognizing only the legitimate metal-settlement gain or loss. See ADR-007.

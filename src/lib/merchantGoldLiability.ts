@@ -1,5 +1,9 @@
 import type { Account, Entry } from '../types';
-import { getEntryArabicWeight, resolveMerchantGoldOperationSemantic } from './engine';
+import {
+  getEntryArabicWeight,
+  resolveMerchantMetalOperationSemantic,
+  type MerchantMetal,
+} from './engine';
 import { compareEntriesForPhase5Cost, getPhase5OperationId } from './inventoryCostEngine';
 import type { InventoryCostTimeline, OperationCostResultV2 } from './inventoryCostTypes';
 
@@ -10,25 +14,50 @@ export type MerchantGoldLiabilityMovementKind =
   | 'cash_settlement'
   | 'merchant_transfer';
 
+export type MerchantMetalPositionSide = 'payable' | 'receivable' | 'settled';
+
 export interface MerchantGoldLiabilityState {
   merchantAccountId: string;
   merchantName: string;
+  metal: MerchantMetal;
+  signedQuantityUnits: number;
+  signedQuantity: number;
+  positionSide: MerchantMetalPositionSide;
+  signedCarryingValueMinor: number;
+  payableBookValueMinor: number;
+  receivableBookValueMinor: number;
+  currentWacMinorPerUnit: number | null;
   goldE21BalanceUnits: number;
   goldE21Balance: number;
   goldLiabilityBookValueMinor: number;
+  goldReceivableBookValueMinor: number;
   goldLiabilityWacMinorPerE21Unit: number | null;
+  goldReceivableWacMinorPerE21Unit: number | null;
+  silverBalanceUnits: number;
+  silverBalance: number;
+  silverLiabilityBookValueMinor: number;
+  silverReceivableBookValueMinor: number;
+  silverLiabilityWacMinorPerUnit: number | null;
+  silverReceivableWacMinorPerUnit: number | null;
 }
 
 export interface MerchantGoldLiabilityMovement {
   operationId: string;
   entry: Entry;
   kind: MerchantGoldLiabilityMovementKind;
+  metal: MerchantMetal | null;
   sourceMerchantAccountId?: string;
   destinationMerchantAccountId?: string;
   quantityUnits: number;
   carryingValueMinor: number;
+  merchantDebitValueMinor: number;
+  merchantCreditValueMinor: number;
   merchantLiabilityReleasedValueMinor: number;
+  merchantReceivableReleasedValueMinor: number;
+  merchantPayableCreatedValueMinor: number;
+  merchantReceivableCreatedValueMinor: number;
   inventoryBookValueReleasedMinor: number;
+  inventoryBookValueRecognizedMinor: number;
   settlementGainMinor: number;
   settlementLossMinor: number;
   valuationSource?: 'opening_cost_compatibility' | 'operation_price_snapshot' | 'historical_cost_compatibility' | 'source_merchant_wac';
@@ -39,17 +68,19 @@ export interface MerchantGoldLiabilityDiagnostic {
     | 'ambiguous_account_reference'
     | 'missing_approved_historical_price'
     | 'missing_opening_price'
-    | 'insufficient_merchant_liability'
+    | 'missing_transfer_carrying_basis'
     | 'inventory_cost_result_missing'
+    | 'transfer_carrying_value_sign_mismatch'
     | 'zero_weight_book_value_residue';
   severity: 'warning' | 'error';
   operationId?: string;
   merchantAccountId?: string;
+  metal?: MerchantMetal;
   message: string;
 }
 
 export interface MerchantGoldLiabilityTimeline {
-  calculationVersion: 'merchant-gold-liability-wac-v1';
+  calculationVersion: 'merchant-metal-signed-wac-v2';
   movements: MerchantGoldLiabilityMovement[];
   movementsByOperationId: Record<string, MerchantGoldLiabilityMovement>;
   finalStates: Record<string, MerchantGoldLiabilityState>;
@@ -59,29 +90,62 @@ export interface MerchantGoldLiabilityTimeline {
 interface MutableMerchantState {
   merchantAccountId: string;
   merchantName: string;
-  goldE21BalanceUnits: number;
-  goldLiabilityBookValueMinor: number;
+  metal: MerchantMetal;
+  signedQuantityUnits: number;
+  signedCarryingValueMinor: number;
 }
 
 const GRAM_SCALE = 100;
 const normalize = (value: unknown): string => String(value ?? '').normalize('NFKC').trim().replace(/\s+/g, ' ');
-const isGoldMerchant = (account?: Account): boolean => !!account
-  && account.type === 'merchant'
-  && (account.metal === 'gold' || account.canonicalSubType === 'merchant_gold');
-
 const roundDivide = (numerator: bigint, denominator: bigint): bigint =>
-  (numerator + denominator / 2n) / denominator;
+  numerator >= 0n
+    ? (numerator + denominator / 2n) / denominator
+    : -((-numerator + denominator / 2n) / denominator);
+const proportionalValue = (totalMinor: number, totalUnits: number, requestedUnits: number): number => {
+  if (totalMinor <= 0 || totalUnits <= 0 || requestedUnits <= 0) return 0;
+  if (requestedUnits === totalUnits) return totalMinor;
+  return Number(roundDivide(BigInt(totalMinor) * BigInt(requestedUnits), BigInt(totalUnits)));
+};
+const positionSide = (units: number): MerchantMetalPositionSide => units > 0 ? 'payable' : units < 0 ? 'receivable' : 'settled';
+const currentWac = (state: MutableMerchantState): number | null =>
+  state.signedQuantityUnits === 0 ? null : Math.abs(state.signedCarryingValueMinor) / Math.abs(state.signedQuantityUnits);
 
-const safeRatio = (totalMinor: number, units: number): number | null =>
-  units > 0 ? totalMinor / units : null;
+const stateSnapshot = (state: MutableMerchantState): MerchantGoldLiabilityState => {
+  const side = positionSide(state.signedQuantityUnits);
+  const carrying = Math.abs(state.signedCarryingValueMinor);
+  const wac = currentWac(state);
+  const gold = state.metal === 'gold';
+  const silver = state.metal === 'silver';
+  return {
+    ...state,
+    signedQuantity: state.signedQuantityUnits / GRAM_SCALE,
+    positionSide: side,
+    payableBookValueMinor: side === 'payable' ? carrying : 0,
+    receivableBookValueMinor: side === 'receivable' ? carrying : 0,
+    currentWacMinorPerUnit: wac,
+    goldE21BalanceUnits: gold ? state.signedQuantityUnits : 0,
+    goldE21Balance: gold ? state.signedQuantityUnits / GRAM_SCALE : 0,
+    goldLiabilityBookValueMinor: gold && side === 'payable' ? carrying : 0,
+    goldReceivableBookValueMinor: gold && side === 'receivable' ? carrying : 0,
+    goldLiabilityWacMinorPerE21Unit: gold && side === 'payable' ? wac : null,
+    goldReceivableWacMinorPerE21Unit: gold && side === 'receivable' ? wac : null,
+    silverBalanceUnits: silver ? state.signedQuantityUnits : 0,
+    silverBalance: silver ? state.signedQuantityUnits / GRAM_SCALE : 0,
+    silverLiabilityBookValueMinor: silver && side === 'payable' ? carrying : 0,
+    silverReceivableBookValueMinor: silver && side === 'receivable' ? carrying : 0,
+    silverLiabilityWacMinorPerUnit: silver && side === 'payable' ? wac : null,
+    silverReceivableWacMinorPerUnit: silver && side === 'receivable' ? wac : null,
+  };
+};
 
-const stateSnapshot = (state: MutableMerchantState): MerchantGoldLiabilityState => ({
-  ...state,
-  goldE21Balance: state.goldE21BalanceUnits / GRAM_SCALE,
-  goldLiabilityWacMinorPerE21Unit: safeRatio(state.goldLiabilityBookValueMinor, state.goldE21BalanceUnits),
-});
+const isMerchantFor = (account: Account | undefined, metal: MerchantMetal): boolean => !!account
+  && account.type === 'merchant'
+  && (account.metal === metal || account.canonicalSubType === `merchant_${metal}`);
 
-const quantityUnits = (entry: Entry): number => Math.round(Math.abs(getEntryArabicWeight(entry)) * GRAM_SCALE);
+const quantityUnits = (entry: Entry, metal: MerchantMetal, account?: Account): number =>
+  metal === 'silver'
+    ? Math.round(Math.abs(Number(entry.weight) || 0) * GRAM_SCALE)
+    : Math.round(Math.abs(getEntryArabicWeight(entry, account)) * GRAM_SCALE);
 
 const accountIndexes = (accounts: Account[]) => {
   const byId = new Map(accounts.flatMap(account => account.id ? [[account.id, account] as const] : []));
@@ -96,42 +160,58 @@ const accountIndexes = (accounts: Account[]) => {
 const openingPriceCompatibility = (
   timeline: InventoryCostTimeline | null | undefined,
 ): Map<string, { costMinor: number; quantityUnits: number }> => {
-  const byYear = new Map<string, { costMinor: number; quantityUnits: number }>();
-  if (!timeline?.valid) return byYear;
+  const byYearAndMetal = new Map<string, { costMinor: number; quantityUnits: number }>();
+  if (!timeline?.valid) return byYearAndMetal;
   timeline.results.filter(result => result.classification === 'opening').forEach(result => {
     const inventoryId = result.destinationInventoryAccountId || result.inventoryAccountId;
-    if (!inventoryId || timeline.finalStates[inventoryId]?.kind !== 'gold') return;
+    const metal = inventoryId ? timeline.finalStates[inventoryId]?.kind : undefined;
+    if (metal !== 'gold' && metal !== 'silver') return;
     if (result.incomingStandardizedQuantityUnits <= 0 || result.incomingMetalCostMinor <= 0) return;
-    const year = result.entry.date.slice(0, 4);
-    const current = byYear.get(year) ?? { costMinor: 0, quantityUnits: 0 };
+    const key = `${result.entry.date.slice(0, 4)}:${metal}`;
+    const current = byYearAndMetal.get(key) ?? { costMinor: 0, quantityUnits: 0 };
     current.costMinor += result.incomingMetalCostMinor;
     current.quantityUnits += result.incomingStandardizedQuantityUnits;
-    byYear.set(year, current);
+    byYearAndMetal.set(key, current);
   });
-  return byYear;
+  return byYearAndMetal;
+};
+
+const snapshotValue = (
+  entry: Entry,
+  metal: MerchantMetal,
+  requestedUnits: number,
+  totalUnits: number,
+): { valueMinor: number; source?: MerchantGoldLiabilityMovement['valuationSource'] } => {
+  const official = Number(entry.invoiceOfficialPricePerGramEgp);
+  if (Number.isFinite(official) && official > 0 && requestedUnits > 0) {
+    return { valueMinor: Math.round(official * requestedUnits), source: 'operation_price_snapshot' };
+  }
+  const saved = Number(entry.marketPrice);
+  const physicalUnits = Math.round(Math.abs(Number(entry.weight) || 0) * GRAM_SCALE);
+  if (Number.isFinite(saved) && saved > 0 && physicalUnits > 0 && totalUnits > 0) {
+    const fullValue = Math.round(saved * physicalUnits);
+    return { valueMinor: proportionalValue(fullValue, totalUnits, requestedUnits), source: 'operation_price_snapshot' };
+  }
+  return { valueMinor: 0 };
 };
 
 const receiptCost = (
   entry: Entry,
   result: OperationCostResultV2 | undefined,
+  metal: MerchantMetal,
+  units: number,
 ): { valueMinor: number; source?: MerchantGoldLiabilityMovement['valuationSource'] } => {
+  const direct = snapshotValue(entry, metal, units, units);
+  if (direct.source) return direct;
   if (result?.classification === 'merchant_receipt' && result.incomingMetalCostMinor > 0) {
-    return {
-      valueMinor: result.incomingMetalCostMinor,
-      source: Number(entry.marketPrice) > 0 ? 'operation_price_snapshot' : 'historical_cost_compatibility',
-    };
-  }
-  const price = Number(entry.marketPrice);
-  const physicalUnits = Math.round(Math.abs(Number(entry.weight) || 0) * GRAM_SCALE);
-  if (Number.isFinite(price) && price > 0 && physicalUnits > 0) {
-    return { valueMinor: Math.round(price * physicalUnits), source: 'operation_price_snapshot' };
+    return { valueMinor: result.incomingMetalCostMinor, source: 'historical_cost_compatibility' };
   }
   return { valueMinor: 0 };
 };
 
-/** Pure in-memory carrying-value timeline. Inventory and merchant liability are
- * deliberately separate WAC pools; Firestore rows are never mutated. */
-export const buildMerchantGoldLiabilityTimeline = (
+/** Pure in-memory signed carrying-value timeline. Gold, silver, inventory,
+ * merchant cash, payable pools, and receivable pools remain independent. */
+export const buildMerchantMetalPositionTimeline = (
   entries: Entry[],
   accounts: Account[],
   inventoryTimeline: InventoryCostTimeline | null | undefined,
@@ -156,147 +236,236 @@ export const buildMerchantGoldLiabilityTimeline = (
     return undefined;
   };
 
-  const ensureState = (account: Account): MutableMerchantState => {
+  const ensureState = (account: Account, metal: MerchantMetal): MutableMerchantState => {
     const accountId = account.id || `legacy-name:${normalize(account.name)}`;
     const existing = states.get(accountId);
     if (existing) return existing;
-    const state = { merchantAccountId: accountId, merchantName: account.name, goldE21BalanceUnits: 0, goldLiabilityBookValueMinor: 0 };
+    const state: MutableMerchantState = {
+      merchantAccountId: accountId,
+      merchantName: account.name,
+      metal,
+      signedQuantityUnits: 0,
+      signedCarryingValueMinor: 0,
+    };
     states.set(accountId, state);
     return state;
   };
 
-  const addLiability = (state: MutableMerchantState, units: number, valueMinor: number): void => {
-    state.goldE21BalanceUnits += units;
-    state.goldLiabilityBookValueMinor += valueMinor;
+  const assertState = (state: MutableMerchantState, entry: Entry): void => {
+    if (state.signedQuantityUnits === 0 && state.signedCarryingValueMinor !== 0) diagnostics.push({
+      code: 'zero_weight_book_value_residue', severity: 'error', operationId: getPhase5OperationId(entry),
+      merchantAccountId: state.merchantAccountId, metal: state.metal,
+      message: `Zero merchant ${state.metal} balance retained ${state.signedCarryingValueMinor} signed minor units.`,
+    });
+    if (state.signedQuantityUnits !== 0 && state.signedCarryingValueMinor !== 0
+      && Math.sign(state.signedQuantityUnits) !== Math.sign(state.signedCarryingValueMinor)) diagnostics.push({
+      code: 'transfer_carrying_value_sign_mismatch', severity: 'error', operationId: getPhase5OperationId(entry),
+      merchantAccountId: state.merchantAccountId, metal: state.metal,
+      message: `Merchant ${state.metal} transfer produced a carrying-value sign inconsistent with its signed weight.`,
+    });
   };
 
-  const releaseLiability = (state: MutableMerchantState, requestedUnits: number, entry: Entry): { units: number; valueMinor: number } => {
-    const units = Math.min(requestedUnits, state.goldE21BalanceUnits);
-    if (units < requestedUnits) diagnostics.push({
-      code: 'insufficient_merchant_liability', severity: 'error', operationId: getPhase5OperationId(entry),
-      merchantAccountId: state.merchantAccountId,
-      message: `Merchant gold settlement/transfer exceeds available E21 liability for ${state.merchantName}.`,
-    });
-    if (units <= 0) return { units: 0, valueMinor: 0 };
-    const valueMinor = units === state.goldE21BalanceUnits
-      ? state.goldLiabilityBookValueMinor
-      : Number(roundDivide(
-        BigInt(state.goldLiabilityBookValueMinor) * BigInt(units),
-        BigInt(state.goldE21BalanceUnits),
-      ));
-    state.goldE21BalanceUnits -= units;
-    state.goldLiabilityBookValueMinor -= valueMinor;
-    if (state.goldE21BalanceUnits === 0 && state.goldLiabilityBookValueMinor !== 0) {
-      diagnostics.push({
-        code: 'zero_weight_book_value_residue', severity: 'error', operationId: getPhase5OperationId(entry),
-        merchantAccountId: state.merchantAccountId,
-        message: `Zero E21 merchant balance retained ${state.goldLiabilityBookValueMinor} minor units.`,
-      });
-    }
+  const releasePayable = (state: MutableMerchantState, requestedUnits: number): { units: number; valueMinor: number } => {
+    const units = Math.min(requestedUnits, Math.max(0, state.signedQuantityUnits));
+    const valueMinor = proportionalValue(Math.max(0, state.signedCarryingValueMinor), state.signedQuantityUnits, units);
+    state.signedQuantityUnits -= units;
+    state.signedCarryingValueMinor -= valueMinor;
+    if (state.signedQuantityUnits === 0) state.signedCarryingValueMinor = 0;
     return { units, valueMinor };
+  };
+  const releaseReceivable = (state: MutableMerchantState, requestedUnits: number): { units: number; valueMinor: number } => {
+    const available = Math.max(0, -state.signedQuantityUnits);
+    const units = Math.min(requestedUnits, available);
+    const valueMinor = proportionalValue(Math.max(0, -state.signedCarryingValueMinor), available, units);
+    state.signedQuantityUnits += units;
+    state.signedCarryingValueMinor += valueMinor;
+    if (state.signedQuantityUnits === 0) state.signedCarryingValueMinor = 0;
+    return { units, valueMinor };
+  };
+  const addPayable = (state: MutableMerchantState, units: number, valueMinor: number): void => {
+    state.signedQuantityUnits += units;
+    state.signedCarryingValueMinor += valueMinor;
+  };
+  const addReceivable = (state: MutableMerchantState, units: number, valueMinor: number): void => {
+    state.signedQuantityUnits -= units;
+    state.signedCarryingValueMinor -= valueMinor;
   };
 
   [...entries].sort(compareEntriesForPhase5Cost).forEach(entry => {
     const operationId = getPhase5OperationId(entry);
     const debit = resolveSide(entry, 'debit');
     const credit = resolveSide(entry, 'credit');
-    const semantic = resolveMerchantGoldOperationSemantic(entry, debit, credit);
-    const requestedUnits = quantityUnits(entry);
+    const semantic = resolveMerchantMetalOperationSemantic(entry, debit, credit);
+    const metal = semantic.metal;
+    const requestedUnits = metal ? quantityUnits(entry, metal, debit ?? credit) : 0;
     const blank = (kind: MerchantGoldLiabilityMovementKind): MerchantGoldLiabilityMovement => ({
-      operationId, entry, kind, quantityUnits: requestedUnits, carryingValueMinor: 0,
-      merchantLiabilityReleasedValueMinor: 0, inventoryBookValueReleasedMinor: 0,
+      operationId, entry, kind, metal, quantityUnits: requestedUnits, carryingValueMinor: 0,
+      merchantDebitValueMinor: 0, merchantCreditValueMinor: 0,
+      merchantLiabilityReleasedValueMinor: 0, merchantReceivableReleasedValueMinor: 0,
+      merchantPayableCreatedValueMinor: 0, merchantReceivableCreatedValueMinor: 0,
+      inventoryBookValueReleasedMinor: 0, inventoryBookValueRecognizedMinor: 0,
       settlementGainMinor: 0, settlementLossMinor: 0,
     });
 
-    if (semantic === 'cash_settlement') {
+    if (semantic.kind === 'cash_settlement') {
       movements.push(blank('cash_settlement'));
       return;
     }
+    if (!metal || requestedUnits <= 0) return;
 
-    if (semantic === 'gold_liability_opening' && isGoldMerchant(credit)) {
+    if (semantic.kind === 'opening') {
+      const merchant = isMerchantFor(credit, metal) ? credit : isMerchantFor(debit, metal) ? debit : undefined;
+      if (!merchant) return;
       const movement = blank('opening');
-      const state = ensureState(credit);
-      const price = openingPrices.get(entry.date.slice(0, 4));
-      if (price && requestedUnits > 0) {
-        movement.carryingValueMinor = Number(roundDivide(BigInt(price.costMinor) * BigInt(requestedUnits), BigInt(price.quantityUnits)));
-        movement.valuationSource = 'opening_cost_compatibility';
+      const state = ensureState(merchant, metal);
+      const price = openingPrices.get(`${entry.date.slice(0, 4)}:${metal}`);
+      const valueMinor = price
+        ? proportionalValue(price.costMinor, price.quantityUnits, requestedUnits)
+        : 0;
+      if (!price) diagnostics.push({
+        code: 'missing_opening_price', severity: 'error', operationId, merchantAccountId: state.merchantAccountId, metal,
+        message: `No approved Settings opening ${metal} cost was available.`,
+      });
+      movement.carryingValueMinor = valueMinor;
+      movement.valuationSource = price ? 'opening_cost_compatibility' : undefined;
+      if (merchant === credit) {
+        movement.destinationMerchantAccountId = state.merchantAccountId;
+        movement.merchantCreditValueMinor = valueMinor;
+        addPayable(state, requestedUnits, valueMinor);
       } else {
-        diagnostics.push({
-          code: 'missing_opening_price', severity: 'warning', operationId, merchantAccountId: state.merchantAccountId,
-          message: 'No approved opening gold cost source was available; legacy liability weight was preserved without inventing a price.',
-        });
+        movement.sourceMerchantAccountId = state.merchantAccountId;
+        movement.merchantDebitValueMinor = valueMinor;
+        addReceivable(state, requestedUnits, valueMinor);
       }
-      movement.destinationMerchantAccountId = state.merchantAccountId;
-      addLiability(state, requestedUnits, movement.carryingValueMinor);
+      assertState(state, entry);
       movements.push(movement);
       return;
     }
 
-    if (semantic === 'gold_liability_receipt' && isGoldMerchant(credit)) {
+    if (semantic.kind === 'receipt' && isMerchantFor(credit, metal)) {
       const movement = blank('receipt');
-      const state = ensureState(credit);
-      const valued = receiptCost(entry, costByOperationId.get(operationId));
+      const state = ensureState(credit, metal);
+      const inventoryResult = costByOperationId.get(operationId);
+      const valued = receiptCost(entry, inventoryResult, metal, requestedUnits);
       movement.destinationMerchantAccountId = state.merchantAccountId;
-      movement.carryingValueMinor = valued.valueMinor;
+      movement.inventoryBookValueRecognizedMinor = inventoryResult?.classification === 'merchant_receipt'
+        ? inventoryResult.incomingTotalCostMinor : valued.valueMinor;
       movement.valuationSource = valued.source;
       if (!valued.source || valued.source === 'historical_cost_compatibility') diagnostics.push({
-        code: 'missing_approved_historical_price', severity: 'warning', operationId, merchantAccountId: state.merchantAccountId,
-        message: valued.source
-          ? 'Immutable official-price snapshot was missing; the existing approved historical inventory-cost compatibility value was preserved.'
-          : 'No approved historical price source was available; no merchant liability price was invented.',
+        code: 'missing_approved_historical_price', severity: 'warning', operationId,
+        merchantAccountId: state.merchantAccountId, metal,
+        message: 'Immutable operation price is missing; exact-date historical price backfill is required.',
       });
-      addLiability(state, requestedUnits, valued.valueMinor);
+
+      const released = state.signedQuantityUnits < 0 ? releaseReceivable(state, requestedUnits) : { units: 0, valueMinor: 0 };
+      const settlementIncomingValue = proportionalValue(valued.valueMinor, requestedUnits, released.units);
+      const excessUnits = requestedUnits - released.units;
+      const excessValue = valued.valueMinor - settlementIncomingValue;
+      if (excessUnits > 0) addPayable(state, excessUnits, excessValue);
+      const difference = settlementIncomingValue - released.valueMinor;
+      movement.merchantReceivableReleasedValueMinor = released.valueMinor;
+      movement.merchantPayableCreatedValueMinor = excessValue;
+      movement.merchantCreditValueMinor = released.valueMinor + excessValue;
+      movement.carryingValueMinor = movement.merchantCreditValueMinor;
+      movement.settlementGainMinor = Math.max(0, difference);
+      movement.settlementLossMinor = Math.max(0, -difference);
+      assertState(state, entry);
       movements.push(movement);
       return;
     }
 
-    if (semantic === 'merchant_transfer' && isGoldMerchant(debit) && isGoldMerchant(credit)) {
+    if (semantic.kind === 'merchant_transfer' && isMerchantFor(debit, metal) && isMerchantFor(credit, metal)) {
       const movement = blank('merchant_transfer');
-      const source = ensureState(debit);
-      const destination = ensureState(credit);
-      const released = releaseLiability(source, requestedUnits, entry);
-      addLiability(destination, released.units, released.valueMinor);
+      const source = ensureState(debit, metal);
+      const destination = ensureState(credit, metal);
+      const wac = currentWac(source);
+      let transferredValue = wac === null ? 0 : Math.round(wac * requestedUnits);
+      if (wac === null) diagnostics.push({
+        code: 'missing_transfer_carrying_basis', severity: 'error', operationId,
+        merchantAccountId: source.merchantAccountId, metal,
+        message: `Merchant ${metal} transfer source has no carrying-value basis.`,
+      });
+      if (wac !== null) {
+        const destinationAfterUnits = destination.signedQuantityUnits + requestedUnits;
+        // When the destination crosses from receivable to payable, the first
+        // portion extinguishes its complete carried receivable. Only the
+        // residual quantity starts the new payable at the source basis. This
+        // preserves value between merchants without market revaluation/P&L.
+        if (destination.signedQuantityUnits < 0 && destinationAfterUnits >= 0) {
+          transferredValue = Math.abs(destination.signedCarryingValueMinor)
+            + Math.round(wac * destinationAfterUnits);
+        }
+        const sourceAfterUnits = source.signedQuantityUnits - requestedUnits;
+        if (source.signedQuantityUnits > 0 && sourceAfterUnits < 0) {
+          transferredValue = Math.max(
+            transferredValue,
+            source.signedCarryingValueMinor + Math.round(wac * Math.abs(sourceAfterUnits)),
+          );
+        } else if (source.signedQuantityUnits > 0 && sourceAfterUnits === 0) {
+          transferredValue = source.signedCarryingValueMinor;
+        }
+      }
+      source.signedQuantityUnits -= requestedUnits;
+      source.signedCarryingValueMinor -= transferredValue;
+      destination.signedQuantityUnits += requestedUnits;
+      destination.signedCarryingValueMinor += transferredValue;
       movement.sourceMerchantAccountId = source.merchantAccountId;
       movement.destinationMerchantAccountId = destination.merchantAccountId;
-      movement.quantityUnits = released.units;
-      movement.carryingValueMinor = released.valueMinor;
-      movement.merchantLiabilityReleasedValueMinor = released.valueMinor;
+      movement.carryingValueMinor = transferredValue;
+      movement.merchantDebitValueMinor = transferredValue;
+      movement.merchantCreditValueMinor = transferredValue;
       movement.valuationSource = 'source_merchant_wac';
+      assertState(source, entry);
+      assertState(destination, entry);
       movements.push(movement);
       return;
     }
 
-    if (semantic === 'gold_weight_settlement' && isGoldMerchant(debit)) {
+    if (semantic.kind === 'weight_settlement' && isMerchantFor(debit, metal)) {
       const movement = blank('weight_settlement');
-      const state = ensureState(debit);
-      const released = releaseLiability(state, requestedUnits, entry);
+      const state = ensureState(debit, metal);
+      const released = state.signedQuantityUnits > 0 ? releasePayable(state, requestedUnits) : { units: 0, valueMinor: 0 };
+      const excessUnits = requestedUnits - released.units;
+      const excessValued = snapshotValue(entry, metal, excessUnits, requestedUnits);
+      if (excessUnits > 0 && !excessValued.source) diagnostics.push({
+        code: 'missing_approved_historical_price', severity: 'error', operationId,
+        merchantAccountId: state.merchantAccountId, metal,
+        message: 'Physical overdelivery creates/increases a receivable and requires an immutable operation price.',
+      });
+      if (excessUnits > 0) addReceivable(state, excessUnits, excessValued.valueMinor);
       const inventoryResult = costByOperationId.get(operationId);
       if (!inventoryResult || inventoryResult.classification !== 'merchant_delivery') diagnostics.push({
-        code: 'inventory_cost_result_missing', severity: 'error', operationId, merchantAccountId: state.merchantAccountId,
-        message: 'Merchant weight settlement is missing its authoritative Inventory WAC result.',
+        code: 'inventory_cost_result_missing', severity: 'error', operationId,
+        merchantAccountId: state.merchantAccountId, metal,
+        message: 'Merchant physical settlement is missing its authoritative Inventory WAC result.',
       });
       const inventoryBookValue = inventoryResult?.classification === 'merchant_delivery'
-        ? inventoryResult.outgoingTotalCostMinor
-        : 0;
-      const difference = released.valueMinor - inventoryBookValue;
+        ? inventoryResult.outgoingTotalCostMinor : 0;
+      const merchantDebit = released.valueMinor + excessValued.valueMinor;
+      const difference = merchantDebit - inventoryBookValue;
       movement.sourceMerchantAccountId = state.merchantAccountId;
-      movement.quantityUnits = released.units;
-      movement.carryingValueMinor = released.valueMinor;
       movement.merchantLiabilityReleasedValueMinor = released.valueMinor;
+      movement.merchantReceivableCreatedValueMinor = excessValued.valueMinor;
+      movement.merchantDebitValueMinor = merchantDebit;
+      movement.carryingValueMinor = merchantDebit;
       movement.inventoryBookValueReleasedMinor = inventoryBookValue;
       movement.settlementGainMinor = Math.max(0, difference);
       movement.settlementLossMinor = Math.max(0, -difference);
-      movement.valuationSource = 'source_merchant_wac';
+      movement.valuationSource = excessUnits > 0 ? excessValued.source : 'source_merchant_wac';
+      assertState(state, entry);
       movements.push(movement);
     }
   });
 
   const finalStates = Object.fromEntries([...states].map(([accountId, state]) => [accountId, stateSnapshot(state)]));
   return {
-    calculationVersion: 'merchant-gold-liability-wac-v1',
+    calculationVersion: 'merchant-metal-signed-wac-v2',
     movements,
     movementsByOperationId: Object.fromEntries(movements.map(movement => [movement.operationId, movement])),
     finalStates,
     diagnostics,
   };
 };
+
+/** Backward-compatible export name retained for downstream consumers. */
+export const buildMerchantGoldLiabilityTimeline = buildMerchantMetalPositionTimeline;
