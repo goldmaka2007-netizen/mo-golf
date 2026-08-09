@@ -3,7 +3,7 @@
 **Last reviewed:** 2026-08-09
 **Repository:** `goldmaka2007-netizen/mo-golf`  
 **Branch reviewed:** `main`  
-**Reviewed head:** `1e52cd56cefcc8e2f1b9829e9b10369f037a5942`  
+**Reviewed head:** `89c5b5c70f9bb585506e83847e7961be19717e87`
 **Production:** `https://makka-central-accounting.web.app`  
 **Firebase project:** `makka-central-accounting`
 
@@ -52,7 +52,9 @@ These paths were present on the reviewed head; verify them again before editing:
 - Physical settlement releases merchant liability and inventory at their separate WAC values; the difference posts to generated gold-liability settlement gain/loss accounts.
 - Khaled Hamido and Mohamed El Sayed/Al-Safy invariants are covered by the focused regression fixture.
 - Verification: 5 focused files / 48 tests, TypeScript, Balance Contract Guard, and production build passed.
-- Firebase Hosting deployment and post-deployment HTTP verification are pending the authorized release step.
+- Code commit `89c5b5c70f9bb585506e83847e7961be19717e87` was deployed once to Firebase Hosting only.
+- Deployed asset: `assets/index-aH8UYW97.js`.
+- One post-deployment check returned HTTP 200 for both the production root and the deployed JS asset.
 
 ### `1e52cd5` — Dashboard metal prices and return loading
 
