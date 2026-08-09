@@ -4,6 +4,7 @@ import { buildLegacyLedgerLegs, type LegacyLedgerLeg } from './legacyLedger';
 import type { InventoryCostKind, InventoryCostTimeline } from './inventoryCostTypes';
 import { buildAccountRegistry } from './accountRegistry';
 import { getEntryArabicWeight } from './engine';
+import { buildMerchantGoldLiabilityTimeline, type MerchantGoldLiabilityDiagnostic } from './merchantGoldLiability';
 
 export interface FinancialStatementLine { id: string; label: string; amount: number; }
 export type StatementDimensionKind = 'gold' | 'silver' | 'accessory' | 'cash';
@@ -62,6 +63,13 @@ export interface MerchantLiabilityStatementRow {
   cashPayable: number;
   averageEgpPerGram: number | null;
 }
+export interface ReconciliationWarning {
+  code: 'merchant_gold_zero_weight_book_value';
+  accountId: string;
+  accountName: string;
+  goldBalance: number;
+  bookValueBalance: number;
+}
 export interface EgpBalanceSheet {
   assets: { cash: number; goldInventory: number; silverInventory: number; accessoriesInventory: number; receivables: number; total: number };
   liabilities: {
@@ -77,8 +85,14 @@ export interface EgpBalanceSheet {
   inventory: InventoryStatementRow[];
   inventoryCategories: Record<InventoryCostKind, InventoryCategorySummary>;
   balances: { assetsLessLiabilitiesAndEquity: number };
+  reconciliationWarnings: ReconciliationWarning[];
 }
-export interface FinancialStatementsEgp { incomeStatement: EgpIncomeStatement; balanceSheet: EgpBalanceSheet; costBasisAvailable: boolean; }
+export interface FinancialStatementsEgp {
+  incomeStatement: EgpIncomeStatement;
+  balanceSheet: EgpBalanceSheet;
+  costBasisAvailable: boolean;
+  merchantLiabilityDiagnostics: MerchantGoldLiabilityDiagnostic[];
+}
 export interface BuildFinancialStatementsEgpOptions {
   canonicalDefinitions?: CanonicalAccountDefinition[];
   timeline?: InventoryCostTimeline | null;
@@ -348,6 +362,22 @@ export const buildFinancialStatementsEgp = (entries: Entry[], rawAccounts: Accou
   const bookBalances = balanceMap(projectedLegs, 'book_value');
   const goldBalances = balanceMap(projectedLegs, 'gold');
   const silverBalances = balanceMap(projectedLegs, 'silver');
+  const merchantLiabilityTimeline = buildMerchantGoldLiabilityTimeline(balanceEntries, accounts, timeline);
+  const reconciliationWarnings: ReconciliationWarning[] = accounts.filter(account =>
+    account.type === 'merchant' && (account.metal === 'gold' || account.canonicalSubType === 'merchant_gold')).flatMap(account => {
+    const entityId = account.id ? `merchant:${account.id}` : `legacy-name:${account.name}`;
+    const goldBalance = roundMoney(goldBalances.get(entityId)?.balance ?? 0);
+    const bookValueBalance = roundMoney(bookBalances.get(entityId)?.balance ?? 0);
+    return Math.abs(goldBalance) <= 0.000001 && Math.abs(bookValueBalance) > 0.0001 ? [{
+      code: 'merchant_gold_zero_weight_book_value' as const,
+      accountId: account.id ?? entityId,
+      accountName: account.name,
+      goldBalance,
+      bookValueBalance,
+    }] : [];
+  });
+
+
 
   let cash = 0; let receivables = 0; let rawCapital = 0; let rawRetainedEarnings = 0; let otherLiabilities = 0;
   const merchantRows = new Map<string, MerchantLiabilityStatementRow>();
@@ -361,16 +391,23 @@ export const buildFinancialStatementsEgp = (entries: Entry[], rawAccounts: Accou
     if (leg.group === 'liabilities') {
       if (account?.type === 'merchant' || account?.metal === 'gold' || account?.metal === 'silver' || account?.canonicalSubType === 'merchant_gold' || account?.canonicalSubType === 'merchant_silver') {
         const metal = account.metal === 'silver' ? 'silver' : account.metal === 'gold' ? 'gold' : null;
+        const equivalent21Weight = -(goldBalances.get(entityId)?.balance ?? 0);
+        const silverWeight = -(silverBalances.get(entityId)?.balance ?? 0);
+        const bookValue = -(bookBalances.get(entityId)?.balance ?? 0);
+        const cashPayable = -(cashBalances.get(entityId)?.balance ?? 0);
+        const merchantGoldState = account.id ? merchantLiabilityTimeline.finalStates[account.id] : undefined;
         merchantRows.set(entityId, {
           id: entityId,
           accountId: account.id ?? entityId,
           label: leg.accountName,
           metal,
-          equivalent21Weight: Math.max(0, -(goldBalances.get(entityId)?.balance ?? 0)),
-          silverWeight: Math.max(0, -(silverBalances.get(entityId)?.balance ?? 0)),
-          bookValue: Math.max(0, -(bookBalances.get(entityId)?.balance ?? 0)),
-          cashPayable: Math.max(0, -(cashBalances.get(entityId)?.balance ?? 0)),
-          averageEgpPerGram: deriveUnitPrice(Math.max(0, -(bookBalances.get(entityId)?.balance ?? 0)), metal === 'gold' ? Math.max(0, -(goldBalances.get(entityId)?.balance ?? 0)) : metal === 'silver' ? Math.max(0, -(silverBalances.get(entityId)?.balance ?? 0)) : null),
+          equivalent21Weight,
+          silverWeight,
+          bookValue,
+          cashPayable,
+          averageEgpPerGram: metal === 'gold' && merchantGoldState
+            ? merchantGoldState.goldLiabilityWacMinorPerE21Unit
+            : deriveUnitPrice(bookValue, metal === 'silver' ? silverWeight : equivalent21Weight),
         });
       } else otherLiabilities += -balance;
       return;
@@ -417,5 +454,10 @@ export const buildFinancialStatementsEgp = (entries: Entry[], rawAccounts: Accou
   const merchant = roundMoney(merchantGold + merchantSilver + merchantCash);
   const liabilities = { merchant, merchantGold, merchantSilver, merchantCash, other: roundMoney(otherLiabilities), total: roundMoney(merchant + otherLiabilities), merchantDetails: details };
   const equity = { capital, retainedEarnings, currentProfit, total: roundMoney(capital + retainedEarnings + currentProfit) };
-  return { incomeStatement: currentIncome, balanceSheet: { assets, liabilities, equity, inventory, inventoryCategories, balances: { assetsLessLiabilitiesAndEquity: roundMoney(assets.total - liabilities.total - equity.total) } }, costBasisAvailable: !!timeline };
+  return {
+    incomeStatement: currentIncome,
+    balanceSheet: { assets, liabilities, equity, inventory, inventoryCategories, reconciliationWarnings, balances: { assetsLessLiabilitiesAndEquity: roundMoney(assets.total - liabilities.total - equity.total) } },
+    costBasisAvailable: !!timeline,
+    merchantLiabilityDiagnostics: merchantLiabilityTimeline.diagnostics,
+  };
 };

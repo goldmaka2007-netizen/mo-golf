@@ -25,7 +25,7 @@ const descriptions: Partial<Record<CanonicalAccountSubType, string>> = {
   merchant_gold: 'تاجر ذهب', merchant_silver: 'تاجر فضة', other_due: 'ذمم أخرى', customer: 'عميل',
   fixed_asset: 'أصل ثابت', capital: 'رأس المال', retained_earnings: 'أرباح محتجزة', withdrawals: 'مسحوبات', revenue: 'إيراد', expense: 'مصروف', unclassified: 'غير مصنف',
 };
-const tolerance = (dimension: LedgerDimension): number => dimension === 'cash' ? 0.0001 : 0.000001;
+const tolerance = (dimension: LedgerDimension): number => dimension === 'cash' || dimension === 'book_value' ? 0.0001 : 0.000001;
 const zero = (value: number, dimension: LedgerDimension): boolean => Math.abs(value) <= tolerance(dimension);
 const empty = (): TrialBalanceAmounts => ({ openingDebit: 0, openingCredit: 0, periodDebit: 0, periodCredit: 0, closingDebit: 0, closingCredit: 0 });
 const amountKeys: Array<keyof TrialBalanceAmounts> = ['openingDebit', 'openingCredit', 'periodDebit', 'periodCredit', 'closingDebit', 'closingCredit'];
@@ -118,11 +118,14 @@ const csvEscape = (value: string): string => `"${value.replace(/"/g, '""')}"`;
 const dimensionLabel = (dimension: LedgerDimension): string => dimension === 'cash' ? 'ميزان النقدية' : dimension === 'gold' ? 'ميزان الذهب' : dimension === 'silver' ? 'ميزان الفضة' : 'ميزان الكمية';
 const csvValue = (amount: number, dimension: LedgerDimension): string => formatLedgerAmount(amount, dimension);
 
+export const trialBalanceDimensionLabel = (dimension: LedgerDimension): string =>
+  dimension === 'book_value' ? '\u0645\u064a\u0632\u0627\u0646 \u0627\u0644\u0642\u064a\u0645\u0629 \u0627\u0644\u062f\u0641\u062a\u0631\u064a\u0629' : dimensionLabel(dimension);
+
 export const buildTrialBalanceCsv = (reports: TrialBalanceReport[], startDate: string, endDate: string): string => {
   const version = reports[0]?.balanceEngineVersion ?? 'unknown';
   const lines: string[] = [`نسخة محرك الأرصدة,${version}`, `الفترة من ${startDate} إلى ${endDate}`];
   reports.forEach(report => {
-    lines.push('', dimensionLabel(report.dimension));
+    lines.push('', trialBalanceDimensionLabel(report.dimension));
     lines.push(['الحساب', 'الوصف', 'المجموعة', 'أول المدة مدين', 'أول المدة دائن', 'حركة الفترة مدين', 'حركة الفترة دائن', 'آخر المدة مدين', 'آخر المدة دائن'].map(csvEscape).join(','));
     report.groups.forEach(group => {
       group.rows.forEach(row => lines.push([row.accountName, row.description, group.label, row.openingDebit, row.openingCredit, row.periodDebit, row.periodCredit, row.closingDebit, row.closingCredit].map((value, index) => csvEscape(index < 3 ? String(value) : csvValue(Number(value), report.dimension))).join(',')));

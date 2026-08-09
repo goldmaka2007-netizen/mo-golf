@@ -68,6 +68,8 @@ The strict low-level engine is:
 
 Do not call it directly from invoice UI/validation or another path that can receive production runtime account IDs without first passing through the approved resolver.
 
+Merchant gold liabilities use a separate in-memory WAC timeline. It maintains E21 quantity and EGP carrying value independently from Inventory WAC. Transfers between merchants carry the source liability WAC unchanged; physical settlement compares the released liability value with the independently released Inventory WAC value.
+
 ### Ledger and Trial Balance
 
 Projected legs carry dimensions such as:
@@ -120,6 +122,12 @@ A supported purchase produces:
 ### Transfer / conversion
 
 A pure inventory transfer preserves total approved quantity and Book Value unless a separately approved gain/loss event exists. It must not manufacture revenue or COGS.
+
+A merchant-to-merchant gold transfer is not an inventory transfer: it preserves total merchant-liability carrying value, does not move physical inventory, and does not create profit or loss.
+
+### Merchant gold settlement
+
+Physical gold settlement debits the merchant liability at Merchant Liability WAC and credits inventory at Inventory WAC. A positive difference credits `مكاسب تسوية التزامات الذهب`; a negative difference debits `خسائر تسوية التزامات الذهب`. Cash/workmanship settlement with Treasury remains cash-only.
 
 ### Inventory increase / shortage
 

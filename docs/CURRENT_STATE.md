@@ -1,6 +1,6 @@
 # Current Project State
 
-**Last reviewed:** 2026-08-05  
+**Last reviewed:** 2026-08-09
 **Repository:** `goldmaka2007-netizen/mo-golf`  
 **Branch reviewed:** `main`  
 **Reviewed head:** `1e52cd56cefcc8e2f1b9829e9b10369f037a5942`  
@@ -44,6 +44,15 @@ These paths were present on the reviewed head; verify them again before editing:
   - Approved historical compatibility directives.
 
 ## Latest reviewed changes
+
+### Merchant gold liability WAC — verified locally 2026-08-09
+
+- Added one in-memory Merchant Gold Liability WAC timeline, separate from Inventory WAC and merchant cash/workmanship.
+- Merchant transfers carry source book value without inventory movement, market revaluation, or P&L.
+- Physical settlement releases merchant liability and inventory at their separate WAC values; the difference posts to generated gold-liability settlement gain/loss accounts.
+- Khaled Hamido and Mohamed El Sayed/Al-Safy invariants are covered by the focused regression fixture.
+- Verification: 5 focused files / 48 tests, TypeScript, Balance Contract Guard, and production build passed.
+- Firebase Hosting deployment and post-deployment HTTP verification are pending the authorized release step.
 
 ### `1e52cd5` — Dashboard metal prices and return loading
 

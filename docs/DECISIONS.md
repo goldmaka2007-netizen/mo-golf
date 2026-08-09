@@ -65,3 +65,7 @@ Simple technical metadata may be updated with a task. Accounting or architectura
 ## D-016 — Definition of Done
 
 Every delivery reports root cause, changed files, verification, data/Firebase impact, remaining risks, deployment status, and one of: Completed, Partially Completed, or Blocked.
+
+## D-017 — Merchant gold liabilities use a separate carrying-value WAC
+
+Gold merchant E21 weight, gold-liability Book Value, and cash/workmanship are separate dimensions. New gold liabilities use the approved operation-date price source; merchant transfers carry source Merchant Liability WAC without revaluation; physical settlement releases Merchant Liability WAC and Inventory WAC independently, with the difference recognized only as gold-liability settlement gain or loss.

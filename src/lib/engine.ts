@@ -168,7 +168,74 @@ export const resolveOperationKind = (entry: Entry): AccountingOperationKind => {
       return rule?.affectsInventory ? 'transfer' : 'other';
   }
 };
-export const affectsInventory = (entry: Entry): boolean => {
+
+export type MerchantGoldOperationSemantic =
+  | 'gold_liability_opening'
+  | 'gold_liability_receipt'
+  | 'gold_weight_settlement'
+  | 'cash_settlement'
+  | 'merchant_transfer'
+  | 'none';
+
+export interface OperationAccountSemanticEvidence {
+  type?: string | null;
+  metal?: string | null;
+  canonicalSubType?: string | null;
+  entityType?: string | null;
+  is_inventory?: boolean;
+  isInventory?: boolean;
+  isMerchant?: boolean;
+}
+
+const isSemanticGoldMerchant = (account?: OperationAccountSemanticEvidence): boolean =>
+  !!account
+  && (account.type === 'merchant' || account.isMerchant === true || account.entityType === 'merchant')
+  && (account.metal === 'gold' || account.canonicalSubType === 'merchant_gold');
+
+const isSemanticGoldInventory = (account?: OperationAccountSemanticEvidence): boolean =>
+  !!account
+  && (account.is_inventory === true || account.isInventory === true)
+  && account.metal !== 'silver';
+
+const isSemanticCash = (account?: OperationAccountSemanticEvidence): boolean =>
+  !!account && (account.type === 'cash' || account.canonicalSubType === 'cash' || account.entityType === 'cash');
+
+/** Central economic split for merchant gold operations. Account metadata supplied
+ * by the caller is authoritative; legacy labels are used only when metadata is
+ * unavailable and the stored amounts make the variant unambiguous. */
+export const resolveMerchantGoldOperationSemantic = (
+  entry: Entry,
+  debit?: OperationAccountSemanticEvidence,
+  credit?: OperationAccountSemanticEvidence,
+): MerchantGoldOperationSemantic => {
+  const quantity = Math.abs(getEntryArabicWeight(entry));
+  const cash = Math.abs(parseCash(entry));
+  const debitMerchant = isSemanticGoldMerchant(debit);
+  const creditMerchant = isSemanticGoldMerchant(credit);
+
+  if (isOpeningEntry(entry) && creditMerchant && quantity > 0) return 'gold_liability_opening';
+  if (isSemanticGoldInventory(debit) && creditMerchant && quantity > 0) return 'gold_liability_receipt';
+  if (debitMerchant && isSemanticGoldInventory(credit) && quantity > 0) return 'gold_weight_settlement';
+  if (debitMerchant && creditMerchant && quantity > 0 && cash === 0) return 'merchant_transfer';
+  if (((debitMerchant && isSemanticCash(credit)) || (creditMerchant && isSemanticCash(debit)))
+    && cash > 0 && quantity === 0) return 'cash_settlement';
+
+  const legacyMerchantSettlement = ['\u062d\u0633\u0627\u0628 \u062a\u0627\u062c\u0631 \u0630\u0647\u0628'].includes(entry.tx)
+    || entry.operationKind === 'merchant_settlement';
+  if (!debit && !credit && legacyMerchantSettlement) {
+    if (quantity > 0 && cash === 0) return 'gold_weight_settlement';
+    if (cash > 0 && quantity === 0) return 'cash_settlement';
+  }
+  return 'none';
+};
+
+export const affectsInventory = (entry: Entry, accounts: Account[] = []): boolean => {
+  const index = accounts.length > 0 ? buildAccountIndex(accounts) : undefined;
+  const debit = index ? resolveAccount(entry, 'debit', index) : undefined;
+  const credit = index ? resolveAccount(entry, 'credit', index) : undefined;
+  const semantic = resolveMerchantGoldOperationSemantic(entry, debit, credit);
+  if (semantic === 'gold_liability_receipt' || semantic === 'gold_weight_settlement') return true;
+  if (semantic === 'cash_settlement' || semantic === 'merchant_transfer' || semantic === 'gold_liability_opening') return false;
   const kind = resolveOperationKind(entry);
   return ['opening', 'purchase', 'sale', 'transfer', 'tifeet', 'adjustment', 'merchant_settlement'].includes(kind);
 };
@@ -232,7 +299,7 @@ export function processInventory(entries: Entry[], accountsDb: Account[]): Inven
   });
 
   entries.forEach(entry => {
-    if (!affectsInventory(entry)) return;
+    if (!affectsInventory(entry, accountsDb)) return;
     const weight = parseWeight(entry.weight);
     const count = parseWeight(entry.weight) || (parseFloat(String(entry.count ?? '0')) || 0);
     if (weight === 0 && count === 0) return;

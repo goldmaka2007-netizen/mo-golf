@@ -104,7 +104,7 @@ export const buildOperationalProjection = (entries: Entry[], accounts: Account[]
     accessoriesQuantityMovement: physical.quantity,
     merchantWeightLiabilityMovement: merchant,
     merchantWorkmanshipCashMovement,
-    costingEffects: valid.filter(entry => !isTx42(entry) && affectsInventory(entry)).map(entry => ({ sourceEntryId: entryId(entry), operationKind: resolveOperationKind(entry), amount: Math.abs(parseCash(entry)) })),
+    costingEffects: valid.filter(entry => !isTx42(entry) && affectsInventory(entry, accounts)).map(entry => ({ sourceEntryId: entryId(entry), operationKind: resolveOperationKind(entry), amount: Math.abs(parseCash(entry)) })),
     warnings: unresolvedCanonicalPostings.map(item => item.warning),
     unresolvedCanonicalPostings,
   };

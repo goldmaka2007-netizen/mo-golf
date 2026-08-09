@@ -5,6 +5,7 @@ import type { InventoryCostTimeline } from './inventoryCostTypes';
 import { isOpeningEntry } from './openingEntry';
 import { applyRuntimeAccountOverride } from './runtimeAccountOverrides';
 import { exposeInventoryLinkedAccounts, inventoryAccountDisplayName } from './inventoryAccountLinkage';
+import { buildMerchantGoldLiabilityTimeline } from './merchantGoldLiability';
 
 export type LegacyLedgerDimension = 'cash' | 'gold' | 'silver' | 'quantity' | 'book_value';
 export type LegacyLedgerSide = 'debit' | 'credit';
@@ -38,7 +39,7 @@ export interface LegacyLedgerLeg {
   canonicalCategory?: string;
   metalType?: 'gold' | 'silver' | 'accessory' | null;
   quantityBasis?: 'equivalent21' | 'physical_grams' | 'pieces' | null;
-  bookValueSource?: 'stored_egp' | 'wac' | null;
+  bookValueSource?: 'stored_egp' | 'wac' | 'carrying_value' | null;
   origin: 'historical' | 'generated';
   generatedLegId: string;
   deduplicationId: string;
@@ -206,6 +207,8 @@ const virtualCogsFor = (account: Account | undefined, accounts: Account[]): Lega
   return virtualAccount(`system:income:cogs:${kind}`, `\u062a\u0643\u0644\u0641\u0629 \u0627\u0644\u0628\u0636\u0627\u0639\u0629 \u0627\u0644\u0645\u0628\u0627\u0639\u0629 - ${kindLabel(kind)}`, 'expenses', 'COGS \u0645\u0646 WAC');
 };
 const virtualShortageLoss = virtualAccount('system:income:inventory-shortage-loss', '\u062e\u0633\u0627\u0626\u0631 \u062a\u0633\u0648\u064a\u0629 \u0639\u062c\u0632 \u0627\u0644\u0645\u062e\u0632\u0648\u0646', 'expenses', '\u062e\u0633\u0627\u0631\u0629 \u0639\u062c\u0632 \u0645\u0646 \u0627\u0644\u0645\u062a\u0648\u0633\u0637 \u0627\u0644\u0645\u0631\u062c\u062d');
+const virtualSettlementGain = virtualAccount('system:income:gold-settlement-gain', '\u0645\u0643\u0627\u0633\u0628 \u062a\u0633\u0648\u064a\u0629 \u0627\u0644\u062a\u0632\u0627\u0645\u0627\u062a \u0627\u0644\u0630\u0647\u0628', 'revenue', '\u0641\u0631\u0642 Merchant Liability WAC \u0639\u0646 Inventory WAC');
+const virtualSettlementLoss = virtualAccount('system:income:gold-settlement-loss', '\u062e\u0633\u0627\u0626\u0631 \u062a\u0633\u0648\u064a\u0629 \u0627\u0644\u062a\u0632\u0627\u0645\u0627\u062a \u0627\u0644\u0630\u0647\u0628', 'expenses', '\u0641\u0631\u0642 Merchant Liability WAC \u0639\u0646 Inventory WAC');
 
 const isInventoryAccount = (account: Account | undefined): boolean =>
   !!account && (account.is_inventory === true || ['gold_product', 'gold_raw', 'gold_direct', 'silver', 'accessory'].includes(account.type ?? ''));
@@ -264,6 +267,7 @@ const legFrom = (
 
 const appendCostLegs = (
   legs: LegacyLedgerLeg[],
+  entries: Entry[],
   accounts: Account[],
   index: LegacyAccountIndex,
   timeline: InventoryCostTimeline | null | undefined,
@@ -277,9 +281,10 @@ const appendCostLegs = (
     opposite: LegacyLedgerAccountMetadata,
     side: LegacyLedgerSide,
     amountMinor: number,
+    source: LegacyLedgerLeg['bookValueSource'] = 'wac',
   ) => {
     if (!Number.isSafeInteger(amountMinor) || amountMinor <= 0) return;
-    const leg = legFrom(entry, account, opposite, side, 'book_value', amountMinor / 100, 'generated', 'wac');
+    const leg = legFrom(entry, account, opposite, side, 'book_value', amountMinor / 100, 'generated', source);
     if (seen.has(leg.deduplicationId)) return;
     seen.add(leg.deduplicationId);
     legs.push(leg);
@@ -289,10 +294,18 @@ const appendCostLegs = (
     debit: LegacyLedgerAccountMetadata,
     credit: LegacyLedgerAccountMetadata,
     amountMinor: number,
+    source: LegacyLedgerLeg['bookValueSource'] = 'wac',
   ) => {
-    pushOne(entry, debit, credit, 'debit', amountMinor);
-    pushOne(entry, credit, debit, 'credit', amountMinor);
+    pushOne(entry, debit, credit, 'debit', amountMinor, source);
+    pushOne(entry, credit, debit, 'credit', amountMinor, source);
   };
+
+  const merchantLiability = buildMerchantGoldLiabilityTimeline(entries, accounts, timeline);
+  merchantLiability.movements.filter(movement => movement.kind === 'opening' || movement.kind === 'merchant_transfer').forEach(movement => {
+    const debit = metadataFor(movement.entry, 'debit', index);
+    const credit = metadataFor(movement.entry, 'credit', index);
+    pushGenerated(movement.entry, debit, credit, movement.carryingValueMinor, 'carrying_value');
+  });
 
   timeline.results.filter(result => allowedOperationIds.has(result.operationId || operationId(result.entry))).forEach(result => {
     const entry = result.entry;
@@ -321,7 +334,8 @@ const appendCostLegs = (
         // is a metal liability carrying value; workmanship remains the stored
         // cash-denominated merchant payable.
         pushOne(entry, destination, counterpart, 'debit', result.incomingTotalCostMinor);
-        pushOne(entry, counterpart, destination, 'credit', result.incomingMetalCostMinor);
+        const receipt = merchantLiability.movementsByOperationId[result.operationId || operationId(entry)];
+        pushOne(entry, counterpart, destination, 'credit', receipt?.carryingValueMinor ?? 0, 'carrying_value');
       }
       return;
     }
@@ -343,7 +357,13 @@ const appendCostLegs = (
       return;
     }
     if (result.classification === 'merchant_delivery') {
-      pushGenerated(entry, metadataFor(entry, 'debit', index), source, result.outgoingTotalCostMinor);
+      const merchant = metadataFor(entry, 'debit', index);
+      const settlement = merchantLiability.movementsByOperationId[result.operationId || operationId(entry)];
+      if (!settlement || settlement.kind !== 'weight_settlement') return;
+      pushOne(entry, merchant, source, 'debit', settlement.merchantLiabilityReleasedValueMinor, 'carrying_value');
+      pushOne(entry, source, merchant, 'credit', settlement.inventoryBookValueReleasedMinor, 'wac');
+      pushOne(entry, virtualSettlementGain, merchant, 'credit', settlement.settlementGainMinor, 'carrying_value');
+      pushOne(entry, virtualSettlementLoss, source, 'debit', settlement.settlementLossMinor, 'carrying_value');
     }
   });
 
@@ -409,7 +429,7 @@ export const buildLegacyLedgerLegs = (
     });
   });
   if (options.enableFinancialProjection) {
-    appendCostLegs(legs, linkedAccounts, index, options.costTimeline, new Set(entries.map(operationId)));
+    appendCostLegs(legs, entries, linkedAccounts, index, options.costTimeline, new Set(entries.map(operationId)));
     const unique = new Map<string, LegacyLedgerLeg>();
     legs.forEach(leg => { if (!unique.has(leg.deduplicationId)) unique.set(leg.deduplicationId, leg); });
     return [...unique.values()];

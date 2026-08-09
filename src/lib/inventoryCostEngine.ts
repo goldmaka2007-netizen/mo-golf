@@ -30,6 +30,7 @@ import {
   type SupportedGoldKarat,
 } from './goldEquivalent';
 import { isOpeningEntry } from './openingEntry';
+import { resolveMerchantGoldOperationSemantic } from './engine';
 
 const MAX_SAFE_BIGINT = BigInt(Number.MAX_SAFE_INTEGER);
 const ACCESSORY_SCALE = 1000;
@@ -603,7 +604,13 @@ const classify = (
   entry: Entry,
   debitInventory?: ResolvedInventoryAccount,
   creditInventory?: ResolvedInventoryAccount,
+  debitAccount?: Account,
+  creditAccount?: Account,
 ): InventoryCostOperationClassification => {
+  const merchantSemantic = resolveMerchantGoldOperationSemantic(entry, debitAccount, creditAccount);
+  if (merchantSemantic === 'gold_liability_receipt') return 'merchant_receipt';
+  if (merchantSemantic === 'gold_weight_settlement') return 'merchant_delivery';
+  if (merchantSemantic === 'cash_settlement' || merchantSemantic === 'merchant_transfer' || merchantSemantic === 'gold_liability_opening') return 'non_cost';
   if (entry.tx === 'تاجر ذهب' || entry.tx === 'تاجر فضة') return 'merchant_receipt';
   if (entry.tx === 'حساب تاجر ذهب' || entry.tx === 'حساب تاجر فضة') {
     return creditInventory ? 'merchant_delivery' : 'non_cost';
@@ -978,6 +985,7 @@ export const rebuildInventoryCostTimeline = (
     states[account.inventoryAccountId] = emptyState(account);
   }
   const accountsByName = new Map(accounts.map(account => [account.name, account]));
+  const accountsById = new Map(accounts.flatMap(account => account.id ? [[account.id, account] as const] : []));
   const results: OperationCostResultV2[] = [];
   let ordered: Entry[] = [];
 
@@ -1036,6 +1044,8 @@ export const rebuildInventoryCostTimeline = (
 
       const debitInventory = resolveInventorySide(entry, 'debit', catalog);
       const creditInventory = resolveInventorySide(entry, 'credit', catalog);
+      const debitAccount = entry.debitAccountId ? accountsById.get(entry.debitAccountId) : accountsByName.get(entry.debit);
+      const creditAccount = entry.creditAccountId ? accountsById.get(entry.creditAccountId) : accountsByName.get(entry.credit);
       const debitLooksInventory = sideLooksLikeInventory(entry, 'debit', accountsByName);
       const creditLooksInventory = sideLooksLikeInventory(entry, 'credit', accountsByName);
       if ((debitLooksInventory && !entry.debitAccountId) || (creditLooksInventory && !entry.creditAccountId)) {
@@ -1048,7 +1058,7 @@ export const rebuildInventoryCostTimeline = (
         fail('unknown_inventory_account', 'Inventory operation references an unknown accountId', entry);
       }
 
-      const classification = classify(entry, debitInventory, creditInventory);
+      const classification = classify(entry, debitInventory, creditInventory, debitAccount, creditAccount);
       if (!debitInventory && !creditInventory) continue;
       if (classification === 'non_cost') {
         const rawWeight = Number(normalizeNumerals(String(entry.weight ?? '0')));
