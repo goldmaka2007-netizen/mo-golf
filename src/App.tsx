@@ -350,9 +350,7 @@ export default function App() {
             >
               {view === 'home' && <MainDashboard refreshData={refreshData} />}
               {view === 'entry' && (
-                areOperationWritesLocked(costCalculationRun)
-                  ? <div className="rounded-2xl border border-red-500/30 bg-red-500/10 p-6 text-center text-sm text-red-100">العمليات متوقفة حتى يكتمل احتساب التكلفة بنجاح.</div>
-                  : <EntryForm />
+                <EntryForm />
               )}
               {view === 'journal' && <DailyJournalView />}
               {view === 'database' && <InventoryCheckView />}
