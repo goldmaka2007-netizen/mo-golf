@@ -3,7 +3,7 @@
 **Last reviewed:** 2026-08-09
 **Repository:** `goldmaka2007-netizen/mo-golf`  
 **Branch reviewed:** `main`  
-**Reviewed head:** `89c5b5c70f9bb585506e83847e7961be19717e87`
+**Reviewed head:** `a1e56b67e01cdcba263cccac8fc7feb085fc1012`
 **Production:** `https://makka-central-accounting.web.app`  
 **Firebase project:** `makka-central-accounting`
 
@@ -44,6 +44,14 @@ These paths were present on the reviewed head; verify them again before editing:
   - Approved historical compatibility directives.
 
 ## Latest reviewed changes
+
+### Emergency production startup recovery — verified 2026-08-09
+
+- The production black screen was caused by a Hosting build created without the required `VITE_FIREBASE_*` configuration; the first browser exception was `Missing required Vite environment variable: VITE_FIREBASE_API_KEY`.
+- Added a Vite build-time guard so a bundle missing required Firebase Web App configuration cannot be produced or deployed again.
+- TypeScript, the Balance Contract Guard, one production build, one local browser smoke, and one cache-busted production browser smoke passed.
+- Code commit `a1e56b67e01cdcba263cccac8fc7feb085fc1012` was deployed once to Firebase Hosting only.
+- Deployed asset: `assets/index-CsjEC3Dn.js`; Firestore Data, Rules, Indexes, Functions, Storage, and Authentication were unchanged.
 
 ### Merchant gold liability WAC — verified locally 2026-08-09
 
