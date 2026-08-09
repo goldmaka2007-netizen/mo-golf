@@ -3,7 +3,7 @@
 **Last reviewed:** 2026-08-09
 **Repository:** `goldmaka2007-netizen/mo-golf`  
 **Branch reviewed:** `main`  
-**Reviewed head:** `a1e56b67e01cdcba263cccac8fc7feb085fc1012`
+**Deployed code head:** `347e0fcc74130c508b0a1a05080635ff97b39dde`
 **Production:** `https://makka-central-accounting.web.app`  
 **Firebase project:** `makka-central-accounting`
 
@@ -44,6 +44,18 @@ These paths were present on the reviewed head; verify them again before editing:
   - Approved historical compatibility directives.
 
 ## Latest reviewed changes
+
+### Signed merchant gold/silver positions — deployed and browser-verified 2026-08-09
+
+- Replaced the one-sided Merchant Gold Liability projection with one central signed merchant-metal carrying-value timeline: positive positions are payables, negative positions are receivables, gold uses E21, and silver uses physical grams with independent WAC state.
+- Physical zero-crossings close the old side at carried WAC, recognize the legitimate metal-specific settlement difference, and establish only the excess at the immutable operation basis. Merchant transfers preserve source carrying value without inventory movement or P&L.
+- Official Balance Sheet and Trial Balance classification now follows each merchant's economic metal sign while cash/workmanship remains separate. `الاء ياسر` is routed through the general gold-merchant engine without changing Firestore account identity.
+- Narrow missing-price repair wrote only `invoiceOfficialPricePerGramEgp` on 12 eligible non-opening `entries`; 0 existing valid prices changed and 0 eligible rows remained missing. Opening entries continued to use Settings opening cost.
+- Production anchors: خالد حميدو ended at zero metal/cash/carrying value; الصافي ended at -1.36g E21 as a Gold Receivable of 8,228 EGP; TX1768 carried 89,083.02 EGP with no inventory or P&L; TX39 valued 25.2g E21 at the Settings price of 5,840 EGP/g for 147,168 EGP.
+- Verification passed: 5 focused files / 29 tests, TypeScript, Balance Contract Guard, production data audit, and one Vite production build. The deployed asset is `assets/index-CK9rVgMm.js`.
+- Code commit `347e0fcc74130c508b0a1a05080635ff97b39dde` was pushed and deployed once to Firebase Hosting only.
+- Authenticated production browser smoke passed: Firebase initialized, React rendered, Home and merchant operations loaded, `الاء ياسر` appeared in the generic gold-merchant selector, the Balance Sheet loaded with zero balance difference, and no console runtime errors appeared. One pre-existing legacy account-nature fallback warning remained.
+- Firestore Rules, Indexes, Functions, Storage, and Authentication were unchanged. Apart from the authorized 12-field price backfill, production Firestore history was unchanged.
 
 ### Emergency production startup recovery — verified 2026-08-09
 
