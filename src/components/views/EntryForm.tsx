@@ -29,6 +29,7 @@ import { OperationSelector } from '../ui/OperationSelector';
 import { buildAccountRegistry } from '../../lib/accountRegistry';
 import { buildCanonicalPosting } from '../../lib/postingMatrix';
 import { validateAccountingPolicy } from '../../lib/accountingPolicy';
+import { mergeGoldMerchantSettlementEntryRules } from '../../lib/merchantSettlementEntryOptions';
 
 export const normalizeAccessoryEntryPayload = <T extends { weight?: string; count?: string }>(entry: T, isAccessory: boolean): T => (
   isAccessory ? { ...entry, weight: entry.weight || '0', count: '0' } : entry
@@ -106,8 +107,8 @@ export const EntryForm = React.memo(() => {
       combined = [...dbRules.map(r => ({ t: r.t, d: r.debit, c: r.credit, k: r.karat, m: r.multiplier })), ...combined];
     }
     
-    return combined;
-  }, [customRules, transactionRules]);
+    return mergeGoldMerchantSettlementEntryRules(combined, accountsDb);
+  }, [customRules, transactionRules, accountsDb]);
 
   const availableOperationTypes = useMemo(() => {
     const operationTypes = new Set<string>();
