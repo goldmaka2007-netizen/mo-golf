@@ -45,6 +45,17 @@ These paths were present on the reviewed head; verify them again before editing:
 
 ## Latest reviewed changes
 
+### Clone-only Chart of Accounts — implemented locally, deployment blocked 2026-08-10
+
+- Replaced the Shadow-mode Discovery/Migration/Parity account UI and the separate free-form account tree with one mobile-first `دليل الحسابات` screen.
+- New entities are created only through `إنشاء حساب مشابه`; the form accepts a new name only and inherits an explicit whitelist of classification and operational rule fields.
+- The authoritative stored entity remains one `accounts` document. Inventory Sales/COGS companions remain read-only derived accounts; inventory clones point to the verified root `cloneSourceAccountId` used by the runtime Cost/WAC resolver.
+- Creation uses one Firestore transaction across the deterministic account-name reservation, cloned `transactionRules`, and immutable audit record. No balance, WAC, carrying state, history, alias, or source identity is copied.
+- Conservative global-per-ledger duplicate detection covers active and inactive/archived `accounts` plus canonical names; concurrent equivalent requests share one deterministic target ID, so exactly one succeeds.
+- Focused verification passed: 15 files / 108 tests, plus the second-generation Cost taxonomy regression; TypeScript, Balance Contract Guard, and production build passed.
+- Read-only authenticated local browser smoke passed for the chart, customer clone dialog, product clone dialog, legacy guard, cash/system guard, and console errors. No clone was submitted and no Firestore write occurred.
+- Hosting deployment is intentionally blocked: the existing full suite is red in six unrelated accounting/Golden assertions plus one worker timeout. The focused change set remains green; no baseline was regenerated.
+
 ### Signed merchant gold/silver positions — deployed and browser-verified 2026-08-09
 
 - Replaced the one-sided Merchant Gold Liability projection with one central signed merchant-metal carrying-value timeline: positive positions are payables, negative positions are receivables, gold uses E21, and silver uses physical grams with independent WAC state.

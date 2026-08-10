@@ -1,18 +1,16 @@
 import React, { useMemo, useState } from 'react';
-import { motion, AnimatePresence } from 'framer-motion';
+import { motion } from 'framer-motion';
 import { BookOpen, Search, Edit2, Trash2, CheckCircle2, X } from 'lucide-react';
 import { useAppStore } from '../../store';
 import { RAW_DATA } from '../../constants';
 import { doc, deleteDoc, updateDoc, collection, addDoc, serverTimestamp } from 'firebase/firestore';
 import { db, handleFirestoreError } from '../../firebase';
 import { cn } from '../../lib/utils';
-import { AccountsTreeView } from './AccountsTreeView';
 import { OperationType } from '../../types';
 
 export const AccountingGuideView = React.memo(() => {
   const { transactionRules, user } = useAppStore();
   const [searchTerm, setSearchTerm] = useState('');
-  const [subView, setSubView] = useState<'rules' | 'accounts'>('rules');
   const [editingRule, setEditingRule] = useState<any>(null);
   const [isAddingNew, setIsAddingNew] = useState(false);
 
@@ -105,28 +103,12 @@ export const AccountingGuideView = React.memo(() => {
           </div>
           <div>
             <h2 className="text-xl font-bold text-[#ddd8cc]">إدارة النظام المالي</h2>
-            <p className="text-[10px] text-[#5a5548]">تعديل شجرة الحسابات والقيود المحاسبية</p>
+            <p className="text-[10px] text-[#5a5548]">مراجعة قواعد العمليات المحاسبية</p>
           </div>
-        </div>
-        <div className="flex gap-2 bg-[#0e1018] p-1.5 rounded-2xl border border-[#1a1e2a]">
-          <button 
-            onClick={() => setSubView('rules')}
-            className={cn("px-4 py-1.5 rounded-xl text-[10px] font-bold transition-all", subView === 'rules' ? "bg-[#c9a84c] text-[#080a0f]" : "text-[#5a5548]")}
-          >
-            القيود
-          </button>
-          <button 
-            onClick={() => setSubView('accounts')}
-            className={cn("px-4 py-1.5 rounded-xl text-[10px] font-bold transition-all", subView === 'accounts' ? "bg-[#c9a84c] text-[#080a0f]" : "text-[#5a5548]")}
-          >
-            شجرة الحسابات
-          </button>
         </div>
       </div>
 
-      <AnimatePresence mode="wait">
-        {subView === 'rules' ? (
-          <motion.div 
+      <motion.div
             key="rules"
             initial={{ opacity: 0, x: 20 }}
             animate={{ opacity: 1, x: 0 }}
@@ -233,11 +215,7 @@ export const AccountingGuideView = React.memo(() => {
                 </tbody>
               </table>
             </div>
-          </motion.div>
-        ) : (
-          <AccountsTreeView />
-        )}
-      </AnimatePresence>
+      </motion.div>
     </motion.div>
   );
 });

@@ -76,6 +76,7 @@ describe('MKA-34 UI integration', () => {
       view: 'settings',
       globalError: null,
       customRules: [],
+      transactionRules: [],
       canonicalAccounts: [],
       setView: vi.fn(),
       setOpeningCostConfig: vi.fn(),
@@ -106,10 +107,9 @@ describe('MKA-34 UI integration', () => {
 
     const chartHtml = renderToStaticMarkup(<CanonicalAccountsView />);
     expect(chartHtml).toContain('دليل الحسابات');
-    expect(chartHtml).toContain('الحسابات المكتشفة');
-    expect(chartHtml).toContain('Aliases الغامضة');
-    expect(chartHtml).toContain('Migration');
-    expect(chartHtml).toContain('Parity Report');
-    expect(chartHtml).toContain('اعتماد دليل الحسابات');
+    expect(chartHtml).toContain('الحسابات والكيانات التشغيلية الفعلية');
+    expect(chartHtml).toContain('إجمالي الكيانات');
+    expect(chartHtml).not.toContain('Migration');
+    expect(chartHtml).not.toContain('Parity Report');
   });
 });

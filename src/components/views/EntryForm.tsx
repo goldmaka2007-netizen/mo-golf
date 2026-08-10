@@ -39,7 +39,6 @@ export const EntryForm = React.memo(() => {
     setView, 
     user, 
     customRules, 
-    accounts, 
     accountsDb, 
     accountCategories, 
     transactionRules, 
@@ -268,20 +267,8 @@ export const EntryForm = React.memo(() => {
   
   const debits = useMemo(() => {
     const list = Array.from(new Set(filteredRules.map(r => r.d)));
-    if (list.length > 0) return sortByUsage(list, i => i);
-    
-    // Combine all sources and remove string duplicates
-    const all = [
-      ...accounts.assets, 
-      ...accounts.liabilities, 
-      ...accounts.equity, 
-      ...accounts.revenue, 
-      ...accounts.expenses, 
-      ...accountsDb.map(a => a.name)
-    ];
-    const uniqueAll = Array.from(new Set(all.filter(Boolean)));
-    return sortByUsage(uniqueAll, i => i);
-  }, [filteredRules, accountsDb, accounts, usageStats]);
+    return sortByUsage(list, i => i);
+  }, [filteredRules, usageStats]);
 
   const credits = useMemo(() => {
     // Get list from rules and ensure unique account names
@@ -299,23 +286,8 @@ export const EntryForm = React.memo(() => {
       }
     });
 
-    if (uniqueRuleList.length > 0) return sortByUsage(uniqueRuleList, i => i.c);
-    
-    // Fallback: Combine all sources and ensure unique objects based on name
-    const all = [
-      ...accounts.assets, 
-      ...accounts.liabilities, 
-      ...accounts.equity, 
-      ...accounts.revenue, 
-      ...accounts.expenses, 
-      ...accountsDb.map(a => a.name)
-    ];
-    
-    const uniqueAllNames = Array.from(new Set(all.filter(Boolean)));
-    const fallbackList = uniqueAllNames.map(a => ({ c: a, k: null as number | null, m: 1 }));
-    
-    return sortByUsage(fallbackList, i => i.c);
-  }, [formData.debit, filteredRules, accountsDb, accounts, usageStats]);
+    return sortByUsage(uniqueRuleList, i => i.c);
+  }, [formData.debit, filteredRules, usageStats]);
 
   useEffect(() => {
     if (debits.length === 1 && formData.debit !== debits[0]) setFormData(prev => ({ ...prev, debit: debits[0], credit: '' }));
