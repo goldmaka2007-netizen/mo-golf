@@ -35,7 +35,34 @@ export const normalizeAccessoryEntryPayload = <T extends { weight?: string; coun
   isAccessory ? { ...entry, weight: entry.weight || '0', count: '0' } : entry
 );
 
-export const EntryForm = React.memo(() => {
+export const getNextInvoiceNumber = (
+  txType: string,
+  entries: Array<Pick<Entry, 'invoiceNumber'>>,
+  reservedInvoiceNumber = '',
+) => {
+  if (!txType) return '';
+  let prefix = 'TX';
+  if (txType.includes('بيع')) prefix = 'S';
+  else if (txType.includes('شراء')) prefix = 'P';
+
+  const invoiceNumbers = [
+    ...entries.map(entry => entry.invoiceNumber || ''),
+    reservedInvoiceNumber,
+  ];
+  const maxNum = invoiceNumbers.reduce((max, invoiceNumber) => {
+    const match = invoiceNumber.match(new RegExp(`^${prefix}(\\d+)$`));
+    const number = match ? Number(match[1]) : 0;
+    return number > max ? number : max;
+  }, 0);
+
+  return `${prefix}${maxNum + 1}`;
+};
+
+interface EntryFormProps {
+  onStepChange?: (step: number) => void;
+}
+
+export const EntryForm = React.memo(({ onStepChange }: EntryFormProps) => {
   const { 
     setView, 
     user, 
@@ -53,9 +80,28 @@ export const EntryForm = React.memo(() => {
   } = useAppStore();
   
   const normalize = normalizeNumerals;
+  const normalizeWeightInput = (value: string) => {
+    const normalized = normalizeNumerals(value.replace(/[,\u066B]/g, '.'));
+    return normalized.startsWith('.') ? `0${normalized}` : normalized;
+  };
+  const formatWeightOnBlur = () => {
+    setFormData(previous => {
+      if (!/^\d+(?:\.\d+)?$/.test(previous.weight)) return previous;
+      const weight = Number(previous.weight).toFixed(2);
+      return {
+        ...previous,
+        weight,
+        arabicWeight: calculateArabicWeight(weight, previous.multiplier, previous.karat),
+      };
+    });
+  };
 
   const [step, setStep] = useState(1);
   const [isSaving, setIsSaving] = useState(false);
+
+  useEffect(() => {
+    onStepChange?.(step);
+  }, [onStepChange, step]);
 
   const [usageStats, setUsageStats] = useState<Record<string, number>>({});
 
@@ -138,6 +184,7 @@ export const EntryForm = React.memo(() => {
   };
 
   const [formData, setFormData] = useState(initialFormState);
+  const lastSavedInvoiceRef = React.useRef('');
   const debitSearchRef = React.useRef<HTMLInputElement>(null);
   const creditSearchRef = React.useRef<HTMLInputElement>(null);
   const cashRef = React.useRef<HTMLInputElement>(null);
@@ -239,18 +286,7 @@ export const EntryForm = React.memo(() => {
   }, [formData.tx, formData.debit, formData.credit, goldPrice, silverPrice]);
 
   const generateInvoiceNumber = (txType: string) => {
-    if (!txType) return '';
-    let prefix = 'TX';
-    if (txType.includes('بيع')) prefix = 'S';
-    else if (txType.includes('شراء')) prefix = 'P';
-    const maxNum = entries.reduce((max, e) => {
-      if (e.invoiceNumber?.startsWith(prefix)) {
-        const num = parseInt(e.invoiceNumber.replace(prefix, ''), 10);
-        return num > max ? num : max;
-      }
-      return max;
-    }, 0);
-    return `${prefix}${maxNum + 1}`;
+    return getNextInvoiceNumber(txType, entries, lastSavedInvoiceRef.current);
   };
 
   const handleTxSelect = (item: string) => {
@@ -364,6 +400,16 @@ export const EntryForm = React.memo(() => {
       return;
     }
 
+    const normalizedInvoiceNumber = String(entry.invoiceNumber || '').trim();
+    const invoiceNumberAlreadyUsed = normalizedInvoiceNumber && (
+      lastSavedInvoiceRef.current === normalizedInvoiceNumber
+      || entries.some(existing => String(existing.invoiceNumber || '').trim() === normalizedInvoiceNumber)
+    );
+    if (invoiceNumberAlreadyUsed) {
+      setGlobalError(`رقم الفاتورة ${normalizedInvoiceNumber} مستخدم بالفعل. كل عملية يجب أن يكون لها رقم فاتورة مستقل.`);
+      return;
+    }
+
     // The legacy engine remains authoritative, while the central matrix acts
     // as a save-time guard once the shadow registry has been initialized.
     if (canonicalAccounts.length > 0) {
@@ -409,6 +455,7 @@ export const EntryForm = React.memo(() => {
         return;
       }
       await addDoc(collection(db, 'entries'), entry);
+      lastSavedInvoiceRef.current = normalizedInvoiceNumber;
       
       // Transition to success step only after successful save
       setStep(4);
@@ -435,15 +482,14 @@ export const EntryForm = React.memo(() => {
     resetForm();
   };
 
-  const continueSameInvoice = () => {
+  const startSameTypeOperation = () => {
     setFormData(prev => ({
       ...initialFormState,
       date: prev.date,
-      invoiceNumber: prev.invoiceNumber,
-      clientName: prev.clientName,
-      clientPhone: prev.clientPhone,
+      tx: prev.tx,
+      invoiceNumber: generateInvoiceNumber(prev.tx),
     }));
-    setStep(1); // Go back to step 1 to choose the new tx type
+    setStep(2);
   };
 
   const renderStep1 = () => (
@@ -511,28 +557,31 @@ export const EntryForm = React.memo(() => {
   }, [isAccessory, formData.count, formData.weight, formData.tx, formData.debit, formData.credit]);
 
   const renderStep2 = () => (
-    <div className="space-y-5 animate-in fade-in">
-      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+    <div className="flex flex-1 flex-col justify-between space-y-2.5 animate-in fade-in">
+      <div className="grid grid-cols-2 gap-2">
         <FormInput 
           label="التاريخ"
           type="date" 
           value={formData.date} 
           onChangeValue={(v) => setFormData(p => ({ ...p, date: v }))} 
-          containerClassName="space-y-1"
+          containerClassName="space-y-0.5"
+          className="rounded-lg px-2 py-1.5 text-xs"
         />
         <FormInput 
           label="الفاتورة"
           type="text" 
           value={formData.invoiceNumber} 
           onChangeValue={(v) => setFormData(p => ({ ...p, invoiceNumber: v }))} 
-          containerClassName="space-y-1"
+          containerClassName="space-y-0.5"
+          className="rounded-lg px-2 py-1.5 text-xs"
         />
       </div>
 
-      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 bg-[#11141d]/30 p-3 rounded-2xl border border-[#1a1e2a] relative">
+      <div className="grid grid-cols-2 gap-2 bg-[#11141d]/25 p-2 rounded-xl border border-[#1a1e2a] relative">
         <AccountSearchSelect 
           label="المدين"
           theme="debit"
+          compact
           value={formData.debit}
           options={debits as string[]}
           onSelect={(val) => setFormData(p => ({ ...p, debit: val, credit: '' }))}
@@ -541,6 +590,7 @@ export const EntryForm = React.memo(() => {
         <AccountSearchSelect 
           label="الدائن"
           theme="credit"
+          compact
           value={formData.credit}
           options={credits as any}
           onSelect={(val, karat, mult) => {
@@ -553,7 +603,16 @@ export const EntryForm = React.memo(() => {
         />
       </div>
 
-      <div className={cn("grid gap-3", showCash && (showWeightAndCount || isAccessory) ? "grid-cols-1 md:grid-cols-2" : "grid-cols-1")}>
+      <div className={cn(
+        "grid gap-2",
+        showCash && showWeightAndCount
+          ? "grid-cols-3"
+          : showCash && isAccessory
+            ? "grid-cols-2"
+            : showWeightAndCount
+              ? "grid-cols-2"
+              : "grid-cols-1",
+      )}>
         {showCash && (
           <FormInput 
             ref={cashRef}
@@ -562,13 +621,13 @@ export const EntryForm = React.memo(() => {
             inputMode="numeric"
             value={formData.cash}
             onChangeValue={(v) => setFormData(p => ({ ...p, cash: normalize(v) }))}
-            containerClassName="space-y-2"
-            labelClassName="text-[#6a9e6a]"
-            className="border-2 py-4 px-4 text-2xl font-black text-[#6a9e6a] text-center font-mono"
+            containerClassName="space-y-1"
+            labelClassName="text-[#6a9e6a] group-focus-within:text-[#8bc48b]"
+            className="border-2 rounded-xl px-2 py-2.5 text-lg font-black text-[#6a9e6a] text-center font-mono focus:border-[#c9a84c] focus:shadow-[0_0_10px_rgba(201,168,76,0.16)]"
           />
         )}
         {(showWeightAndCount || isAccessory) && (
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+          <>
             {showWeightAndCount && (
               <FormInput 
                 ref={weightRef}
@@ -577,12 +636,13 @@ export const EntryForm = React.memo(() => {
                 inputMode="decimal"
                 value={formData.weight}
                 onChangeValue={(v) => {
-                  let w = normalize(v);
+                  const w = normalizeWeightInput(v);
                   setFormData(p => ({ ...p, weight: w, arabicWeight: calculateArabicWeight(w, p.multiplier, p.karat) }));
                 }}
-                containerClassName="space-y-2"
-                labelClassName="text-[#c9a84c]"
-                className="border-2 py-4 px-4 text-xl font-black text-[#ddd8cc] text-center font-mono"
+                onBlur={formatWeightOnBlur}
+                containerClassName="space-y-1"
+                labelClassName="text-[#c9a84c] group-focus-within:text-[#f2cf76]"
+                className="border-2 rounded-xl px-2 py-2.5 text-lg font-black text-[#ddd8cc] text-center font-mono focus:border-[#c9a84c] focus:shadow-[0_0_10px_rgba(201,168,76,0.16)]"
               />
             )}
             <FormInput 
@@ -591,22 +651,22 @@ export const EntryForm = React.memo(() => {
               inputMode="numeric"
               value={formData.count}
               onChangeValue={(v) => setFormData(p => ({ ...p, count: normalize(v) }))}
-              containerClassName="space-y-2"
-              labelClassName="text-[#c9a84c]"
-              className="border-2 py-4 px-4 text-xl font-black text-[#ddd8cc] text-center font-mono"
+              containerClassName="space-y-1"
+              labelClassName="text-[#c9a84c] group-focus-within:text-[#f2cf76]"
+              className="border-2 rounded-xl px-2 py-2.5 text-lg font-black text-[#ddd8cc] text-center font-mono focus:border-[#c9a84c] focus:shadow-[0_0_10px_rgba(201,168,76,0.16)]"
             />
-          </div>
+          </>
         )}
       </div>
 
       {showWeightAndCount && (
-        <div className="bg-[#11141d]/50 border border-[#c9a84c33] rounded-xl py-2 px-4 text-center">
-          <div className="text-[8px] text-[#c9a84c] font-black uppercase">وزن موحد (٢١)</div>
-          <div className="text-xl font-bold text-[#c9a84c] font-mono">{parseFloat(formData.arabicWeight || '0').toFixed(2)}</div>
+        <div className="flex items-center justify-between bg-[#11141d]/30 border border-[#c9a84c22] rounded-lg py-1.5 px-2">
+          <span className="text-[8px] text-[#8a8578] font-bold">وزن موحد (٢١) تلقائيًا</span>
+          <span className="text-sm font-bold text-[#c9a84c] font-mono">{parseFloat(formData.arabicWeight || '0').toFixed(2)} جم</span>
         </div>
       )}
 
-      <button onClick={() => setStep(3)} className="w-full bg-gradient-to-r from-[#c9a84c] to-[#9a7830] text-[#080a0f] font-bold py-4 rounded-2xl shadow-lg hover:shadow-[#c9a84c44] transition-all active:scale-95">التالي</button>
+      <button onClick={() => setStep(3)} className="w-full bg-gradient-to-r from-[#c9a84c] to-[#9a7830] text-[#080a0f] font-bold py-2.5 rounded-xl shadow-lg hover:shadow-[#c9a84c44] transition-all active:scale-95">التالي</button>
     </div>
   );
 
@@ -791,11 +851,11 @@ export const EntryForm = React.memo(() => {
         <p className="text-[10px] text-[#5a5548] font-bold mt-2">فاتورة رقم: {formData.invoiceNumber}</p>
         
         <div className="flex flex-col gap-3 max-w-sm mx-auto">
-          <button onClick={continueSameInvoice} className="w-full bg-[#1a1e2a] text-[#ddd8cc] border border-[#c9a84c33] hover:border-[#c9a84c66] hover:bg-[#c9a84c11] py-4 rounded-2xl font-bold transition-all active:scale-95">
-            إضافة صنف آخر (نفس الفاتورة)
+          <button onClick={startSameTypeOperation} className="w-full bg-[#1a1e2a] text-[#ddd8cc] border border-[#c9a84c33] hover:border-[#c9a84c66] hover:bg-[#c9a84c11] py-4 rounded-2xl font-bold transition-all active:scale-95">
+            عملية جديدة من نفس النوع
           </button>
           <button onClick={resetForm} className="w-full bg-gradient-to-r from-[#c9a84c] to-[#9a7830] text-[#080a0f] py-4 rounded-2xl font-bold shadow-lg hover:shadow-[#c9a84c44] transition-all active:scale-95">
-            إنهاء وبدء قيد جديد
+            عملية جديدة
           </button>
         </div>
       </div>
@@ -808,19 +868,21 @@ export const EntryForm = React.memo(() => {
       animate={{ opacity: 1, x: 0 }}
       onKeyDown={handleKeyDown}
       className={cn(
-        'relative space-y-5 overflow-hidden',
+        'relative overflow-hidden',
         step === 1
-          ? '-mx-4 bg-[radial-gradient(circle_at_85%_0%,rgba(201,154,46,0.13),transparent_34%),radial-gradient(circle_at_0%_32%,rgba(201,154,46,0.07),transparent_28%),#fffdf7] px-4 pb-5'
-          : 'rounded-2xl border border-[#1a1e2a] bg-[#0e1018] p-4 shadow-2xl sm:p-6',
+          ? 'space-y-5 -mx-4 bg-[radial-gradient(circle_at_85%_0%,rgba(201,154,46,0.13),transparent_34%),radial-gradient(circle_at_0%_32%,rgba(201,154,46,0.07),transparent_28%),#fffdf7] px-4 pb-5'
+          : step === 2
+            ? 'flex flex-1 flex-col space-y-3 -mx-4 bg-[#0a0d14] px-3 py-3 shadow-xl sm:mx-0 sm:rounded-2xl sm:border sm:border-[#1a1e2a] sm:p-4'
+            : 'space-y-5 rounded-2xl border border-[#1a1e2a] bg-[#0e1018] p-4 shadow-2xl sm:p-6',
       )}
     >
       {step > 1 && <div className="absolute left-0 top-0 h-1.5 w-full bg-[#1a1e2a]"><motion.div animate={{ width: `${(step / 4) * 100}%` }} className="h-full bg-gradient-to-r from-[#c9a84c] to-[#9a7830]" /></div>}
       
-      {step > 1 && <div className="flex justify-between items-center bg-[#11141d]/50 p-3 rounded-2xl border border-[#1a1e2a] gap-3">
+      {step > 1 && <div className={cn("flex justify-between items-center bg-[#11141d]/50 border border-[#1a1e2a]", step === 2 ? "p-2 rounded-xl gap-2" : "p-3 rounded-2xl gap-3")}>
         <div className="flex items-center gap-2">
-          <button onClick={() => setView('guide')} className="px-3 py-2 bg-[#c9a84c0a] border border-[#c9a84c22] rounded-xl text-[10px] font-black text-[#c9a84c] hover:bg-[#c9a84c22] transition-all">دليل العمليات</button>
+          <button onClick={() => setView('guide')} className={cn("bg-[#c9a84c0a] border border-[#c9a84c22] rounded-xl text-[10px] font-black text-[#c9a84c] hover:bg-[#c9a84c22] transition-all", step === 2 ? "px-2 py-1.5" : "px-3 py-2")}>دليل العمليات</button>
           {formData.tx && step > 1 && (
-            <button onClick={clearDraft} className="px-3 py-2 bg-red-500/05 border border-red-500/20 rounded-xl text-[10px] font-black text-red-500 hover:bg-red-500/15 transition-all">بدء من جديد</button>
+            <button onClick={clearDraft} className={cn("bg-red-500/05 border border-red-500/20 rounded-xl text-[10px] font-black text-red-500 hover:bg-red-500/15 transition-all", step === 2 ? "px-2 py-1.5" : "px-3 py-2")}>بدء من جديد</button>
           )}
         </div>
         <div className="flex items-center gap-2">

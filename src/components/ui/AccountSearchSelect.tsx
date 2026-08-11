@@ -14,9 +14,10 @@ interface Props {
   options: string[] | AccountOption[]; 
   onSelect: (name: string, karat?: number | null, multiplier?: number) => void;
   inputRef?: React.RefObject<HTMLInputElement>;
+  compact?: boolean;
 }
 
-export const AccountSearchSelect = ({ label, theme, value, options, onSelect, inputRef }: Props) => {
+export const AccountSearchSelect = ({ label, theme, value, options, onSelect, inputRef, compact = false }: Props) => {
   const [search, setSearch] = React.useState('');
   
   const isDebit = theme === 'debit';
@@ -38,22 +39,22 @@ export const AccountSearchSelect = ({ label, theme, value, options, onSelect, in
 
   return (
     <div className={cn(
-      "p-3 rounded-2xl border-2 min-h-[100px] flex flex-col justify-between transition-all", 
+      compact ? "p-2 rounded-xl border min-h-[68px] flex flex-col justify-between transition-all" : "p-3 rounded-2xl border-2 min-h-[100px] flex flex-col justify-between transition-all",
       value ? `${themeColors.bg} ${themeColors.borderActive}` : "bg-[#080a0f] border-[#1a1e2a]"
     )}>
       <div className={cn("text-[8px] font-black uppercase", themeColors.textTitle)}>{label}</div>
-      <div className="text-sm font-bold text-[#ddd8cc] text-right truncate" title={value || ""}>
+      <div className={cn(compact ? "text-xs" : "text-sm", "font-bold text-[#ddd8cc] text-right truncate")} title={value || ""}>
         {value || "اختر..."}
       </div>
       {options.length > 1 && (
-        <div className="relative mt-2">
+        <div className={cn("relative", compact ? "mt-1" : "mt-2")}>
           <input 
             ref={inputRef} 
             type="text" 
             value={search} 
             onChange={(e) => setSearch(e.target.value)} 
             placeholder="بحث..." 
-            className={cn("w-full bg-[#11141d] rounded-lg p-1.5 text-[9px] text-[#ddd8cc] outline-none border border-[#1a1e2a] transition-all", themeColors.focusBorder)}
+            className={cn("w-full bg-[#11141d] rounded-lg text-[#ddd8cc] outline-none border border-[#1a1e2a] transition-all", compact ? "p-1 text-[8px]" : "p-1.5 text-[9px]", themeColors.focusBorder)}
           />
           {search && (
             <div className="absolute top-full left-0 right-0 z-50 mt-1 max-h-32 overflow-y-auto bg-[#0e1018] border border-[#1a1e2a] rounded-xl shadow-2xl custom-scrollbar">

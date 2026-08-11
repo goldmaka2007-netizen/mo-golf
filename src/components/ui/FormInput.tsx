@@ -17,7 +17,7 @@ export const FormInput = forwardRef<HTMLInputElement, FormInputProps>(
     };
 
     return (
-      <div className={cn("space-y-1", containerClassName)}>
+      <div className={cn("group space-y-1", containerClassName)}>
         {label && (
           <label className={cn("text-[9px] text-[#5a5548] font-black uppercase block", labelClassName)}>
             {label}
