@@ -22,11 +22,11 @@ This file is intentionally current and may change frequently. Verify the head SH
 - Dashboard gold/silver price editor restored.
 - Dashboard return path uses an in-memory result cache keyed by existing inputs.
 
-### WAC audit Excel export — implemented locally, pending deployment 2026-08-12
+### WAC audit Excel export — deployed and verified 2026-08-12
 
 - Settings > Import/Export now includes a local, read-only `makka_wac_audit_YYYY-MM-DD.xlsx` export with Arabic sheets for WAC summary, inventory movements, merchant signed carrying-value movements, and combined diagnostics.
 - The report consumes the canonical runtime Inventory WAC timeline and the existing signed merchant-metal carrying-value timeline; audit snapshots are rebuilt through those same paths and introduce no posting or valuation formula.
-- Focused export/inventory/merchant tests, TypeScript, Balance Contract Guard, and one production build passed. Firestore data, Rules, Functions, Storage, and Auth remain out of scope.
+- Focused export/inventory/merchant tests, TypeScript, Balance Contract Guard, and one production build passed. Commit `b9f6d54` was pushed and deployed to Firebase Hosting only; production root and `assets/index-C38ElpCE.js` returned HTTP 200. Firestore data, Rules, Functions, Storage, and Auth remain out of scope.
 
 ## Verified central implementation landmarks
 
