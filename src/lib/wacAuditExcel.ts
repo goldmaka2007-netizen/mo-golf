@@ -1,8 +1,6 @@
 import * as XLSX from 'xlsx';
 import type { Account, Entry } from '../types';
 import { buildMerchantMetalPositionTimeline, type MerchantGoldLiabilityState } from './merchantGoldLiability';
-import { rebuildRuntimeInventoryCostTimeline } from './costRecalculation';
-import { compareEntriesForPhase5Cost } from './inventoryCostEngine';
 import type { InventoryCostState, InventoryCostTimeline, Phase5OpeningCostConfig } from './inventoryCostTypes';
 
 const GRAM_SCALE = 100;
@@ -33,20 +31,57 @@ const inventoryAccountName = (accountsById: Map<string, Account>, accountId?: st
 const wacPerGram = (minorPerUnit: number | null | undefined): number | null =>
   minorPerUnit === null || minorPerUnit === undefined ? null : minorPerUnit;
 
-const inventorySnapshot = (timeline: InventoryCostTimeline, accountId?: string): InventoryCostState | undefined =>
-  accountId ? timeline.finalStates[accountId] : undefined;
+type InventoryAuditState = Pick<InventoryCostState,
+  'kind' | 'standardizedQuantityUnits' | 'actualPhysicalWeightUnits' | 'accessoryQuantityUnits' | 'remainingTotalCostMinor'>;
+
+const inventoryAuditSnapshot = (state: InventoryAuditState | undefined): InventoryAuditState | undefined =>
+  state && { ...state };
+
+const inventoryAuditWac = (state: InventoryAuditState | undefined): number | null => {
+  if (!state) return null;
+  const units = state.kind === 'accessory' ? state.accessoryQuantityUnits : state.standardizedQuantityUnits;
+  if (units <= 0) return null;
+  return state.kind === 'accessory'
+    ? (state.remainingTotalCostMinor * 1000) / units
+    : (state.remainingTotalCostMinor * GRAM_SCALE) / units;
+};
+
+const createInventoryAuditStates = (timeline: InventoryCostTimeline): Map<string, InventoryAuditState> =>
+  new Map(Object.values(timeline.finalStates).map(state => [state.inventoryAccountId, {
+    kind: state.kind,
+    standardizedQuantityUnits: 0,
+    actualPhysicalWeightUnits: 0,
+    accessoryQuantityUnits: 0,
+    remainingTotalCostMinor: 0,
+  }]));
+
+const applyInventoryAuditDelta = (
+  states: Map<string, InventoryAuditState>,
+  accountId: string | undefined,
+  result: InventoryCostTimeline['results'][number],
+  direction: 1 | -1,
+): void => {
+  if (!accountId) return;
+  const state = states.get(accountId);
+  if (!state) throw new Error(`WAC audit cannot find authoritative inventory state for ${accountId}.`);
+  const incoming = direction === 1;
+  state.standardizedQuantityUnits += direction * (incoming ? result.incomingStandardizedQuantityUnits : result.outgoingStandardizedQuantityUnits);
+  state.actualPhysicalWeightUnits += direction * (incoming ? result.incomingActualPhysicalWeightUnits : result.outgoingActualPhysicalWeightUnits);
+  state.accessoryQuantityUnits += direction * (incoming ? result.incomingAccessoryQuantityUnits : result.outgoingAccessoryQuantityUnits);
+  state.remainingTotalCostMinor += direction * (incoming ? result.incomingTotalCostMinor : result.outgoingTotalCostMinor);
+};
 
 const inventoryRows = (input: WacAuditWorkbookInput, accountsById: Map<string, Account>): ExcelRow[] => {
-  const orderedEntries = input.inventoryTimeline.results.map(result => result.entry);
-  const rebuild = input.rebuildInventoryTimeline
-    ?? ((entries: Entry[]) => rebuildRuntimeInventoryCostTimeline(entries, input.accounts, input.openingCostConfig));
-  let before = rebuild([]);
+  const states = createInventoryAuditStates(input.inventoryTimeline);
 
-  return input.inventoryTimeline.results.map((result, index) => {
-    const after = rebuild(orderedEntries.slice(0, index + 1));
+  return input.inventoryTimeline.results.map(result => {
     const snapshotAccountId = result.destinationInventoryAccountId ?? result.inventoryAccountId ?? result.sourceInventoryAccountId;
-    const stateBefore = inventorySnapshot(before, snapshotAccountId);
-    const stateAfter = inventorySnapshot(after, snapshotAccountId);
+    const stateBefore = inventoryAuditSnapshot(states.get(snapshotAccountId ?? ''));
+    // Every quantity and carrying-value delta below is already calculated by the canonical timeline.
+    // This pass intentionally never invokes a cost engine or derives cost from raw entries.
+    applyInventoryAuditDelta(states, result.sourceInventoryAccountId ?? (result.destinationInventoryAccountId ? undefined : result.inventoryAccountId), result, -1);
+    applyInventoryAuditDelta(states, result.destinationInventoryAccountId ?? result.inventoryAccountId, result, 1);
+    const stateAfter = inventoryAuditSnapshot(states.get(snapshotAccountId ?? ''));
     const row: ExcelRow = {
       'التاريخ': result.entry.date,
       'رقم العملية': operationNumber(result.entry),
@@ -73,43 +108,58 @@ const inventoryRows = (input: WacAuditWorkbookInput, accountsById: Map<string, A
       'الربح': egp(result.profitMinor),
       'مكسب التسوية/الزيادة': egp(result.adjustmentGainMinor),
       'خسارة التسوية/العجز': egp(result.adjustmentLossMinor),
-      'WAC قبل الحركة': wacPerGram(stateBefore?.totalWacMinorPerDisplayUnit),
+      'WAC قبل الحركة': inventoryAuditWac(stateBefore),
       'WAC المستخدم في الخروج': result.outgoingStandardizedQuantityUnits > 0
         ? egp(result.outgoingTotalCostMinor)! / grams(result.outgoingStandardizedQuantityUnits)!
         : null,
-      'WAC بعد الحركة': wacPerGram(stateAfter?.totalWacMinorPerDisplayUnit),
+      'WAC بعد الحركة': inventoryAuditWac(stateAfter),
       'رصيد الوزن قبل': stateBefore?.kind === 'accessory' ? grams(stateBefore.accessoryQuantityUnits) : grams(stateBefore?.actualPhysicalWeightUnits),
       'رصيد الوزن بعد': stateAfter?.kind === 'accessory' ? grams(stateAfter.accessoryQuantityUnits) : grams(stateAfter?.actualPhysicalWeightUnits),
       'القيمة الدفترية قبل': egp(stateBefore?.remainingTotalCostMinor),
       'القيمة الدفترية بعد': egp(stateAfter?.remainingTotalCostMinor),
       'Calculation version': result.calculationVersion,
     };
-    before = after;
     return row;
   });
 };
 
 const merchantRows = (input: WacAuditWorkbookInput, accountsById: Map<string, Account>): ExcelRow[] => {
-  const orderedEntries = [...input.entries].sort(compareEntriesForPhase5Cost);
   const complete = buildMerchantMetalPositionTimeline(input.entries, input.accounts, input.inventoryTimeline);
-  const rebuild = input.rebuildInventoryTimeline
-    ?? ((entries: Entry[]) => rebuildRuntimeInventoryCostTimeline(entries, input.accounts, input.openingCostConfig));
-  let previousEntries: Entry[] = [];
-
-  return complete.movements.map(movement => {
-    const operationIndex = orderedEntries.indexOf(movement.entry) >= 0
-      ? orderedEntries.indexOf(movement.entry)
-      : orderedEntries.findIndex(entry => String(entry.id ?? '') === movement.operationId || String(entry.legacyOperationId ?? '') === movement.operationId);
-    const upto = operationIndex >= 0 ? orderedEntries.slice(0, operationIndex + 1) : previousEntries;
-    const beforeInventory = rebuild(previousEntries);
-    const afterInventory = rebuild(upto);
-    const beforeMerchant = buildMerchantMetalPositionTimeline(previousEntries, input.accounts, beforeInventory);
-    const afterMerchant = buildMerchantMetalPositionTimeline(upto, input.accounts, afterInventory);
-    const accountId = movement.destinationMerchantAccountId ?? movement.sourceMerchantAccountId ?? '';
-    const beforeState = beforeMerchant.finalStates[accountId];
-    const afterState = afterMerchant.finalStates[accountId];
-    previousEntries = upto;
+  const states = new Map(Object.values(complete.finalStates).map(state => [state.merchantAccountId, {
+    metal: state.metal, signedQuantityUnits: 0, signedCarryingValueMinor: 0,
+  }]));
+  const snapshot = (accountId: string): MerchantGoldLiabilityState | undefined => {
+    const state = states.get(accountId);
+    if (!state) return undefined;
+    const signedQuantity = state.signedQuantityUnits / GRAM_SCALE;
+    const side = state.signedQuantityUnits > 0 ? 'payable' : state.signedQuantityUnits < 0 ? 'receivable' : 'settled';
     return {
+      merchantAccountId: accountId, merchantName: accountsById.get(accountId)?.name ?? '', metal: state.metal,
+      signedQuantityUnits: state.signedQuantityUnits, signedQuantity, positionSide: side,
+      signedCarryingValueMinor: state.signedCarryingValueMinor,
+      payableBookValueMinor: side === 'payable' ? state.signedCarryingValueMinor : 0,
+      receivableBookValueMinor: side === 'receivable' ? -state.signedCarryingValueMinor : 0,
+      currentWacMinorPerUnit: state.signedQuantityUnits === 0 ? null : Math.abs(state.signedCarryingValueMinor) / Math.abs(state.signedQuantityUnits),
+      goldE21BalanceUnits: state.metal === 'gold' ? state.signedQuantityUnits : 0, goldE21Balance: state.metal === 'gold' ? signedQuantity : 0,
+      goldLiabilityBookValueMinor: state.metal === 'gold' && side === 'payable' ? state.signedCarryingValueMinor : 0,
+      goldReceivableBookValueMinor: state.metal === 'gold' && side === 'receivable' ? -state.signedCarryingValueMinor : 0,
+      goldLiabilityWacMinorPerE21Unit: state.metal === 'gold' && side === 'payable' ? Math.abs(state.signedCarryingValueMinor) / Math.abs(state.signedQuantityUnits) : null,
+      goldReceivableWacMinorPerE21Unit: state.metal === 'gold' && side === 'receivable' ? Math.abs(state.signedCarryingValueMinor) / Math.abs(state.signedQuantityUnits) : null,
+      silverBalanceUnits: state.metal === 'silver' ? state.signedQuantityUnits : 0, silverBalance: state.metal === 'silver' ? signedQuantity : 0,
+      silverLiabilityBookValueMinor: state.metal === 'silver' && side === 'payable' ? state.signedCarryingValueMinor : 0,
+      silverReceivableBookValueMinor: state.metal === 'silver' && side === 'receivable' ? -state.signedCarryingValueMinor : 0,
+      silverLiabilityWacMinorPerUnit: state.metal === 'silver' && side === 'payable' ? Math.abs(state.signedCarryingValueMinor) / Math.abs(state.signedQuantityUnits) : null,
+      silverReceivableWacMinorPerUnit: state.metal === 'silver' && side === 'receivable' ? Math.abs(state.signedCarryingValueMinor) / Math.abs(state.signedQuantityUnits) : null,
+    };
+  };
+  const apply = (accountId: string | undefined, quantityDelta: number, valueDelta: number): void => {
+    if (!accountId) return;
+    const state = states.get(accountId);
+    if (!state) throw new Error(`WAC audit cannot find authoritative merchant state for ${accountId}.`);
+    state.signedQuantityUnits += quantityDelta;
+    state.signedCarryingValueMinor += valueDelta;
+  };
+  const row = (movement: typeof complete.movements[number], accountId: string, beforeState: MerchantGoldLiabilityState | undefined, afterState: MerchantGoldLiabilityState | undefined): ExcelRow => ({
       'التاريخ': movement.entry.date,
       'رقم العملية': operationNumber(movement.entry),
       'Operation ID': movement.operationId,
@@ -137,7 +187,21 @@ const merchantRows = (input: WacAuditWorkbookInput, accountsById: Map<string, Ac
       'Settlement Loss': egp(movement.settlementLossMinor),
       'Valuation Source': movement.valuationSource ?? '',
       'Merchant WAC بعد الحركة': wacPerGram(afterState?.currentWacMinorPerUnit),
-    };
+    });
+
+  return complete.movements.flatMap(movement => {
+    const source = movement.sourceMerchantAccountId;
+    const destination = movement.destinationMerchantAccountId;
+    const sourceBefore = source ? snapshot(source) : undefined;
+    const destinationBefore = destination ? snapshot(destination) : undefined;
+    apply(source, -movement.quantityUnits, -movement.merchantDebitValueMinor);
+    apply(destination, movement.quantityUnits, movement.merchantCreditValueMinor);
+    // Transfers intentionally emit both affected merchant buckets under the existing columns.
+    if (source && destination && source !== destination) {
+      return [row(movement, source, sourceBefore, snapshot(source)), row(movement, destination, destinationBefore, snapshot(destination))];
+    }
+    const accountId = destination ?? source ?? '';
+    return accountId ? [row(movement, accountId, destination ? destinationBefore : sourceBefore, snapshot(accountId))] : [];
   });
 };
 

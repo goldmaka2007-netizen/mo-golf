@@ -47,6 +47,7 @@ export const SettingsView = React.memo(() => {
   const [importText, setImportText] = useState('');
   const [isImporting, setIsImporting] = useState(false);
   const [isDeletingAll, setIsDeletingAll] = useState(false);
+  const [isGeneratingWacAudit, setIsGeneratingWacAudit] = useState(false);
   const [showDeleteAllConfirm, setShowDeleteAllConfirm] = useState(false);
   const [activeTab, setActiveTab] = useState<'rules' | 'cost' | 'import' | 'accounts'>('rules');
 
@@ -194,21 +195,35 @@ export const SettingsView = React.memo(() => {
     }
   };
 
-  const handleExportWacAudit = () => {
+  const handleExportWacAudit = async () => {
     if (costCalculationRun.status !== 'valid' || !costCalculationRun.timeline?.valid) {
       setGlobalError('لا يمكن تصدير تقرير WAC قبل اكتمال حساب التكلفة المركزي بنجاح.');
       return;
     }
+    setIsGeneratingWacAudit(true);
     try {
+      // Let the loading state paint before serializing a large browser-local workbook.
+      await new Promise<void>(resolve => requestAnimationFrame(() => resolve()));
       const workbook = buildWacAuditWorkbook({
         entries,
         accounts: accountsDb,
         openingCostConfig: buildOpeningCostConfig(openingCostConfig, accountsDb),
         inventoryTimeline: costCalculationRun.timeline,
       });
-      XLSX.writeFile(workbook, wacAuditFilename());
+      const bytes = XLSX.write(workbook, { type: 'array', bookType: 'xlsx' });
+      const url = URL.createObjectURL(new Blob([bytes], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' }));
+      const anchor = document.createElement('a');
+      anchor.href = url;
+      anchor.download = wacAuditFilename();
+      anchor.style.display = 'none';
+      document.body.appendChild(anchor);
+      anchor.click();
+      anchor.remove();
+      window.setTimeout(() => URL.revokeObjectURL(url), 0);
     } catch (error) {
       setGlobalError(error instanceof Error ? `تعذر تصدير تقرير WAC: ${error.message}` : 'تعذر تصدير تقرير WAC.');
+    } finally {
+      setIsGeneratingWacAudit(false);
     }
   };
 
@@ -737,11 +752,11 @@ export const SettingsView = React.memo(() => {
                 <button
                   type="button"
                   onClick={handleExportWacAudit}
-                  disabled={costCalculationRun.status !== 'valid' || !costCalculationRun.timeline?.valid}
+                  disabled={isGeneratingWacAudit}
                   className="w-full py-3 bg-[#1a1e2a] text-[#c9a84c] rounded-xl hover:bg-[#c9a84c22] transition-all text-xs font-bold border border-[#c9a84c22] flex items-center justify-center gap-2 disabled:cursor-not-allowed disabled:opacity-50"
                 >
-                  <Download className="w-4 h-4" />
-                  تصدير تقرير WAC الشامل
+                  {isGeneratingWacAudit ? <Loader2 className="w-4 h-4 animate-spin" /> : <Download className="w-4 h-4" />}
+                  {isGeneratingWacAudit ? 'جاري تجهيز تقرير WAC...' : 'تصدير تقرير WAC الشامل'}
                 </button>
               </div>
 

@@ -75,11 +75,47 @@ describe('WAC audit Excel export', () => {
     expect(movement['Settlement Loss']).toBe(0);
   });
 
+  it('shows authoritative before/after state for both sides of a merchant transfer', () => {
+    const movements = records('حركات التجار WAC').filter(row => row['Operation ID'] === 'merchant-transfer');
+    const source = movements.find(row => row['Merchant Account ID'] === 'merchant-a')!;
+    const destination = movements.find(row => row['Merchant Account ID'] === 'merchant-b')!;
+    expect(movements).toHaveLength(2);
+    expect(source['الرصيد بعد الحركة']).toBe(1);
+    expect(source['القيمة الدفترية بعد']).toBe(120);
+    expect(destination['الرصيد قبل الحركة']).toBe(0);
+    expect(destination['الرصيد بعد الحركة']).toBe(1);
+    expect(destination['القيمة الدفترية بعد']).toBe(120);
+  });
+
   it('exports separate merchant and inventory WAC values with exact physical-settlement gain/loss', () => {
     const movement = records('حركات التجار WAC').find(row => row['Operation ID'] === 'settlement')!;
     expect(movement['Merchant Liability Released']).toBe(120);
     expect(movement['Inventory Book Value Released']).toBe(103.34);
     expect(movement['Settlement Gain']).toBe(16.66);
     expect(movement['Merchant WAC قبل الحركة']).toBe(120);
+  });
+
+  it('exports a 2,000-operation history without any per-row inventory timeline rebuild', () => {
+    const largeEntries: Entry[] = [entries[0], ...Array.from({ length: 2_000 }, (_, index) => entry(`large-${index}`, index + 2, {
+      tx: 'تاجر ذهب', debit: 'ذهب أ', debitAccountId: 'gold-a', credit: 'التاجر أ', creditAccountId: 'merchant-a',
+      weight: '1', arabicWeight: '1', invoiceOfficialPricePerGramEgp: 120,
+    }))];
+    const timeline = rebuild(largeEntries);
+    let rebuildCalls = 0;
+
+    const exported = buildWacAuditWorkbook({
+      entries: largeEntries,
+      accounts,
+      openingCostConfig: config,
+      inventoryTimeline: timeline,
+      rebuildInventoryTimeline: () => {
+        rebuildCalls += 1;
+        throw new Error('Export must not rebuild inventory timelines per row.');
+      },
+    });
+
+    expect(rebuildCalls).toBe(0);
+    expect(exported.SheetNames).toContain('حركات المخزون WAC');
+    expect(exported.SheetNames).toContain('حركات التجار WAC');
   });
 });
