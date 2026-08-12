@@ -32,14 +32,14 @@ export const validateAccountingPolicy = (entry: Partial<Entry>, accounts: Accoun
   const issues: AccountingPolicyIssue[] = [];
 
   const incomingGold = debit.is_inventory && debit.metal === 'gold';
-  if (kind === 'purchase' && incomingGold && debit.type === 'gold_product') {
+  const traderReceipt = debit.is_inventory && credit.type === 'merchant';
+  if (kind === 'purchase' && incomingGold && debit.type === 'gold_product' && !traderReceipt) {
     issues.push({
       code: 'finished_gold_direct_purchase',
       message: 'لا يجوز شراء المشغولات الذهبية مباشرة. الإدخال مسموح من تاجر أو تفييت أو تحويل أو زيادة مخزون فقط.',
     });
   }
 
-  const traderReceipt = debit.is_inventory && credit.type === 'merchant';
   if (traderReceipt && (!(Number(entry.marketPrice) > 0) || !Number.isFinite(Number(entry.marketPrice)))) {
     issues.push({ code: 'trader_invoice_price_missing', message: 'فاتورة التاجر تحتاج سعر الذهب المثبت في الفاتورة.' });
   }

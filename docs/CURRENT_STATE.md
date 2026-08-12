@@ -22,6 +22,12 @@ This file is intentionally current and may change frequently. Verify the head SH
 - Dashboard gold/silver price editor restored.
 - Dashboard return path uses an in-memory result cache keyed by existing inputs.
 
+### Save-time merchant gold invoice validation - audited locally 2026-08-13
+
+- New trader receipts now carry `karat` and `marketPrice` onto the entry before policy and save-time guards run.
+- Finished-gold direct purchase remains blocked unless the credit account is semantically classified as `merchant`; trader receipts still require a positive invoice price snapshot.
+- Focused regressions, TypeScript, Balance Contract Guard, and production build passed locally. No deployment or Firestore change was performed.
+
 ### WAC audit Excel export — deployed and verified 2026-08-12
 
 - Settings > Import/Export now includes a local, read-only `makka_wac_audit_YYYY-MM-DD.xlsx` export with Arabic sheets for WAC summary, inventory movements, merchant signed carrying-value movements, and combined diagnostics.

@@ -30,10 +30,26 @@ describe('invoice accounting policy', () => {
       operationKind: 'other', debit: '????', debitAccountId: 'finished', credit: '????', creditAccountId: 'merchant', cash: '100', weight: '2', arabicWeight: '2',
     }), accounts);
     const priced = validateAccountingPolicy(entry({
-      operationKind: 'other', debit: '????', debitAccountId: 'finished', credit: '????', creditAccountId: 'merchant', cash: '100', weight: '2', arabicWeight: '2', marketPrice: 4200,
+      operationKind: 'purchase', debit: '????', debitAccountId: 'finished', credit: '????', creditAccountId: 'merchant', cash: '100', weight: '2', arabicWeight: '2', karat: 18, marketPrice: 4200,
     }), accounts);
     expect(missing.map(issue => issue.code)).toContain('trader_invoice_price_missing');
+    expect(missing.map(issue => issue.code)).not.toContain('finished_gold_direct_purchase');
     expect(priced.map(issue => issue.code)).not.toContain('trader_invoice_price_missing');
+    expect(priced.map(issue => issue.code)).not.toContain('finished_gold_direct_purchase');
+  });
+
+  it('keeps direct finished-gold purchases blocked for non-merchants', () => {
+    const issues = validateAccountingPolicy(entry({
+      operationKind: 'purchase', debit: '????', debitAccountId: 'finished', credit: '??????', creditAccountId: 'cash', cash: '1000', weight: '2', arabicWeight: '2', marketPrice: 4200,
+    }), accounts);
+    expect(issues.map(issue => issue.code)).toContain('finished_gold_direct_purchase');
+  });
+
+  it('does not require a trader invoice price for merchant settlement', () => {
+    const issues = validateAccountingPolicy(entry({
+      operationKind: 'merchant_settlement', debit: '????', debitAccountId: 'merchant', credit: '??????', creditAccountId: 'cash', cash: '1000',
+    }), accounts);
+    expect(issues.map(issue => issue.code)).not.toContain('trader_invoice_price_missing');
   });
 
   it('does not project a generic metal piece count as accessories quantity', () => {

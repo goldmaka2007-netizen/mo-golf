@@ -374,6 +374,8 @@ export const EntryForm = React.memo(({ onStepChange }: EntryFormProps) => {
       invoiceNumber: formData.invoiceNumber || '',
       arabicWeight: formData.arabicWeight || '0',
       multiplier: formData.multiplier || 1,
+      karat: formData.karat ?? undefined,
+      marketPrice: formData.marketPrice,
       clientName: formData.clientName || '',
       clientPhone: formData.clientPhone || '',
       userId: user?.uid || '',
@@ -421,8 +423,6 @@ export const EntryForm = React.memo(({ onStepChange }: EntryFormProps) => {
     }
 
     setIsSaving(true);
-    if (formData.karat) entry.karat = formData.karat;
-    if (formData.marketPrice !== undefined) entry.marketPrice = formData.marketPrice;
     try {
       if (isGoldEquivalentEntry(entry, accountsDb)) {
         const calculationKarat = entry.karat ?? inferGoldKaratFromMultiplier(entry.multiplier);
