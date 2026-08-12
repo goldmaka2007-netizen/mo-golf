@@ -29,6 +29,8 @@ import { cn } from '../../lib/utils';
 import { formatMinorUnitsToEgpInput, getAccessoryOpeningCostsMinorByAccountId, getGoldOpeningPriceMinor, getSilverOpeningPriceMinor, mergeAnnualOpeningCostRows, parseEgpToMinorUnits } from '../../lib/openingCostConfig';
 import { normalizeNumerals } from '../../lib/accounting';
 import { areOperationWritesLocked } from '../../lib/costRecalculation';
+import { buildOpeningCostConfig } from '../../lib/openingCostConfig';
+import { buildWacAuditWorkbook, wacAuditFilename } from '../../lib/wacAuditExcel';
 
 export const SettingsView = React.memo(() => {
   const { setView, user, entries, accountsDb, setGlobalError, openingCostConfig, setOpeningCostConfig, costCalculationRun } = useAppStore();
@@ -189,6 +191,24 @@ export const SettingsView = React.memo(() => {
       setOpeningPriceError(error instanceof Error ? error.message : '\u062a\u0639\u0630\u0631 \u062d\u0641\u0638 \u0633\u0639\u0631 \u0627\u0644\u0627\u0641\u062a\u062a\u0627\u062d. \u0631\u0627\u062c\u0639 \u0627\u0644\u0642\u064a\u0645 \u0627\u0644\u0645\u062f\u062e\u0644\u0629.');
     } finally {
       setIsSavingOpeningPrice(false);
+    }
+  };
+
+  const handleExportWacAudit = () => {
+    if (costCalculationRun.status !== 'valid' || !costCalculationRun.timeline?.valid) {
+      setGlobalError('لا يمكن تصدير تقرير WAC قبل اكتمال حساب التكلفة المركزي بنجاح.');
+      return;
+    }
+    try {
+      const workbook = buildWacAuditWorkbook({
+        entries,
+        accounts: accountsDb,
+        openingCostConfig: buildOpeningCostConfig(openingCostConfig, accountsDb),
+        inventoryTimeline: costCalculationRun.timeline,
+      });
+      XLSX.writeFile(workbook, wacAuditFilename());
+    } catch (error) {
+      setGlobalError(error instanceof Error ? `تعذر تصدير تقرير WAC: ${error.message}` : 'تعذر تصدير تقرير WAC.');
     }
   };
 
@@ -707,6 +727,22 @@ export const SettingsView = React.memo(() => {
                   </button>
                 </div>
                 <div className="text-[9px] text-[#5a5548] italic">* عند استبدال الملف في iCloud، اختر "Keep Both" لملف جديد، أو "Replace" لتحديث الملف الحالي.</div>
+              </div>
+
+              <div className="pb-6 border-b border-[#1a1e2a] space-y-4" dir="rtl">
+                <div>
+                  <div className="text-sm font-bold text-[#ddd8cc]">تصدير تقرير WAC الشامل</div>
+                  <div className="text-[10px] text-[#5a5548]">سجل كامل لتكلفة المخزون والتجار ومتوسط التكلفة قبل وبعد الحركات</div>
+                </div>
+                <button
+                  type="button"
+                  onClick={handleExportWacAudit}
+                  disabled={costCalculationRun.status !== 'valid' || !costCalculationRun.timeline?.valid}
+                  className="w-full py-3 bg-[#1a1e2a] text-[#c9a84c] rounded-xl hover:bg-[#c9a84c22] transition-all text-xs font-bold border border-[#c9a84c22] flex items-center justify-center gap-2 disabled:cursor-not-allowed disabled:opacity-50"
+                >
+                  <Download className="w-4 h-4" />
+                  تصدير تقرير WAC الشامل
+                </button>
               </div>
 
               <div className="flex items-center justify-between pt-4">
