@@ -379,41 +379,33 @@ export const buildMerchantMetalPositionTimeline = (
       const source = ensureState(debit, metal);
       const destination = ensureState(credit, metal);
       const wac = currentWac(source);
-      let transferredValue = wac === null ? 0 : Math.round(wac * requestedUnits);
       if (wac === null) diagnostics.push({
         code: 'missing_transfer_carrying_basis', severity: 'error', operationId,
         merchantAccountId: source.merchantAccountId, metal,
         message: `Merchant ${metal} transfer source has no carrying-value basis.`,
       });
-      if (wac !== null) {
-        const destinationAfterUnits = destination.signedQuantityUnits + requestedUnits;
-        // When the destination crosses from receivable to payable, the first
-        // portion extinguishes its complete carried receivable. Only the
-        // residual quantity starts the new payable at the source basis. This
-        // preserves value between merchants without market revaluation/P&L.
-        if (destination.signedQuantityUnits < 0 && destinationAfterUnits >= 0) {
-          transferredValue = Math.abs(destination.signedCarryingValueMinor)
-            + Math.round(wac * destinationAfterUnits);
-        }
-        const sourceAfterUnits = source.signedQuantityUnits - requestedUnits;
-        if (source.signedQuantityUnits > 0 && sourceAfterUnits < 0) {
-          transferredValue = Math.max(
-            transferredValue,
-            source.signedCarryingValueMinor + Math.round(wac * Math.abs(sourceAfterUnits)),
-          );
-        } else if (source.signedQuantityUnits > 0 && sourceAfterUnits === 0) {
-          transferredValue = source.signedCarryingValueMinor;
-        }
+      // Transfers are valued exclusively from the source signed carrying pool.
+      // A destination zero-crossing is an algebraic combination with its existing
+      // receivable/payable carrying value; it never changes the value released by source.
+      const transferredValue = wac === null ? 0 : Math.round(wac * requestedUnits);
+      if (source.signedQuantityUnits > 0 && requestedUnits <= source.signedQuantityUnits) {
+        const released = releasePayable(source, requestedUnits);
+        // `releasePayable` closes the full pool exactly, avoiding a rounding residue.
+        addPayable(destination, requestedUnits, released.valueMinor);
+        movement.carryingValueMinor = released.valueMinor;
+        movement.merchantDebitValueMinor = released.valueMinor;
+        movement.merchantCreditValueMinor = released.valueMinor;
+      } else {
+        source.signedQuantityUnits -= requestedUnits;
+        source.signedCarryingValueMinor -= transferredValue;
+        destination.signedQuantityUnits += requestedUnits;
+        destination.signedCarryingValueMinor += transferredValue;
+        movement.carryingValueMinor = transferredValue;
+        movement.merchantDebitValueMinor = transferredValue;
+        movement.merchantCreditValueMinor = transferredValue;
       }
-      source.signedQuantityUnits -= requestedUnits;
-      source.signedCarryingValueMinor -= transferredValue;
-      destination.signedQuantityUnits += requestedUnits;
-      destination.signedCarryingValueMinor += transferredValue;
       movement.sourceMerchantAccountId = source.merchantAccountId;
       movement.destinationMerchantAccountId = destination.merchantAccountId;
-      movement.carryingValueMinor = transferredValue;
-      movement.merchantDebitValueMinor = transferredValue;
-      movement.merchantCreditValueMinor = transferredValue;
       movement.valuationSource = 'source_merchant_wac';
       assertState(source, entry);
       assertState(destination, entry);

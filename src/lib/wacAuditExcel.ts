@@ -30,6 +30,9 @@ const inventoryAccountName = (accountsById: Map<string, Account>, accountId?: st
   accountId ? accountsById.get(accountId)?.name ?? '' : '';
 const wacPerGram = (minorPerUnit: number | null | undefined): number | null =>
   minorPerUnit === null || minorPerUnit === undefined ? null : minorPerUnit;
+// Inventory state stores WAC in minor EGP per display gram; Excel labels it EGP/g.
+const inventoryWacPerGram = (minorPerGram: number | null | undefined): number | null =>
+  egp(minorPerGram);
 
 type InventoryAuditState = Pick<InventoryCostState,
   'kind' | 'standardizedQuantityUnits' | 'actualPhysicalWeightUnits' | 'accessoryQuantityUnits' | 'remainingTotalCostMinor'>;
@@ -41,9 +44,10 @@ const inventoryAuditWac = (state: InventoryAuditState | undefined): number | nul
   if (!state) return null;
   const units = state.kind === 'accessory' ? state.accessoryQuantityUnits : state.standardizedQuantityUnits;
   if (units <= 0) return null;
-  return state.kind === 'accessory'
+  const minorPerDisplayUnit = state.kind === 'accessory'
     ? (state.remainingTotalCostMinor * 1000) / units
     : (state.remainingTotalCostMinor * GRAM_SCALE) / units;
+  return egp(minorPerDisplayUnit);
 };
 
 const createInventoryAuditStates = (timeline: InventoryCostTimeline): Map<string, InventoryAuditState> =>
@@ -216,7 +220,7 @@ const summaryRows = (
     'الوزن الفعلي': state.kind === 'accessory' ? null : grams(state.actualPhysicalWeightUnits),
     'مكافئ عيار 21': state.kind === 'gold' ? grams(state.standardizedQuantityUnits) : null,
     'الرصيد الموقع': null, 'اتجاه الرصيد: مستحق للتاجر / مستحق للمحل / مسدد': '',
-    'القيمة الدفترية بالجنيه': egp(state.remainingTotalCostMinor), 'WAC الحالي لكل جرام': state.kind === 'accessory' ? null : wacPerGram(state.totalWacMinorPerDisplayUnit),
+    'القيمة الدفترية بالجنيه': egp(state.remainingTotalCostMinor), 'WAC الحالي لكل جرام': state.kind === 'accessory' ? null : inventoryWacPerGram(state.totalWacMinorPerDisplayUnit),
     'Cost basis reliable': state.hasReliableCostBasis, 'Calculation version': state.calculationVersion,
   })),
   ...Object.values(merchantTimeline.finalStates).map(state => ({

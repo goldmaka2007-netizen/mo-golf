@@ -45,7 +45,7 @@ describe('WAC audit Excel export', () => {
     const movement = records('حركات المخزون WAC').find(row => row['Operation ID'] === 'settlement')!;
     expect(movement['رصيد الوزن بعد']).toBe(final.actualPhysicalWeightUnits / 100);
     expect(movement['القيمة الدفترية بعد']).toBe(final.remainingTotalCostMinor / 100);
-    expect(movement['WAC بعد الحركة']).toBe(final.totalWacMinorPerDisplayUnit);
+    expect(movement['WAC بعد الحركة']).toBe(final.totalWacMinorPerDisplayUnit! / 100);
   });
 
   it('exports sale outgoing cost from the authoritative inventory WAC result', () => {

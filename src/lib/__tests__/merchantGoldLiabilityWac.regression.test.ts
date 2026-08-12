@@ -112,19 +112,43 @@ describe('signed merchant metal carrying-value projection', () => {
     expect(timeline.finalStates['merchant-a']).toMatchObject({ positionSide: 'payable', signedQuantity: 3, payableBookValueMinor: 2400000, currentWacMinorPerUnit: 8000 });
   });
 
-  it('allows a signed transfer to credit -2g by 5g with no inventory/P&L and conserved carrying value', () => {
+  it('conserves source carrying value when a transfer crosses the destination from receivable to payable', () => {
     const before = [opening('open', 'gold-scrap', '20'), goldReceipt('source', 'merchant-a', '10', 6000, '0', 2), goldDelivery('safy-negative', 'merchant-b', '2', 3, 7000)];
     const transfer = entry({ id: 'cross-transfer', seq: 4, date: '2026-06-20', tx: 'حوالة', operationKind: 'transfer', debit: 'محمد السيد', debitAccountId: 'merchant-a', credit: 'الصافي', creditAccountId: 'merchant-b', weight: '5', arabicWeight: '5', karat: 21 });
     const inventoryBefore = rebuild(before);
     const inventoryAfter = rebuild([...before, transfer]);
     const timeline = buildMerchantMetalPositionTimeline([...before, transfer], normalizedAccounts, inventoryAfter);
-    expect(timeline.finalStates['merchant-b']).toMatchObject({ positionSide: 'payable', signedQuantity: 3, payableBookValueMinor: 1800000 });
-    expect(timeline.movementsByOperationId['cross-transfer']).toMatchObject({ carryingValueMinor: 3200000, settlementGainMinor: 0, settlementLossMinor: 0 });
+    expect(timeline.finalStates['merchant-a']).toMatchObject({ positionSide: 'payable', signedQuantity: 5, payableBookValueMinor: 3000000, currentWacMinorPerUnit: 6000 });
+    expect(timeline.finalStates['merchant-b']).toMatchObject({ positionSide: 'payable', signedQuantity: 3, payableBookValueMinor: 1600000, currentWacMinorPerUnit: 5333.333333333333 });
+    expect(timeline.movementsByOperationId['cross-transfer']).toMatchObject({ carryingValueMinor: 3000000, merchantDebitValueMinor: 3000000, merchantCreditValueMinor: 3000000, inventoryBookValueReleasedMinor: 0, inventoryBookValueRecognizedMinor: 0, settlementGainMinor: 0, settlementLossMinor: 0 });
     expect(Object.values(inventoryAfter.finalStates).map(state => state.remainingTotalCostMinor)).toEqual(Object.values(inventoryBefore.finalStates).map(state => state.remainingTotalCostMinor));
     const totalSigned = Object.values(timeline.finalStates).reduce((sum, state) => sum + state.signedCarryingValueMinor, 0);
     expect(totalSigned).toBe(4600000);
     const legs = buildLegacyLedgerLegs([...before, transfer], normalizedAccounts, [], { enableFinancialProjection: true, costTimeline: inventoryAfter });
     expect(legs.filter(leg => leg.sourceEntryId === 'cross-transfer' && ['revenue', 'expenses'].includes(leg.group))).toHaveLength(0);
+  });
+
+  it('releases the complete source carrying pool when transfer reaches exact zero', () => {
+    const before = [opening('open', 'gold-scrap', '20'), goldReceipt('source', 'merchant-a', '5', 6000, '0', 2)];
+    const transfer = entry({ id: 'exact-zero', seq: 3, tx: 'حوالة', operationKind: 'transfer', debit: 'محمد السيد', debitAccountId: 'merchant-a', credit: 'الصافي', creditAccountId: 'merchant-b', weight: '5', arabicWeight: '5', karat: 21 });
+    const timeline = buildMerchantMetalPositionTimeline([...before, transfer], normalizedAccounts, rebuild([...before, transfer]));
+    expect(timeline.movementsByOperationId['exact-zero']).toMatchObject({ carryingValueMinor: 3000000, merchantDebitValueMinor: 3000000, merchantCreditValueMinor: 3000000 });
+    expect(timeline.finalStates['merchant-a']).toMatchObject({ positionSide: 'settled', signedQuantity: 0, signedCarryingValueMinor: 0 });
+  });
+
+  it('keeps source WAC on partial TX476-like and TX1768-like transfers', () => {
+    const tx476Before = [opening('open-476', 'gold-scrap', '100'), goldReceipt('source-476', 'merchant-a', '61.71', 5840, '0', 2)];
+    const tx476 = entry({ id: 'TX476-like', seq: 3, tx: 'حوالة', operationKind: 'transfer', debit: 'محمد السيد', debitAccountId: 'merchant-a', credit: 'الصافي', creditAccountId: 'merchant-b', weight: '34.29', arabicWeight: '34.29', karat: 21 });
+    const timeline476 = buildMerchantMetalPositionTimeline([...tx476Before, tx476], normalizedAccounts, rebuild([...tx476Before, tx476]));
+    expect(timeline476.movementsByOperationId['TX476-like']).toMatchObject({ carryingValueMinor: 20025360, merchantDebitValueMinor: 20025360, merchantCreditValueMinor: 20025360 });
+    expect(timeline476.finalStates['merchant-a']).toMatchObject({ signedQuantity: 27.42, payableBookValueMinor: 16013280, currentWacMinorPerUnit: 5840 });
+
+    const tx1768Before = [opening('open-1768', 'gold-scrap', '100'), goldReceipt('source-1768', 'merchant-a', '14.34', 6375.24, '0', 2)];
+    const tx1768 = entry({ id: 'TX1768-like', seq: 3, tx: 'حوالة', operationKind: 'transfer', debit: 'محمد السيد', debitAccountId: 'merchant-a', credit: 'الصافي', creditAccountId: 'merchant-b', weight: '14', arabicWeight: '14', karat: 21 });
+    const timeline1768Before = buildMerchantMetalPositionTimeline(tx1768Before, normalizedAccounts, rebuild(tx1768Before));
+    const timeline1768 = buildMerchantMetalPositionTimeline([...tx1768Before, tx1768], normalizedAccounts, rebuild([...tx1768Before, tx1768]));
+    expect(timeline1768.finalStates['merchant-a']).toMatchObject({ signedQuantity: 0.34 });
+    expect(timeline1768.finalStates['merchant-a'].currentWacMinorPerUnit).toBeCloseTo(timeline1768Before.finalStates['merchant-a'].currentWacMinorPerUnit!, 2);
   });
 
   it('closes the two خالد حميدو metal/workmanship cycles at exact zero', () => {
