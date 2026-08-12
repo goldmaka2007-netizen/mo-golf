@@ -3,7 +3,7 @@
 **Last reviewed:** 2026-08-12
 **Repository:** `goldmaka2007-netizen/mo-golf`  
 **Branch reviewed:** `main`  
-**Deployed code head:** `18fd3e009be2e7d01428a5fb56cbc18dc45170a4`
+**Deployed code head:** `6ecca5b74402eda2a7e71d4c398a6128a03f04d5`
 **Production:** `https://makka-central-accounting.web.app`  
 **Firebase project:** `makka-central-accounting`
 
@@ -57,7 +57,7 @@ These paths were present on the reviewed head; verify them again before editing:
 - Merchant-to-merchant transfers now release carrying value solely and proportionally from the source signed carrying pool. Exact source zero closes the complete carrying value; destination zero-crossing combines its existing signed carrying value algebraically and creates no inventory movement, P&L, market revaluation, or balancing account.
 - The WAC audit Excel export now converts Inventory WAC stored in minor EGP per gram to labelled EGP per gram for before/after/current inventory columns. Inventory WAC storage and calculation remain unchanged; the outgoing WAC column remains sourced from authoritative outgoing cost.
 - Regression coverage includes source WAC preservation, exact-zero cleanup, destination receivable-to-payable crossing under value conservation, TX476-like and TX1768-like partial transfers, and exported Inventory WAC units. Focused merchant/Excel tests (18), related inventory/settlement tests (37), TypeScript, Balance Contract Guard, and production build passed locally.
-- Pending commit/push/deploy verification. Firestore Data, Rules, Indexes, Functions, Storage, and Authentication remain unchanged.
+- Code commit `6ecca5b74402eda2a7e71d4c398a6128a03f04d5` was pushed and deployed to Firebase Hosting only. Production root and `assets/index-B7_ssVzq.js` returned HTTP 200; browser smoke rendered the operations screen with no console errors. Firestore Data, Rules, Indexes, Functions, Storage, and Authentication remain unchanged.
 
 ### Clone-only Chart of Accounts — implemented locally, deployment blocked 2026-08-10
 
