@@ -1,9 +1,9 @@
 # Current Project State
 
-**Last reviewed:** 2026-08-09
+**Last reviewed:** 2026-08-12
 **Repository:** `goldmaka2007-netizen/mo-golf`  
 **Branch reviewed:** `main`  
-**Deployed code head:** `347e0fcc74130c508b0a1a05080635ff97b39dde`
+**Deployed code head:** `18fd3e009be2e7d01428a5fb56cbc18dc45170a4`
 **Production:** `https://makka-central-accounting.web.app`  
 **Firebase project:** `makka-central-accounting`
 
@@ -25,8 +25,9 @@ This file is intentionally current and may change frequently. Verify the head SH
 ### WAC audit Excel export — deployed and verified 2026-08-12
 
 - Settings > Import/Export now includes a local, read-only `makka_wac_audit_YYYY-MM-DD.xlsx` export with Arabic sheets for WAC summary, inventory movements, merchant signed carrying-value movements, and combined diagnostics.
-- The report consumes the canonical runtime Inventory WAC timeline and the existing signed merchant-metal carrying-value timeline; audit snapshots are rebuilt through those same paths and introduce no posting or valuation formula.
-- Focused export/inventory/merchant tests, TypeScript, Balance Contract Guard, and one production build passed. Commit `b9f6d54` was pushed and deployed to Firebase Hosting only; production root and `assets/index-C38ElpCE.js` returned HTTP 200. Firestore data, Rules, Functions, Storage, and Auth remain out of scope.
+- The report consumes the canonical runtime Inventory WAC timeline and one existing signed merchant-metal carrying-value timeline. Export snapshots now replay only authoritative result deltas in one chronological pass; they do not rebuild cost timelines or introduce posting/valuation formulas.
+- The export button shows local generation progress, surfaces actual failures, and uses a browser-local XLSX Blob/object-URL download compatible with iOS Safari/PWA.
+- Focused export/inventory/merchant tests (4 files / 38 tests), TypeScript, Balance Contract Guard, and production build passed. Commit `18fd3e0` was pushed and deployed to Firebase Hosting only; production root and `assets/index-CpNRDDZ5.js` returned HTTP 200. Firestore data, Rules, Functions, Storage, and Auth remain out of scope.
 
 ## Verified central implementation landmarks
 
