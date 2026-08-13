@@ -63,7 +63,7 @@ These paths were present on the reviewed head; verify them again before editing:
 - Reports now presents one Arabic entry, `تحليل وربحية المخزون`, in place of the former inventory movement, profitability, and analytics duplicates. Legacy report-tab aliases remain hidden for stored navigation compatibility.
 - The read-only report consumes `costCalculationRun.timeline.results` and `finalStates` directly. It reports E21 current state, classified inflow/outflow, authoritative sales profitability, adjustments, monthly reconciliation, item rankings, and operation detail without rebuilding WAC, COGS, postings, or financial statements.
 - Internal `transfer` and `tafyeet` remain visible for an individual item, while transfers wholly inside a karat group or inside total gold are excluded from external in/out totals.
-- Focused report, WAC/COGS, and merchant tests (5 files / 44 tests), TypeScript, Balance Contract Guard, production build, and authenticated mobile local/production browser smoke passed. Commit `b65ca562925bc43b1bceca6808791705209a0199` was pushed and deployed to Firebase Hosting only; production root and `assets/index-By-zN3uP.js` returned HTTP 200. Firestore data, Rules, Functions, Storage, and Auth remain unchanged.
+- Focused report, WAC/COGS, and merchant tests (5 files / 44 tests), TypeScript, Balance Contract Guard, production build, and authenticated mobile local/production browser smoke passed. Commit `6eb974ca54f06ca631d4183cbab07d4327e67efb` was pushed and deployed to Firebase Hosting only; production root and `assets/index-Bqfthq12.js` returned HTTP 200. Firestore data, Rules, Functions, Storage, and Auth remain unchanged.
 
 ### Merchant transfer carrying-value conservation + WAC audit Excel units — verified locally 2026-08-12
 
