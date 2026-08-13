@@ -363,7 +363,7 @@ export const HomeView = React.memo(({
   }, [centralBalances]);
 
   const reportShortcuts = [
-    { id: 'profit-analysis', label: 'تحليل الربحية والمخزون', icon: <BarChart3 className="w-5 h-5 text-[#c9a84c]" />, desc: 'الأرباح الحقيقية بالمتوسط المتحرك' },
+    { id: 'inventory-profitability', label: 'تحليل وربحية المخزون', icon: <BarChart3 className="w-5 h-5 text-[#c9a84c]" />, desc: 'الحركة والأرباح الحقيقية بالمتوسط المتحرك' },
     { id: 'final', label: 'التقرير الشامل', icon: <PieChart className="w-5 h-5 text-[#6a8a9e]" />, desc: 'ملخص المركز والمخزون' },
     { id: 'income', label: 'الدخل والأرباح', icon: <TrendingUp className="w-5 h-5 text-[#6a9e6a]" />, desc: 'كشف الأرباح والخسائر' },
     { id: 'ledger', label: 'كشف حساب', icon: <Book className="w-5 h-5 text-[#9e6a6a]" />, desc: 'بحث وتفريغ حساب معين' }
@@ -604,8 +604,8 @@ export const HomeView = React.memo(({
             <button
               key={rep.id}
               onClick={() => {
-                if (rep.id === 'profit-analysis') {
-                  setReportsTab('profit-analysis' as any);
+                if (rep.id === 'inventory-profitability') {
+                  setReportsTab('inventory-profitability' as any);
                   setView('reports');
                 } else {
                   setReportsTab(rep.id as any);

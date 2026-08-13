@@ -140,8 +140,7 @@ export default function App() {
 
   useEffect(() => {
     if (view === 'inventory') setReportsTab('inventory');
-    if (view === 'profit-analysis') setReportsTab('profit-analysis');
-    if (view === 'advanced-analytics') setReportsTab('advanced-analytics');
+    if (view === 'profit-analysis' || view === 'advanced-analytics') setReportsTab('inventory-profitability');
   }, [view, setReportsTab]);
 
   const handleDelete = async (id: string) => {

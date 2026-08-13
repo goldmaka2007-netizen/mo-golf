@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { BarChart3, Book, BookOpen, Briefcase, ChevronRight, Landmark, PieChart, RefreshCw, TrendingUp } from 'lucide-react';
+import { BarChart3, Book, BookOpen, Briefcase, ChevronRight, Landmark, PieChart, TrendingUp } from 'lucide-react';
 import { format } from 'date-fns';
 import { useAppStore } from '../../store';
 import { IncomeStatementView } from './reports/EgpIncomeStatementView';
@@ -11,10 +11,10 @@ import { InventoryCheckView } from './InventoryCheckView';
 import { FinalReportView } from './reports/FinalReportView';
 import { ScrapAnalysisView } from './reports/ScrapAnalysisView';
 import { MonthlyReportView } from './reports/MonthlyReportView';
-import { Phase5CostReportView } from './reports/Phase5CostReportView';
+import { InventoryProfitabilityReportView } from './reports/InventoryProfitabilityReportView';
 import { FinancialStatementsView } from './reports/FinancialStatementsView';
 
-type ReportId = 'ledger' | 'trial' | 'income' | 'equity' | 'balance' | 'inventory' | 'lifecycle' | 'profit-analysis' | 'advanced-analytics' | 'final' | 'monthly' | 'scrap' | 'financial-statements';
+type ReportId = 'ledger' | 'trial' | 'income' | 'equity' | 'balance' | 'inventory' | 'inventory-profitability' | 'lifecycle' | 'profit-analysis' | 'advanced-analytics' | 'final' | 'monthly' | 'scrap' | 'financial-statements';
 const reports: { id: ReportId; label: string; icon: React.ReactNode }[] = [
   { id: 'ledger', label: 'دفتر الأستاذ', icon: <Book /> },
   { id: 'trial', label: 'ميزان المراجعة', icon: <BookOpen /> },
@@ -22,9 +22,7 @@ const reports: { id: ReportId; label: string; icon: React.ReactNode }[] = [
   { id: 'balance', label: 'المركز المالي', icon: <Briefcase /> },
   { id: 'equity', label: 'حقوق الملكية', icon: <Landmark /> },
   { id: 'inventory', label: 'الجرد', icon: <PieChart /> },
-  { id: 'lifecycle', label: 'حركة المخزون', icon: <RefreshCw /> },
-  { id: 'profit-analysis', label: 'الربحية', icon: <PieChart /> },
-  { id: 'advanced-analytics', label: 'التحليلات', icon: <TrendingUp /> },
+  { id: 'inventory-profitability', label: 'تحليل وربحية المخزون', icon: <PieChart /> },
   { id: 'monthly', label: 'التقرير الشهري', icon: <TrendingUp /> },
   { id: 'scrap', label: 'تحليل الكسر', icon: <TrendingUp /> },
   { id: 'final', label: 'التقرير النهائي', icon: <BarChart3 /> },
@@ -81,9 +79,7 @@ export const ReportsView = React.memo(() => {
     {selected === 'equity' && <EquityStatementView entries={filteredEntries} />}
     {selected === 'balance' && <BalanceSheetView entries={balanceEntries} onOpenLedger={openLedger} />}
     {selected === 'inventory' && <InventoryCheckView />}
-    {selected === 'lifecycle' && <Phase5CostReportView initialSection="inventory" />}
-    {selected === 'profit-analysis' && <Phase5CostReportView initialSection="profit" />}
-    {selected === 'advanced-analytics' && <Phase5CostReportView initialSection="profit" />}
+    {(selected === 'inventory-profitability' || selected === 'lifecycle' || selected === 'profit-analysis' || selected === 'advanced-analytics') && <InventoryProfitabilityReportView />}
     {selected === 'monthly' && <MonthlyReportView entries={entries} onNavigate={target => open(target)} />}
     {selected === 'scrap' && <ScrapAnalysisView entries={filteredEntries} allEntries={entries} />}
     {selected === 'final' && <FinalReportView entries={filteredEntries} balanceEntries={balanceEntries} />}

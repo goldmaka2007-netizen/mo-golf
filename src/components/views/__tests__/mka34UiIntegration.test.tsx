@@ -5,6 +5,7 @@ import { SettingsView } from '../SettingsView';
 import { ProfitAnalysisView } from '../ProfitAnalysisView';
 import { MoreView } from '../MoreView';
 import { CanonicalAccountsView } from '../CanonicalAccountsView';
+import { InventoryProfitabilityReportView } from '../reports/InventoryProfitabilityReportView';
 import type { Account, Entry } from '../../../types';
 
 const mockStore = vi.hoisted(() => ({ value: {} as any }));
@@ -99,6 +100,13 @@ describe('MKA-34 UI integration', () => {
     const html = renderToStaticMarkup(<ProfitAnalysisView />);
 
     expect(html).toContain('تكلفة المخزون الافتتاحي غير مكتملة');
+  });
+
+  it('shows the unified report failure state instead of calculating from raw entries', () => {
+    mockStore.value.costCalculationRun = { status: 'failed', generationId: 1, inputRevision: 'x', catalogVersion: 'x', error: { code: 'missing_wac', message: 'missing' } };
+    mockStore.value.requestCostRetry = vi.fn();
+    const html = renderToStaticMarkup(<InventoryProfitabilityReportView />);
+    expect(html).toContain('تحليل وربحية المخزون غير متاح');
   });
 
   it('exposes the central chart from More and renders every required mobile section', () => {

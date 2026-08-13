@@ -58,6 +58,13 @@ These paths were present on the reviewed head; verify them again before editing:
 
 ## Latest reviewed changes
 
+### Unified inventory profitability report — validated locally 2026-08-13
+
+- Reports now presents one Arabic entry, `تحليل وربحية المخزون`, in place of the former inventory movement, profitability, and analytics duplicates. Legacy report-tab aliases remain hidden for stored navigation compatibility.
+- The read-only report consumes `costCalculationRun.timeline.results` and `finalStates` directly. It reports E21 current state, classified inflow/outflow, authoritative sales profitability, adjustments, monthly reconciliation, item rankings, and operation detail without rebuilding WAC, COGS, postings, or financial statements.
+- Internal `transfer` and `tafyeet` remain visible for an individual item, while transfers wholly inside a karat group or inside total gold are excluded from external in/out totals.
+- Focused report, WAC/COGS, and merchant tests (5 files / 44 tests), TypeScript, Balance Contract Guard, production build, and authenticated mobile local browser smoke passed. Firestore data, Rules, Functions, Storage, and Auth remain unchanged. Deployment is pending this change's commit/push cycle.
+
 ### Merchant transfer carrying-value conservation + WAC audit Excel units — verified locally 2026-08-12
 
 - Merchant-to-merchant transfers now release carrying value solely and proportionally from the source signed carrying pool. Exact source zero closes the complete carrying value; destination zero-crossing combines its existing signed carrying value algebraically and creates no inventory movement, P&L, market revaluation, or balancing account.
