@@ -1,6 +1,6 @@
 import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
-import { getNextInvoiceNumber } from '../EntryForm';
+import { getNextInvoiceNumber, sanitizeFirestorePayload } from '../EntryForm';
 
 describe('EntryForm completion actions', () => {
   it('allocates a fresh invoice number even before the saved entry snapshot arrives', () => {
@@ -27,5 +27,23 @@ describe('EntryForm completion actions', () => {
     expect(entryFields).toBeLessThan(policyValidation);
     expect(source).not.toContain('if (formData.karat) entry.karat = formData.karat;');
     expect(source).not.toContain('if (formData.marketPrice !== undefined) entry.marketPrice = formData.marketPrice;');
+  });
+
+  it('omits undefined optional fields from the persisted payload without inventing tafyeet pricing', () => {
+    const entry = {
+      operationKind: 'tifeet',
+      tx: 'تيفيت',
+      debit: 'بريمة',
+      credit: 'كسر افرنجي',
+      weight: '0.43',
+      karat: 18,
+      marketPrice: undefined,
+    };
+
+    const persisted = sanitizeFirestorePayload(entry);
+
+    expect(persisted).toMatchObject({ operationKind: 'tifeet', weight: '0.43', karat: 18 });
+    expect(persisted).not.toHaveProperty('marketPrice');
+    expect(entry.marketPrice).toBeUndefined();
   });
 });

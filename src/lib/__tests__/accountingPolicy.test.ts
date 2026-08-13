@@ -52,6 +52,14 @@ describe('invoice accounting policy', () => {
     expect(issues.map(issue => issue.code)).not.toContain('trader_invoice_price_missing');
   });
 
+  it('does not require a market price for tafyeet', () => {
+    const issues = validateAccountingPolicy(entry({
+      operationKind: 'tifeet', tx: 'تيفيت', debit: 'بريمة', debitAccountId: 'scrap', credit: 'كسر افرنجي', creditAccountId: 'scrap',
+      weight: '0.43', arabicWeight: '0.37', karat: 18, marketPrice: undefined,
+    }), accounts);
+    expect(issues.map(issue => issue.code)).not.toContain('trader_invoice_price_missing');
+  });
+
   it('does not project a generic metal piece count as accessories quantity', () => {
     const issues = validateAccountingPolicy(entry({
       operationKind: 'expense', debit: '??????', debitAccountId: 'cash', credit: '????', creditAccountId: 'merchant', cash: '100', count: '1',

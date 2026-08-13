@@ -1,6 +1,6 @@
 # Current Project State
 
-**Last reviewed:** 2026-08-12
+**Last reviewed:** 2026-08-14
 **Repository:** `goldmaka2007-netizen/mo-golf`  
 **Branch reviewed:** `main`  
 **Deployed code head:** `6ecca5b74402eda2a7e71d4c398a6128a03f04d5`
@@ -27,6 +27,12 @@ This file is intentionally current and may change frequently. Verify the head SH
 - New trader receipts now carry `karat` and `marketPrice` onto the entry before policy and save-time guards run.
 - Finished-gold direct purchase remains blocked unless the credit account is semantically classified as `merchant`; trader receipts still require a positive invoice price snapshot.
 - Focused regressions, TypeScript, Balance Contract Guard, and production build passed locally. No deployment or Firestore change was performed.
+
+### Tafyeet save payload regression - fixed locally 2026-08-14
+
+- Save-time `EntryForm` validation still receives `karat` and `marketPrice` before policy checks, preserving merchant invoice pricing enforcement.
+- The Firestore write now removes only top-level `undefined` optional fields from the persisted payload, so valid tafyeet operations do not require an invented `marketPrice`.
+- Focused regression tests and TypeScript passed; the Balance Contract Guard remains blocked by the unrelated existing `InventoryProfitabilityReportView.tsx` formatting rule. Production bundling passed directly with Vite. No Firestore data, Rules, Indexes, Functions, Storage, Auth, or deployment changed.
 
 ### WAC audit Excel export — deployed and verified 2026-08-12
 

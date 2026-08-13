@@ -35,6 +35,11 @@ export const normalizeAccessoryEntryPayload = <T extends { weight?: string; coun
   isAccessory ? { ...entry, weight: entry.weight || '0', count: '0' } : entry
 );
 
+/** Firestore does not accept undefined field values; keep them out of the persisted document. */
+export const sanitizeFirestorePayload = <T extends Record<string, unknown>>(entry: T): T => (
+  Object.fromEntries(Object.entries(entry).filter(([, value]) => value !== undefined)) as T
+);
+
 export const getNextInvoiceNumber = (
   txType: string,
   entries: Array<Pick<Entry, 'invoiceNumber'>>,
@@ -454,7 +459,7 @@ export const EntryForm = React.memo(({ onStepChange }: EntryFormProps) => {
         setGlobalError(`رفض محرك التكلفة: ${diagnostic?.code || 'unknown'} — ${diagnostic?.message || 'تعذر اعتماد تكلفة العملية.'}`);
         return;
       }
-      await addDoc(collection(db, 'entries'), entry);
+      await addDoc(collection(db, 'entries'), sanitizeFirestorePayload(entry));
       lastSavedInvoiceRef.current = normalizedInvoiceNumber;
       
       // Transition to success step only after successful save
