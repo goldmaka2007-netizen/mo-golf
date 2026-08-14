@@ -40,6 +40,14 @@ export const sanitizeFirestorePayload = <T extends Record<string, unknown>>(entr
   Object.fromEntries(Object.entries(entry).filter(([, value]) => value !== undefined)) as T
 );
 
+/** Presentation-only lookup through the existing canonical account resolver. */
+export const accountSupportsCount = (registry: ReturnType<typeof buildAccountRegistry>, accountNames: string[]): boolean => {
+  return accountNames.some((accountName) => {
+    const resolution = registry.resolve(undefined, accountName);
+    return resolution.status === 'resolved' && resolution.account.tracksQuantity;
+  });
+};
+
 export const getNextInvoiceNumber = (
   txType: string,
   entries: Array<Pick<Entry, 'invoiceNumber'>>,
@@ -545,6 +553,16 @@ export const EntryForm = React.memo(({ onStepChange }: EntryFormProps) => {
     };
   }, [formData.tx, formData.debit, formData.credit, accountCategories]);
 
+  const accountRegistry = useMemo(
+    () => buildAccountRegistry(accountsDb, entries, canonicalAccounts),
+    [accountsDb, entries, canonicalAccounts],
+  );
+
+  const supportsCount = useMemo(
+    () => accountSupportsCount(accountRegistry, [formData.debit, formData.credit].filter(Boolean)),
+    [accountRegistry, formData.debit, formData.credit],
+  );
+
   // Handle weight/count sync for accessories
   useEffect(() => {
     if (isAccessory) {
@@ -676,54 +694,52 @@ export const EntryForm = React.memo(({ onStepChange }: EntryFormProps) => {
   );
 
   const renderStep3 = () => (
-    <div className="space-y-5 animate-in fade-in">
+    <div className="space-y-4 pb-[calc(var(--bottom-nav-height)+env(safe-area-inset-bottom)+12px)] animate-in fade-in">
       {/* Invoice Card */}
-      <div className="p-6 bg-gradient-to-b from-[#11141d] to-[#080a0f] border-2 border-[#1a1e2a] rounded-3xl space-y-4 shadow-xl relative overflow-hidden">
+      <div className="relative space-y-4 overflow-hidden rounded-[28px] border border-[#c9a84c55] bg-[radial-gradient(circle_at_50%_0%,rgba(201,168,76,0.08),transparent_42%),linear-gradient(160deg,#111a2b,#080c15)] p-4 shadow-[0_18px_45px_rgba(0,0,0,0.28)] sm:p-6">
         {/* Top zigzag or dashed border effect */}
         <div className="absolute top-0 left-0 w-full h-[3px] bg-[url('data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSI4IiBoZWlnaHQ9IjgiPjxyZWN0IHdpZHRoPSI0IiBoZWlnaHQ9IjgiIGZpbGw9IiMxYTFlMmEiLz48L3N2Zz4=')] repeat-x" />
         
         {/* Header */}
-        <div className="flex justify-between items-start border-b border-dashed border-[#1a1e2a] pb-4 pt-2">
+        <div className="border-b border-[#2a2e3a] pb-4 pt-2 text-center">
           <div>
-            <div className="text-[10px] text-[#c9a84c] font-black uppercase mb-1">مراجعة نهائية للفاتورة</div>
-            <h3 className="text-xl font-bold text-[#f8fafc]">{formData.tx}</h3>
-            <p className="text-xs text-[#8a8578] font-mono mt-1">رقم الفاتورة: {formData.invoiceNumber}</p>
+            <div className="text-xs font-black text-[#c9a84c]">مراجعة نهائية للفواتير</div>
+            <h3 className="mt-1 text-3xl font-black tracking-tight text-[#f8fafc]">{formData.tx}</h3>
+            <p className="mt-2 text-sm font-mono text-[#aaa79e]">{formData.invoiceNumber} <span className="mx-1 text-[#c9a84c]">•</span> {formData.date}</p>
           </div>
-          <div className="text-left bg-[#1a1e2a] px-3 py-1.5 rounded-lg border border-[#2a2e3a]">
-            <p className="text-xs text-[#ddd8cc] font-mono">{formData.date}</p>
-          </div>
+          <div />
         </div>
 
         {/* Values */}
-        <div className="grid gap-2 border-b border-dashed border-[#1a1e2a] pb-4">
+        <div className="grid grid-cols-2 gap-2 border-b border-[#2a2e3a] pb-4">
           {showCash && (
-            <div className="flex justify-between items-center bg-[#1a1e2a]/30 p-2 rounded-lg">
+            <div className="rounded-2xl border border-[#c9a84c44] bg-[#0c1422]/80 p-3">
               <span className="text-sm text-[#8a8578] font-bold">نقدا:</span>
               <span className="text-lg font-mono font-bold text-[#6a9e6a]">{parseFloat(formData.cash || '0').toLocaleString()} <span className="text-xs">ج.م</span></span>
             </div>
           )}
           {showWeightAndCount && (
-            <div className="flex justify-between items-center bg-[#1a1e2a]/30 p-2 rounded-lg">
+            <div className="rounded-2xl border border-[#c9a84c44] bg-[#0c1422]/80 p-3">
               <span className="text-sm text-[#8a8578] font-bold">الوزن:</span>
               <span className="text-lg font-mono font-bold text-[#ddd8cc]">{formatWeight(parseFloat(formData.weight || '0'))} <span className="text-xs">ج</span></span>
             </div>
           )}
           {formData.karat !== null && formData.karat !== undefined && (
-            <div className="flex justify-between items-center bg-[#1a1e2a]/30 p-2 rounded-lg">
+            <div className="rounded-2xl border border-[#c9a84c44] bg-[#0c1422]/80 p-3">
               <span className="text-sm text-[#8a8578] font-bold">العيار:</span>
               <span className="text-lg font-mono font-bold text-[#ddd8cc]">{formData.karat}</span>
             </div>
           )}
           {formData.marketPrice && formData.marketPrice > 0 ? (
-            <div className="flex justify-between items-center bg-[#1a1e2a]/30 p-2 rounded-lg">
+            <div className="rounded-2xl border border-[#c9a84c44] bg-[#0c1422]/80 p-3">
               <span className="text-sm text-[#8a8578] font-bold">سعر الذهب الرسمي:</span>
               <span className="text-sm font-mono font-bold text-[#8a8578]">
                 {Math.round(formData.marketPrice).toLocaleString()} <span className="text-xs">ج.م</span>
               </span>
             </div>
           ) : null}
-          {showWeightAndCount && formData.count && parseFloat(formData.count) > 0 && (
-            <div className="flex justify-between items-center bg-[#1a1e2a]/30 p-2 rounded-lg">
+          {supportsCount && (
+            <div className="rounded-2xl border border-[#c9a84c44] bg-[#0c1422]/80 p-3">
               <span className="text-sm text-[#8a8578] font-bold">العدد:</span>
               <span className="text-lg font-mono font-bold text-[#ddd8cc]">{formData.count}</span>
             </div>
@@ -767,7 +783,8 @@ export const EntryForm = React.memo(({ onStepChange }: EntryFormProps) => {
       </div>
 
       {/* Input Fields for Step 3 */}
-      <div className="space-y-4">
+      <div className="space-y-3 rounded-3xl border border-[#2a2e3a] bg-[#0e1522]/90 p-4">
+        <h4 className="text-lg font-black text-[#f1cc68]">بيانات الفاتورة الإضافية <span className="text-sm font-bold text-[#aaa79e]">(اختياري)</span></h4>
         {showClientInfo && (
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <FormInput 
@@ -790,15 +807,16 @@ export const EntryForm = React.memo(({ onStepChange }: EntryFormProps) => {
         <textarea 
           value={formData.notes} 
           onChange={(e) => setFormData(prev => ({ ...prev, notes: e.target.value }))} 
-          className="w-full h-20 bg-[#080a0f] border border-[#1a1e2a] rounded-2xl p-4 text-sm outline-none focus:border-[#c9a84c55] transition-all resize-none" 
+          aria-label="ملاحظات (اختياري)"
+          className="h-20 w-full resize-none rounded-2xl border border-[#2a2e3a] bg-[#080a0f] p-4 text-sm outline-none transition-all focus:border-[#c9a84c55]"
           placeholder="إضافة ملاحظات (اختياري)..."
         />
       </div>
       
       {/* Actions */}
       <div className="flex gap-3">
-        <button onClick={() => setStep(2)} className="w-[30%] bg-[#11141d] border border-[#1a1e2a] text-[#ddd8cc] py-4 rounded-2xl hover:bg-[#1a1e2a]/50 transition-all active:scale-95 font-bold">تعديل</button>
-        <button onClick={handleSave} disabled={isSaving} className="w-[70%] bg-green-600 hover:bg-green-500 text-white font-bold py-4 rounded-2xl shadow-[0_4px_20px_rgba(34,197,94,0.3)] flex items-center justify-center transition-all active:scale-95">
+        <button onClick={() => setStep(2)} className="min-h-14 flex-1 rounded-2xl border border-[#c9a84c] bg-[#111827] py-3 font-black text-[#f1cc68] transition-all hover:bg-[#182235] active:scale-95">تعديل</button>
+        <button onClick={handleSave} disabled={isSaving} className="min-h-14 flex-[1.8] rounded-2xl bg-green-600 py-3 font-black text-white shadow-[0_4px_20px_rgba(34,197,94,0.3)] transition-all hover:bg-green-500 active:scale-95 disabled:cursor-not-allowed disabled:opacity-60">
           {isSaving ? "جاري الحفظ..." : "تأكيد وحفظ"}
         </button>
       </div>
