@@ -289,19 +289,19 @@ export default function App() {
   return (
     <ErrorBoundary>
       <div
-        className={`pb-[calc(var(--bottom-nav-height)+env(safe-area-inset-bottom)+16px)] font-sans ${isEntryStep2 ? 'flex min-h-[100svh] flex-col bg-[#020408] text-[#f5f1e8]' : view === 'entry' ? 'min-h-[100dvh] bg-[#fffdf7] text-[#15203b]' : 'min-h-[100dvh] bg-[#020408] text-[#f5f1e8]'}`}
+        className={`pb-[calc(var(--bottom-nav-height)+env(safe-area-inset-bottom)+16px)] font-sans ${isEntryStep2 ? 'flex min-h-[100svh] flex-col bg-[#020408] text-[#f5f1e8]' : view === 'entry' ? 'min-h-[100dvh] bg-[#020408] text-[#f5f1e8]' : 'min-h-[100dvh] bg-[#020408] text-[#f5f1e8]'}`}
         dir="rtl"
       >
         <main className={`mx-auto max-w-2xl px-4 pt-4 sm:pt-6 ${isEntryStep2 ? 'flex w-full flex-1 flex-col' : ''}`}>
-          <header className={`sticky top-0 z-30 -mx-4 border-b px-4 py-3 backdrop-blur-xl ${isEntryStep2 ? 'mb-3 border-[#1a1e2a]/80 bg-[#020408]/92' : view === 'entry' ? 'mb-4 border-[#15203b]/10 bg-[#fffdf7]/94' : 'mb-4 border-[#1a1e2a]/80 bg-[#020408]/92'}`}>
+          <header className={`sticky top-0 z-30 -mx-4 border-b px-4 py-3 backdrop-blur-xl ${isEntryStep2 ? 'mb-3 border-[#1a1e2a]/80 bg-[#020408]/92' : view === 'entry' ? 'mb-4 border-[#1a1e2a]/80 bg-[#020408]/92' : 'mb-4 border-[#1a1e2a]/80 bg-[#020408]/92'}`}>
             <div className="flex items-center justify-between gap-3">
               <div className="min-w-0">
                 {view === 'entry' ? (
                   <div className="flex items-center gap-2.5">
-                    <span className={`flex h-10 w-10 items-center justify-center rounded-2xl bg-[#c99a2e]/12 ${isEntryStep2 ? 'text-[#c9a84c]' : 'text-[#b17f1d]'}`}>
+                    <span className="flex h-10 w-10 items-center justify-center rounded-2xl bg-[#c99a2e]/12 text-[#c9a84c]">
                       <Gem className="h-6 w-6" aria-hidden="true" />
                     </span>
-                    <h1 className={`truncate text-[30px] font-black leading-none ${isEntryStep2 ? 'text-[#f5f1e8]' : 'text-[#15203b]'}`}>{pageTitle}</h1>
+                    <h1 className="truncate text-[30px] font-black leading-none text-[#f5f1e8]">{pageTitle}</h1>
                   </div>
                 ) : (
                   <>
@@ -314,7 +314,7 @@ export default function App() {
                 type="button"
                 onClick={refreshData}
                 aria-label="تحديث البيانات"
-                className={`flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl border text-[#c9a84c] transition-all active:scale-95 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#c99a2e] ${isEntryStep2 ? 'border-[#1a1e2a] bg-[#0e1018]' : view === 'entry' ? 'border-[#15203b]/10 bg-white shadow-sm' : 'border-[#1a1e2a] bg-[#0e1018]'}`}
+                className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl border border-[#1a1e2a] bg-[#0e1018] text-[#c9a84c] transition-all active:scale-95 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#c99a2e]"
                 title="تحديث البيانات"
               >
                 <RefreshCw className="h-5 w-5" />
