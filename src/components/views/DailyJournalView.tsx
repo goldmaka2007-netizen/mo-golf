@@ -7,6 +7,7 @@ import { cn } from '../../lib/utils';
 import { useAppStore } from '../../store';
 import { Entry } from '../../types';
 import { formatEgpNumber, formatQuantity, formatWeight } from '../../lib/formatting';
+import { downloadCsv } from '../../utils/csv';
 
 const dimensions: { id: DailyJournalDimension; title: string; unit: string; icon: React.ElementType; accent: string }[] = [
   { id: 'gold', title: '\u062d\u0631\u0643\u0629 \u0627\u0644\u0630\u0647\u0628 (21)', unit: '\u062c\u0645', icon: Scale, accent: 'text-[#c9a84c]' },
@@ -19,13 +20,10 @@ const unique = (items: string[]) => [...new Set(items)].filter(Boolean);
 const amount = (value: number, dimension: DailyJournalDimension) => dimension === 'cash' ? formatEgpNumber(value) : dimension === 'quantity' ? formatQuantity(value, 3) : formatWeight(value, 2);
 export type DailyJournalExportRow = Record<string, string | number | undefined>;
 
-export const createDailyJournalWorkbook = async (summary: DailyJournalExportRow[], operations: DailyJournalExportRow[]) => {
-  const XLSX = await import('xlsx');
-  const workbook = XLSX.utils.book_new();
-  XLSX.utils.book_append_sheet(workbook, XLSX.utils.json_to_sheet(summary), 'Journal Summary');
-  XLSX.utils.book_append_sheet(workbook, XLSX.utils.json_to_sheet(operations), 'Operations');
-  return { XLSX, workbook };
-};
+export const createDailyJournalCsvRows = (summary: DailyJournalExportRow[], operations: DailyJournalExportRow[]) => [
+  ...summary.map(row => ({ التقرير: 'Journal Summary', ...row })),
+  ...operations.map(row => ({ التقرير: 'Operations', ...row })),
+];
 
 export const DailyJournalView = React.memo(() => {
   const { entries, setEditingEntry, accountsDb, setView } = useAppStore();
@@ -62,21 +60,20 @@ export const DailyJournalView = React.memo(() => {
     setEditingEntry({ date: targetDate });
     setView('entry');
   };
-  const exportToExcel = async () => {
+  const exportToCsv = () => {
     const summary = dimensions.map(meta => {
       const data = report.dimensions[meta.id];
       return { dimension: meta.title, openingDebit: data.openingDebit, openingCredit: data.openingCredit, periodDebit: data.periodDebit, periodCredit: data.periodCredit, closingDebit: data.closingDebit, closingCredit: data.closingCredit };
     });
     const operations = rawEntries.map(entry => ({ date: entry.date, operation: entry.invoiceNumber || entry.seq, tx: entry.tx, debit: entry.debit, credit: entry.credit, cash: entry.cash, weight: entry.weight, count: entry.count, notes: entry.notes }));
-    const { XLSX, workbook } = await createDailyJournalWorkbook(summary, operations);
-    XLSX.writeFile(workbook, `Journal_${selectedDate}.xlsx`);
+    downloadCsv(createDailyJournalCsvRows(summary, operations), `Journal_${selectedDate}.csv`);
   };
 
   return <div className="space-y-6 pb-10" dir="rtl">
     <div className="rounded-2xl border border-[#1a1e2a] bg-[#0e1018] p-3 shadow-lg">
       <div className="mb-3 flex items-center justify-between gap-3">
         <h2 className="flex items-center gap-2 text-base font-black text-[#c9a84c]"><Calendar className="h-5 w-5" />{'\u0627\u0644\u064a\u0648\u0645\u064a\u0629 \u0627\u0644\u0639\u0627\u0645\u0629'}</h2>
-        <button type="button" onClick={exportToExcel} className="flex h-10 w-10 items-center justify-center rounded-xl border border-[#c9a84c22] bg-[#c9a84c11] text-[#c9a84c]"><Download className="h-4 w-4" /></button>
+        <button type="button" onClick={exportToCsv} className="flex h-10 w-10 items-center justify-center rounded-xl border border-[#c9a84c22] bg-[#c9a84c11] text-[#c9a84c]"><Download className="h-4 w-4" /></button>
       </div>
       <div className="grid grid-cols-[44px_1fr_44px] items-center gap-2">
         <button type="button" onClick={() => { const date = new Date(selectedDate); date.setDate(date.getDate() - 1); setSelectedDate(format(date, 'yyyy-MM-dd')); }} className="flex h-11 items-center justify-center rounded-xl border border-[#1a1e2a] bg-[#080a0f] text-[#ddd8cc]"><ChevronRight className="h-5 w-5" /></button>

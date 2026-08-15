@@ -6,7 +6,7 @@ import { useAppStore } from "../../store";
 import { analyzeProfitability, type ProfitAccountRow } from "../../lib/engine";
 import { buildOpeningCostConfig } from "../../lib/openingCostConfig";
 import { cn } from "../../lib/utils";
-import { exportToExcel } from "../../utils/exportUtils";
+import { exportToCsv } from "../../utils/exportUtils";
 
 export const ProfitAnalysisView = () => {
   const { entries, goldPrice, silverPrice, accountsDb, openingCostConfig, setView } = useAppStore();
@@ -70,7 +70,7 @@ export const ProfitAnalysisView = () => {
       "قيمة مشتريات": row.purchCash,
       "قيمة مبيعات": row.salesCash,
     }));
-    exportToExcel([{ name: "profit_analysis", data }], `profit_analysis_${format(new Date(), "yyyy-MM-dd")}`);
+    exportToCsv([{ name: "profit_analysis", data }], `profit_analysis_${format(new Date(), "yyyy-MM-dd")}`);
   };
 
   return (

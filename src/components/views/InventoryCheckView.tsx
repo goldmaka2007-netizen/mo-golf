@@ -11,7 +11,7 @@ import { cn } from '../../lib/utils';
 import { parseWeight } from '../../lib/accounting';
 import { getMetricValue, getDynamicAccountNature, getMetricActualValue } from '../../utils/accountLogic';
 import { AccountNature, InventoryCheck, OperationType } from '../../types';
-import * as XLSX from 'xlsx';
+import { downloadCsv } from '../../utils/csv';
 import { FormInput } from '../ui/FormInput';
 import { areOperationWritesLocked } from '../../lib/costRecalculation';
 import {
@@ -430,10 +430,7 @@ export const InventoryCheckView = React.memo(() => {
       'الملاحظات': check.notes || '-'
     }));
 
-    const ws = XLSX.utils.json_to_sheet(data);
-    const wb = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(wb, ws, "سجل الجرد");
-    XLSX.writeFile(wb, `inventory_report_${format(new Date(), 'yyyy-MM-dd')}.xlsx`);
+    downloadCsv(data, `inventory_report_${format(new Date(), 'yyyy-MM-dd')}.csv`);
   };
 
   // Derive system's expected balance for the selected account

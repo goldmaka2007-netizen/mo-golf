@@ -1,4 +1,3 @@
-import * as XLSX from 'xlsx';
 import type { Account, Entry } from '../types';
 import { buildMerchantMetalPositionTimeline, type MerchantGoldLiabilityState } from './merchantGoldLiability';
 import type { InventoryCostState, InventoryCostTimeline, Phase5OpeningCostConfig } from './inventoryCostTypes';
@@ -8,6 +7,7 @@ const EGP_SCALE = 100;
 
 type ExcelValue = string | number | boolean | null;
 type ExcelRow = Record<string, ExcelValue>;
+export interface WacAuditCsv { rows: ExcelRow[]; }
 
 export interface WacAuditWorkbookInput {
   entries: Entry[];
@@ -242,38 +242,27 @@ const diagnosticsRows = (input: WacAuditWorkbookInput, merchantTimeline: ReturnT
   ...merchantTimeline.diagnostics.map(item => ({ 'المصدر': 'Merchant WAC', Severity: item.severity, Code: item.code, 'التاريخ إن أمكن': '', 'Operation ID': item.operationId ?? '', 'Account ID': item.merchantAccountId ?? '', 'المعدن': item.metal ?? '', 'الرسالة': item.message })),
 ];
 
-const addSheet = (workbook: XLSX.WorkBook, name: string, rows: ExcelRow[], metadata: ExcelValue[][] = []): void => {
-  const headers = rows.length ? Object.keys(rows[0]) : [];
-  const sheet = XLSX.utils.aoa_to_sheet([...metadata, [], headers, ...rows.map(row => headers.map(header => row[header]))]);
-  const headerRow = metadata.length + 2;
-  const end = XLSX.utils.encode_cell({ r: Math.max(headerRow, headerRow + rows.length), c: Math.max(0, headers.length - 1) });
-  sheet['!autofilter'] = { ref: `A${headerRow}:${end}` };
-  sheet['!freeze'] = { xSplit: 0, ySplit: headerRow, topLeftCell: `A${headerRow + 1}`, activePane: 'bottomLeft', state: 'frozen' };
-  sheet['!cols'] = headers.map(header => ({ wch: Math.min(38, Math.max(14, header.length + 4)) }));
-  Object.keys(sheet).filter(key => key[0] !== '!').forEach(key => {
-    const cell = sheet[key];
-    if (typeof cell.v === 'string' && /(ID|رقم العملية|Account ID)/.test(headers[XLSX.utils.decode_cell(key).c] ?? '')) cell.t = 's';
-    if (typeof cell.v === 'number') cell.z = /WAC/.test(headers[XLSX.utils.decode_cell(key).c] ?? '') ? '#,##0.00' : '#,##0.00;[Red]-#,##0.00';
-  });
-  XLSX.utils.book_append_sheet(workbook, sheet, name);
+const addSheet = (output: ExcelRow[], name: string, rows: ExcelRow[], metadata: ExcelValue[][] = []): void => {
+  metadata.forEach(row => output.push({ التقرير: name, الحقل: row[0], القيمة: row[1] }));
+  rows.forEach(row => output.push({ التقرير: name, ...row }));
 };
 
 /** Builds only derived workbook bytes; no Firestore write and no accounting mutation. */
-export const buildWacAuditWorkbook = (input: WacAuditWorkbookInput): XLSX.WorkBook => {
+export const buildWacAuditCsv = (input: WacAuditWorkbookInput): WacAuditCsv => {
   const accountsById = new Map(input.accounts.flatMap(account => account.id ? [[account.id, account] as const] : []));
   const merchantTimeline = buildMerchantMetalPositionTimeline(input.entries, input.accounts, input.inventoryTimeline);
-  const workbook = XLSX.utils.book_new();
+  const rows: ExcelRow[] = [];
   const exportedAt = input.exportedAt ?? new Date();
-  addSheet(workbook, 'ملخص WAC', summaryRows(input, merchantTimeline, accountsById), [
+  addSheet(rows, 'ملخص WAC', summaryRows(input, merchantTimeline, accountsById), [
     ['تاريخ ووقت التصدير', exportedAt.toISOString()],
     ['إصدار حساب المخزون', input.inventoryTimeline.calculationVersion],
     ['إصدار حساب التجار', merchantTimeline.calculationVersion],
     ['حالة Inventory timeline', input.inventoryTimeline.valid ? 'valid' : 'invalid'],
   ]);
-  addSheet(workbook, 'حركات المخزون WAC', inventoryRows(input, accountsById));
-  addSheet(workbook, 'حركات التجار WAC', merchantRows(input, accountsById));
-  addSheet(workbook, 'Diagnostics', diagnosticsRows(input, merchantTimeline));
-  return workbook;
+  addSheet(rows, 'حركات المخزون WAC', inventoryRows(input, accountsById));
+  addSheet(rows, 'حركات التجار WAC', merchantRows(input, accountsById));
+  addSheet(rows, 'Diagnostics', diagnosticsRows(input, merchantTimeline));
+  return { rows };
 };
 
-export const wacAuditFilename = (date = new Date()): string => `makka_wac_audit_${date.toISOString().slice(0, 10)}.xlsx`;
+export const wacAuditFilename = (date = new Date()): string => `makka_wac_audit_${date.toISOString().slice(0, 10)}.csv`;

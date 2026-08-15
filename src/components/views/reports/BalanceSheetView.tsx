@@ -18,7 +18,7 @@ import { buildIncomeStatementReport } from '../../../lib/incomeStatementReport';
 import { buildEquityStatementReport } from '../../../lib/equityStatementReport';
 import { buildFinancialPositionReport } from '../../../lib/financialPositionReport';
 import { computeAccountBalances } from '../../../lib/engine';
-import { exportToExcel } from '../../../utils/exportUtils';
+import { exportToCsv } from '../../../utils/exportUtils';
 
 type LedgerType = 'cash' | 'gold' | 'silver' | 'accs';
 
@@ -80,7 +80,7 @@ export const BalanceSheetView = React.memo(({ entries }: { entries: Entry[] }) =
       sheets.push({ name: `المركز المالي - ${tabNames[tab]}`, data: rows });
     });
 
-    exportToExcel(sheets, 'المركز_المالي');
+    exportToCsv(sheets, 'المركز_المالي');
   };
 
   const renderSection = (title: string, data: any, icon: any, colorClass: string, unit: string) => (
@@ -246,7 +246,7 @@ export const BalanceSheetView = React.memo(({ entries }: { entries: Entry[] }) =
           className="flex items-center justify-center gap-2 bg-[#1a1e2a] hover:bg-[#c9a84c] hover:text-[#080a0f] text-[#c9a84c] px-5 py-2.5 rounded-xl text-sm font-bold transition-all border border-[#c9a84c33] hover:border-[#c9a84c] w-full sm:w-auto"
         >
           <Download className="w-4 h-4" />
-          تصدير Excel (الكل)
+          تصدير CSV (الكل)
         </button>
       </div>
 

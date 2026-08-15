@@ -19,7 +19,7 @@ import { cn } from '../../../lib/utils';
 import { buildIncomeStatementReport, type IncomeStatementCashBreakdown, type IncomeStatementSection } from '../../../lib/incomeStatementReport';
 import { computeAccountBalances } from '../../../lib/engine';
 import { buildIncomeStatementExcelSheets } from '../../../lib/incomeStatementExcel';
-import { exportToExcel } from '../../../utils/exportUtils';
+import { exportToCsv } from '../../../utils/exportUtils';
 
 export const IncomeStatementView = React.memo(({ entries }: { entries: Entry[] }) => {
   const { accountsDb } = useAppStore();
@@ -52,7 +52,7 @@ export const IncomeStatementView = React.memo(({ entries }: { entries: Entry[] }
   );
 
   const handleExport = () => {
-    exportToExcel(
+    exportToCsv(
       buildIncomeStatementExcelSheets(financials),
       `قائمة_الدخل_${selectedMonth === 'all' ? 'الكل' : selectedMonth}`,
     );
@@ -235,8 +235,8 @@ export const IncomeStatementView = React.memo(({ entries }: { entries: Entry[] }
         >
           <Download className="w-4 h-4" />
           {selectedMonth === 'all' 
-            ? 'تصدير Excel (الكل)' 
-            : `تصدير Excel (${format(parseISO(selectedMonth + '-01'), 'MMMM yyyy', { locale: ar })})`}
+            ? 'تصدير CSV (الكل)'
+            : `تصدير CSV (${format(parseISO(selectedMonth + '-01'), 'MMMM yyyy', { locale: ar })})`}
         </button>
       </div>
 

@@ -21,7 +21,6 @@ import {
   setDoc,
   writeBatch 
 } from 'firebase/firestore';
-import * as XLSX from 'xlsx';
 import { db } from '../../firebase';
 import { AnnualOpeningCostConfig } from '../../types';
 import { useAppStore } from '../../store';
@@ -30,7 +29,9 @@ import { formatMinorUnitsToEgpInput, getAccessoryOpeningCostsMinorByAccountId, g
 import { normalizeNumerals } from '../../lib/accounting';
 import { areOperationWritesLocked } from '../../lib/costRecalculation';
 import { buildOpeningCostConfig } from '../../lib/openingCostConfig';
-import { buildWacAuditWorkbook, wacAuditFilename } from '../../lib/wacAuditExcel';
+import { buildWacAuditCsv, wacAuditFilename } from '../../lib/wacAuditExcel';
+import { downloadCsv } from '../../utils/csv';
+import { parseSettingsEntryCsv } from '../../utils/csvImport';
 
 export const SettingsView = React.memo(() => {
   const { setView, user, entries, accountsDb, setGlobalError, openingCostConfig, setOpeningCostConfig, costCalculationRun } = useAppStore();
@@ -204,22 +205,13 @@ export const SettingsView = React.memo(() => {
     try {
       // Let the loading state paint before serializing a large browser-local workbook.
       await new Promise<void>(resolve => requestAnimationFrame(() => resolve()));
-      const workbook = buildWacAuditWorkbook({
+      const workbook = buildWacAuditCsv({
         entries,
         accounts: accountsDb,
         openingCostConfig: buildOpeningCostConfig(openingCostConfig, accountsDb),
         inventoryTimeline: costCalculationRun.timeline,
       });
-      const bytes = XLSX.write(workbook, { type: 'array', bookType: 'xlsx' });
-      const url = URL.createObjectURL(new Blob([bytes], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' }));
-      const anchor = document.createElement('a');
-      anchor.href = url;
-      anchor.download = wacAuditFilename();
-      anchor.style.display = 'none';
-      document.body.appendChild(anchor);
-      anchor.click();
-      anchor.remove();
-      window.setTimeout(() => URL.revokeObjectURL(url), 0);
+      downloadCsv(workbook.rows, wacAuditFilename());
     } catch (error) {
       setGlobalError(error instanceof Error ? `تعذر تصدير تقرير WAC: ${error.message}` : 'تعذر تصدير تقرير WAC.');
     } finally {
@@ -418,15 +410,10 @@ export const SettingsView = React.memo(() => {
       e.id || ""
     ]);
 
-    const wb = XLSX.utils.book_new();
-    const ws = XLSX.utils.aoa_to_sheet([headers, ...rows]);
-    XLSX.utils.book_append_sheet(wb, ws, "القيود");
-
     const fileName = mode === 'update' 
-      ? 'mecca_gold_backup.xlsx' 
-      : `makkah_gold_all_data_${new Date().toISOString().split('T')[0]}.xlsx`;
-
-    XLSX.writeFile(wb, fileName);
+      ? 'mecca_gold_backup.csv'
+      : `makkah_gold_all_data_${new Date().toISOString().split('T')[0]}.csv`;
+    downloadCsv(rows.map(row => Object.fromEntries(headers.map((header, index) => [header, row[index]]))), fileName, headers);
   };
 
   const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -434,28 +421,13 @@ export const SettingsView = React.memo(() => {
     if (!file) return;
     
     const reader = new FileReader();
-    const isExcel = file.name.endsWith('.xlsx') || file.name.endsWith('.xls');
+    const isExcel = false;
     
     reader.onload = (event) => {
-      if (isExcel) {
-        const data = new Uint8Array(event.target?.result as ArrayBuffer);
-        const workbook = XLSX.read(data, { type: 'array' });
-        const sheetName = workbook.SheetNames[0];
-        const worksheet = workbook.Sheets[sheetName];
-        const json = XLSX.utils.sheet_to_json(worksheet, { header: 1, raw: false }) as any[][];
-        const csvLines = json.map(row => row.map(cell => String(cell || "")).join(','));
-        setImportText(csvLines.join('\n'));
-      } else {
-        const text = event.target?.result as string;
-        setImportText(text);
-      }
+      setImportText(event.target?.result as string);
     };
     
-    if (isExcel) {
-      reader.readAsArrayBuffer(file);
-    } else {
-      reader.readAsText(file);
-    }
+    reader.readAsText(file);
   };
 
   const handleImport = async () => {
@@ -468,30 +440,16 @@ export const SettingsView = React.memo(() => {
     setImportProgress(null);
     
     try {
-      const lines = importText.split(/\r?\n/).filter(l => l.trim());
-      const total = lines.length;
+      const importedRows = parseSettingsEntryCsv(importText);
+      const total = importedRows.length;
       let success = 0;
       let failed = 0;
       
       setImportProgress({ current: 0, total, success: 0, failed: 0 });
 
-      const firstLine = lines[0];
-      let delimiter = ',';
-      const counts = {
-        ',': (firstLine.match(/,/g) || []).length,
-        '\t': (firstLine.match(/\t/g) || []).length,
-        ';': (firstLine.match(/;/g) || []).length
-      };
-      
-      if (counts['\t'] > counts[','] && counts['\t'] > counts[';']) delimiter = '\t';
-      else if (counts[';'] > counts[','] && counts[';'] > counts['\t']) delimiter = ';';
-
-      for (let i = 0; i < lines.length; i++) {
+      for (let i = 0; i < importedRows.length; i++) {
         try {
-          const parts = lines[i].split(delimiter).map(p => p.trim());
-          if (parts.length < 4) { failed++; continue; }
-          
-          const [date, tx, debit, credit, cash, weight, notes, karat, count, arabicWeight, multiplier] = parts;
+          const { date, tx, debit, credit, cash, weight, notes, karat, count, arabicWeight, multiplier } = importedRows[i];
           
           await addDoc(collection(db, 'entries'), {
             date: date || "",
@@ -501,10 +459,10 @@ export const SettingsView = React.memo(() => {
             cash: cash || "0",
             weight: weight || "0",
             notes: notes || "",
-            karat: karat ? parseInt(karat) : null,
+            karat: karat === null ? null : parseInt(String(karat), 10),
             count: count || "0",
             arabicWeight: arabicWeight || "0",
-            multiplier: multiplier ? parseFloat(multiplier) : null,
+            multiplier: multiplier === null ? null : parseFloat(String(multiplier)),
             userId: user.uid,
             createdAt: new Date().toISOString()
           });
@@ -722,7 +680,7 @@ export const SettingsView = React.memo(() => {
             <div className="bg-[#0e1018] border border-[#1a1e2a] rounded-3xl p-6 space-y-6">
               <div className="pb-6 border-b border-[#1a1e2a] space-y-4">
                 <div>
-                  <div className="text-sm font-bold text-[#ddd8cc]">تصدير كافة البيانات (Excel)</div>
+                  <div className="text-sm font-bold text-[#ddd8cc]">تصدير كافة البيانات (CSV)</div>
                   <div className="text-[10px] text-[#5a5548]">تحميل نسخة احتياطية من جميع القيود المسجلة</div>
                 </div>
                 <div className="flex gap-2">
@@ -793,19 +751,19 @@ export const SettingsView = React.memo(() => {
               </div>
 
               <div className="pt-6 border-t border-[#1a1e2a] space-y-4">
-                <div className="text-sm font-bold text-[#ddd8cc]">استيراد بيانات (Excel/CSV)</div>
+                <div className="text-sm font-bold text-[#ddd8cc]">استيراد بيانات CSV</div>
                 <div className="flex flex-col gap-4">
                   <div className="relative group">
                     <input 
                       type="file" 
-                      accept=".csv, .xlsx, .xls"
+                      accept=".csv,text/csv"
                       onChange={handleFileUpload}
                       className="absolute inset-0 w-full h-full opacity-0 cursor-pointer z-10"
                     />
                     <div className="bg-[#080a0f] border-2 border-dashed border-[#1a1e2a] rounded-2xl p-8 text-center group-hover:border-[#c9a84c33] transition-all">
                       <Upload className="w-8 h-8 text-[#5a5548] mx-auto mb-2 group-hover:text-[#c9a84c] transition-colors" />
                       <div className="text-xs text-[#5a5548]">اسحب الملف هنا أو اضغط للاختيار</div>
-                      <div className="text-[9px] text-[#5a5548] mt-1">يدعم ملفات Excel و CSV</div>
+                      <div className="text-[9px] text-[#5a5548] mt-1">يدعم ملفات CSV فقط</div>
                     </div>
                   </div>
                   

@@ -6,7 +6,7 @@ import { format } from 'date-fns';
 import { Entry } from '../../../types';
 import { useAppStore } from '../../../store';
 import { cn } from '../../../lib/utils';
-import { exportToExcel } from '../../../utils/exportUtils';
+import { exportToCsv } from '../../../utils/exportUtils';
 import { buildInventoryCycleExcelSheets, canExportInventoryCycleReport } from '../../../lib/inventoryCycleExcel';
 import { buildOpeningCostConfig } from '../../../lib/openingCostConfig';
 import { useInventoryCycleReportCache } from '../../../hooks/useInventoryCycleReportCache';
@@ -151,7 +151,7 @@ export const InventoryLifecycleView: React.FC<Props> = ({ entries }) => {
   const exportCurrentTab = () => {
     if (!canExportInventoryCycleReport(report)) return;
     const suffix = `${filters.startDate}_${filters.endDate}_${format(new Date(), 'yyyy-MM-dd')}`;
-    exportToExcel(buildInventoryCycleExcelSheets(report, tab), `inventory-cycle-${tab}_${suffix}`);
+    exportToCsv(buildInventoryCycleExcelSheets(report, tab), `inventory-cycle-${tab}_${suffix}`);
   };
 
   const openOriginal = (id: string) => {
