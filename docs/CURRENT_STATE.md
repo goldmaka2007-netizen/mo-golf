@@ -1,5 +1,14 @@
 # Current Project State
 
+### XLSX to CSV migration — deployed 2026-08-15
+
+- Commit `1796f7bf53b2c95a407d74de6ee10f9c9dbc2f63` is deployed to Firebase Hosting only for `makka-central-accounting`.
+- All application exports use native UTF-8 BOM CSV; Settings import uses a standards-compliant local parser with headers, quoting, embedded commas/newlines, reordered columns, validation, Arabic text/numerals, and safe extra-column handling.
+- XLSX was removed from runtime dependencies and production bundle. Baseline: 2,350.19 kB JS / 662.59 kB gzip. Deployed build: 1,914.60 kB JS / 517.50 kB gzip; the final build includes the CSV import parser and is slightly above the earlier 1,912.59 kB measurement.
+- The original XLSX module was in the main bundle; no lazy XLSX chunk existed. Firestore Data, Rules, Indexes, Functions, Storage, and Authentication were unchanged.
+- Focused CSV/Settings tests passed (8 tests). TypeScript, Balance Contract Guard, production build, and diff check passed. Full suite retains five pre-existing accounting/Golden failures; no Golden Baseline was changed.
+- Production root and `assets/index-DDP4HsQB.js` returned HTTP 200. Browser smoke reached Home, Daily Journal, Reports, Settings CSV UI, and Inventory Check; no runtime errors were observed. A safe CSV file was parsed in the UI without starting the import write.
+
 **Last reviewed:** 2026-08-14
 **Repository:** `goldmaka2007-netizen/mo-golf`  
 **Branch reviewed:** `main`  
