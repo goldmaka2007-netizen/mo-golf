@@ -4,11 +4,33 @@ import { buildAccountRegistry, canApproveRegistry, discoverAccounts, normalizeAc
 import { buildMigrationPatch, planAccountIdMigration } from '../accountMigration';
 import { buildCanonicalPosting } from '../postingMatrix';
 import { buildParityReport } from '../shadowAccounting';
+import { SEED_ACCOUNTS } from '../../migrationData';
 
 const account = (patch: Partial<Account>): Account => ({ id: 'a', name: 'حساب', mainType: 'اصول', subType: '', balanceNature: 'جنية مصري', type: 'other', userId: 'u', ...patch });
 const entry = (patch: Partial<Entry>): Entry => ({ id: 'e', seq: 1, tx: 'عملية', operationKind: 'other', debit: 'الخزنة', credit: 'مصروفات', date: '2026-01-01', cash: '100', weight: '0', arabicWeight: '0', count: '0', notes: '', userId: 'u', ...patch });
 
 describe('central account registry', () => {
+  it('derives coin and bar quantity tracking from runtime taxonomy when metadata is missing', () => {
+    const seeded = (name: string, id: string): Account => ({
+      ...(SEED_ACCOUNTS.find(item => item.name === name)! as Account),
+      id,
+      userId: 'u',
+    });
+    const registry = buildAccountRegistry([
+      seeded('كسر افرنجي', 'scrap-foreign'),
+      seeded('كسر عربي', 'scrap-arabic'),
+      seeded('جنية', 'coin'),
+      seeded('سبيكة', 'bar'),
+      { ...seeded('جنية', 'unrelated-direct'), name: 'ذهب مباشر إضافي', cloneSourceAccountId: undefined, type: 'gold_direct', quantityStep: undefined },
+    ]);
+
+    expect(registry.bySourceAccountId.get('scrap-foreign')).toMatchObject({ trackingMode: 'weight', tracksQuantity: false });
+    expect(registry.bySourceAccountId.get('scrap-arabic')).toMatchObject({ trackingMode: 'weight', tracksQuantity: false });
+    expect(registry.bySourceAccountId.get('coin')).toMatchObject({ trackingMode: 'weight_and_quantity', tracksQuantity: true });
+    expect(registry.bySourceAccountId.get('bar')).toMatchObject({ trackingMode: 'weight_and_quantity', tracksQuantity: true });
+    expect(registry.bySourceAccountId.get('unrelated-direct')).toMatchObject({ trackingMode: 'weight', tracksQuantity: false });
+  });
+
   it('extracts inventory and merchant dimensions from legacy metadata without treating merchant weight as inventory', () => {
     const registry = buildAccountRegistry([
       account({ id: 'gold', name: 'خاتم', type: 'gold_product', metal: 'gold', is_inventory: true, karat: '21', balanceNature: 'جرام ذهب' }),

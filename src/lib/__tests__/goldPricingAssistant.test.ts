@@ -1,6 +1,7 @@
 import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
 import type { Account } from '../../types';
+import { SEED_ACCOUNTS } from '../../migrationData';
 import { buildAccountRegistry } from '../accountRegistry';
 import {
   buildGoldAssistantEntryPrefill,
@@ -161,12 +162,17 @@ describe('assistant quantity, reset, and session behavior', () => {
 });
 
 describe('account rules and EntryForm handoff', () => {
+  const seededInventory = (name: string, id: string): Account => ({
+    ...(SEED_ACCOUNTS.find(account => account.name === name)! as Account),
+    id,
+    userId: 'u',
+  });
   const accounts: Account[] = [
     { id: 'cash', name: 'الخزنة', mainType: 'اصول', subType: 'نقدية', balanceNature: 'جنيه', type: 'cash', is_inventory: false, karat: null, metal: null, userId: 'u' },
-    { id: 'raw18', name: 'كسر افرنجي', mainType: 'اصول', subType: 'مخزون ذهب', balanceNature: 'جرام ذهب', type: 'gold_raw', is_inventory: true, karat: '18', metal: 'gold', userId: 'u' },
-    { id: 'raw21', name: 'كسر عربي', mainType: 'اصول', subType: 'مخزون ذهب', balanceNature: 'جرام ذهب', type: 'gold_raw', is_inventory: true, karat: '21', metal: 'gold', userId: 'u' },
-    { id: 'coin', name: 'جنية', mainType: 'اصول', subType: 'مخزون ذهب', balanceNature: 'جرام ذهب', type: 'gold_direct', is_inventory: true, karat: '21', metal: 'gold', quantityStep: 1, userId: 'u' },
-    { id: 'bar', name: 'سبيكة', mainType: 'اصول', subType: 'مخزون ذهب', balanceNature: 'جرام ذهب', type: 'gold_direct', is_inventory: true, karat: '24', metal: 'gold', quantityStep: 1, userId: 'u' },
+    seededInventory('كسر افرنجي', 'raw18'),
+    seededInventory('كسر عربي', 'raw21'),
+    seededInventory('جنية', 'coin'),
+    seededInventory('سبيكة', 'bar'),
     { id: 'unrelated-direct', name: 'ذهب مباشر إضافي', mainType: 'اصول', subType: 'مخزون ذهب', balanceNature: 'جرام ذهب', type: 'gold_direct', is_inventory: true, karat: '21', metal: 'gold', quantityStep: 1, cloneSourceAccountId: 'coin', userId: 'u' },
   ];
   const registry = buildAccountRegistry(accounts);

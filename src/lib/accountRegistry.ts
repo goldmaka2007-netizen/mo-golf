@@ -13,6 +13,7 @@ import { getEntryArabicWeight, parseCash, resolveOperationKind } from './engine'
 import { applyApprovedCanonicalEquityTaxonomy } from './canonicalEquityCatalog';
 import { applyRuntimeAccountOverride } from './runtimeAccountOverrides';
 import { exposeInventoryLinkedAccounts, inventoryAccountDisplayName } from './inventoryAccountLinkage';
+import { accountHasRuntimeQuantityTracking, applyRuntimeQuantityTracking, buildRuntimeQuantityTrackedAccountIds } from './inventoryTrackingPolicy';
 
 export type AccountResolution =
   | { status: 'resolved'; account: CanonicalAccountDefinition; via: 'id' | 'alias' }
@@ -123,6 +124,7 @@ const dimensionsFor = (
   type: CanonicalAccountType,
   metal: CanonicalAccountDefinition['metal'],
   group: CanonicalMainGroup,
+  runtimeQuantityTrackedAccountIds: ReadonlySet<string> = new Set(),
 ): AccountTrackingDimension[] => {
   const dimensions: AccountTrackingDimension[] = [];
   if (type === 'merchant') dimensions.push('cash');
@@ -134,7 +136,7 @@ const dimensionsFor = (
   }
   if (metal === 'gold') dimensions.push('gold');
   if (metal === 'silver') dimensions.push('silver');
-  if (metal === 'accessory' || account?.quantityStep !== undefined) dimensions.push('quantity');
+  if (metal === 'accessory' || accountHasRuntimeQuantityTracking(account, runtimeQuantityTrackedAccountIds)) dimensions.push('quantity');
   return [...new Set(dimensions)];
 };
 
@@ -155,11 +157,11 @@ const allowedOperations: AccountingOperationKind[] = [
   'merchant_settlement', 'personal_withdrawal', 'expense', 'other',
 ];
 
-const createDefinition = (account: Account | undefined, name: string, historical: boolean, evidenceSource: 'account_document' | 'entry_name'): CanonicalAccountDefinition => {
+const createDefinition = (account: Account | undefined, name: string, historical: boolean, evidenceSource: 'account_document' | 'entry_name', runtimeQuantityTrackedAccountIds: ReadonlySet<string> = new Set()): CanonicalAccountDefinition => {
   const group = groupFor(account);
   const metal = metalFor(account);
   const entityType = historical ? 'historical' : typeFor(account, group, metal);
-  const allowedDimensions = dimensionsFor(account, entityType, metal, group);
+  const allowedDimensions = dimensionsFor(account, entityType, metal, group, runtimeQuantityTrackedAccountIds);
   const baseBalance = normalBalance(group);
   const timestamp = now();
   const sourceId = account?.id;
@@ -231,13 +233,14 @@ const mergeManual = (generated: CanonicalAccountDefinition, manual: CanonicalAcc
 /** Builds the source of truth for the shadow path. Manual records always win. */
 export const buildAccountRegistry = (accounts: Account[], entries: Entry[] = [], manualDefinitions: CanonicalAccountDefinition[] = []): AccountRegistry => {
   const linkedAccounts = exposeInventoryLinkedAccounts(accounts);
+  const runtimeQuantityTrackedAccountIds = buildRuntimeQuantityTrackedAccountIds(linkedAccounts);
   const manualBySource = new Map(manualDefinitions.filter(item => item.sourceAccountId).map(item => [item.sourceAccountId!, item]));
   const manualByName = new Map(manualDefinitions.map(item => [normalizeAccountName(item.canonicalName), item]));
   const definitions = linkedAccounts.filter(account => account.isActive !== false).map((rawAccount): CanonicalAccountDefinition => {
     const account = applyRuntimeAccountOverride(rawAccount);
     const displayName = inventoryAccountDisplayName(account);
     const generated = applyApprovedCanonicalEquityTaxonomy(
-      createDefinition(account, displayName, false, 'account_document'),
+      createDefinition(account, displayName, false, 'account_document', runtimeQuantityTrackedAccountIds),
       account,
     );
     if (displayName !== account.name) {
@@ -256,7 +259,7 @@ export const buildAccountRegistry = (accounts: Account[], entries: Entry[] = [],
         || manual.metal !== governed.metal
         || [...manual.allowedDimensions].sort().join('|')
           !== [...governed.allowedDimensions].sort().join('|'));
-    if (!conflicts) return mergeManual(generated, manual);
+    if (!conflicts) return applyRuntimeQuantityTracking(mergeManual(generated, manual), account, runtimeQuantityTrackedAccountIds);
     return {
       ...generated,
       allowedDimensions: [],
