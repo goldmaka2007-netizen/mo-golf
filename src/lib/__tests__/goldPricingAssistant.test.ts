@@ -163,10 +163,11 @@ describe('assistant quantity, reset, and session behavior', () => {
 describe('account rules and EntryForm handoff', () => {
   const accounts: Account[] = [
     { id: 'cash', name: 'الخزنة', mainType: 'اصول', subType: 'نقدية', balanceNature: 'جنيه', type: 'cash', is_inventory: false, karat: null, metal: null, userId: 'u' },
-    { id: 'raw18', name: 'كسر افرنجي', mainType: 'اصول', subType: 'مخزون', balanceNature: 'جرام ذهب', type: 'gold_raw', is_inventory: true, karat: '18', metal: 'gold', userId: 'u' },
-    { id: 'raw21', name: 'كسر عربي', mainType: 'اصول', subType: 'مخزون', balanceNature: 'جرام ذهب', type: 'gold_raw', is_inventory: true, karat: '21', metal: 'gold', userId: 'u' },
-    { id: 'coin', name: 'جنية', mainType: 'اصول', subType: 'مخزون', balanceNature: 'جرام ذهب', type: 'gold_direct', is_inventory: true, karat: '21', metal: 'gold', quantityStep: 1, userId: 'u' },
-    { id: 'bar', name: 'سبيكة', mainType: 'اصول', subType: 'مخزون', balanceNature: 'جرام ذهب', type: 'gold_direct', is_inventory: true, karat: '24', metal: 'gold', quantityStep: 1, userId: 'u' },
+    { id: 'raw18', name: 'كسر افرنجي', mainType: 'اصول', subType: 'مخزون ذهب', balanceNature: 'جرام ذهب', type: 'gold_raw', is_inventory: true, karat: '18', metal: 'gold', userId: 'u' },
+    { id: 'raw21', name: 'كسر عربي', mainType: 'اصول', subType: 'مخزون ذهب', balanceNature: 'جرام ذهب', type: 'gold_raw', is_inventory: true, karat: '21', metal: 'gold', userId: 'u' },
+    { id: 'coin', name: 'جنية', mainType: 'اصول', subType: 'مخزون ذهب', balanceNature: 'جرام ذهب', type: 'gold_direct', is_inventory: true, karat: '21', metal: 'gold', quantityStep: 1, userId: 'u' },
+    { id: 'bar', name: 'سبيكة', mainType: 'اصول', subType: 'مخزون ذهب', balanceNature: 'جرام ذهب', type: 'gold_direct', is_inventory: true, karat: '24', metal: 'gold', quantityStep: 1, userId: 'u' },
+    { id: 'unrelated-direct', name: 'ذهب مباشر إضافي', mainType: 'اصول', subType: 'مخزون ذهب', balanceNature: 'جرام ذهب', type: 'gold_direct', is_inventory: true, karat: '21', metal: 'gold', quantityStep: 1, cloneSourceAccountId: 'coin', userId: 'u' },
   ];
   const registry = buildAccountRegistry(accounts);
   const purchaseRules = accounts.slice(1).map(account => ({
@@ -179,9 +180,10 @@ describe('account rules and EntryForm handoff', () => {
     multiplier: Number(account.karat) / 21,
   }));
 
-  it('resolves the four allowed purchase products by rule and account metadata', () => {
+  it('resolves only the four approved purchase products and excludes an unrelated fifth gold rule', () => {
     const products = resolveGoldAssistantProducts({ mode: 'purchase', accounts, registry, rules: purchaseRules });
     expect(products.map(item => item.accountId).sort()).toEqual(['bar', 'coin', 'raw18', 'raw21']);
+    expect(products.some(item => item.accountId === 'unrelated-direct')).toBe(false);
     expect(products.find(item => item.accountId === 'coin')?.tracksQuantity).toBe(true);
     expect(products.find(item => item.accountId === 'raw18')?.tracksQuantity).toBe(false);
   });

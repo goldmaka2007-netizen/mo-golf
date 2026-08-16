@@ -1,6 +1,8 @@
 import type { Account, Entry, TransactionRule } from '../types';
 import { calculateKaratPrice, normalizeNumerals } from './accounting';
 import type { AccountRegistry } from './accountRegistry';
+import { CURRENT_DATASET_INVENTORY_BINDINGS } from './inventoryCostCatalog';
+import { buildRuntimeStableInventoryIdAliases } from './runtimeCostAccountResolver';
 
 export type GoldAssistantMode = 'sale' | 'purchase';
 export type GoldAssistantKarat = 18 | 21 | 24;
@@ -47,6 +49,25 @@ export interface PurchaseLinkedValues {
   discountPerGram: number;
   purchasePricePerGram: number;
 }
+
+const SMART_PURCHASE_TAXONOMY_KEYS = new Set([
+  'gold.raw.scrap_foreign',
+  'gold.raw.scrap_arabic',
+  'gold.direct.coin',
+  'gold.direct.bar',
+]);
+
+const SMART_PURCHASE_STABLE_ACCOUNT_IDS = new Set(
+  CURRENT_DATASET_INVENTORY_BINDINGS
+    .filter(binding => SMART_PURCHASE_TAXONOMY_KEYS.has(binding.taxonomyKey))
+    .map(binding => binding.inventoryAccountId),
+);
+
+const approvedSmartPurchaseAccountIds = (accounts: Account[]): Set<string> => new Set(
+  [...buildRuntimeStableInventoryIdAliases(accounts)]
+    .filter(([, stableAccountId]) => SMART_PURCHASE_STABLE_ACCOUNT_IDS.has(stableAccountId))
+    .map(([runtimeAccountId]) => runtimeAccountId),
+);
 
 export interface GoldAssistantRule {
   tx: string;
@@ -249,6 +270,9 @@ export const resolveGoldAssistantProducts = (args: {
   const { mode, accounts, registry, rules } = args;
   const tx = mode === 'sale' ? 'بيع ذهب' : 'شراء ذهب';
   const products = new Map<string, GoldAssistantProduct>();
+  const approvedPurchaseIds = mode === 'purchase'
+    ? approvedSmartPurchaseAccountIds(accounts)
+    : null;
 
   for (const rule of rules) {
     if (rule.tx !== tx) continue;
@@ -261,6 +285,7 @@ export const resolveGoldAssistantProducts = (args: {
     const cashResolution = cashAccount ? registry.resolve(cashAccount.id, cashAccount.name) : null;
     if (
       !isGoldInventoryProduct(productAccount)
+      || (approvedPurchaseIds && !approvedPurchaseIds.has(productAccount.id))
       || cashResolution?.status !== 'resolved'
       || cashResolution.account.entityType !== 'cash'
     ) continue;
