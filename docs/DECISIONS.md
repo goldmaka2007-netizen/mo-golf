@@ -69,3 +69,7 @@ Every delivery reports root cause, changed files, verification, data/Firebase im
 ## D-017 — Merchant metal positions are signed and use separate carrying-value pools
 
 Each merchant gold position is signed in E21 and each merchant silver position is signed in physical grams. Positive positions are payables; negative positions are merchant-metal receivables. Gold, silver, inventory, and merchant cash/workmanship remain independent dimensions and WAC pools. New positions use the approved immutable operation basis; opening entries use Settings opening cost. Merchant transfers preserve carrying value without inventory or P&L. Physical settlements release merchant carrying value and Inventory WAC independently, recognizing only the legitimate metal-settlement gain or loss. See ADR-007.
+
+## D-018 — Smart Gold Assistants remain outside the accounting write contract
+
+Smart Sale and Smart Purchase are optional pricing/pre-fill helpers; the existing Entry Form review/save pipeline remains authoritative. Smart Purchase is restricted to the four approved stable inventory taxonomies: foreign scrap, Arabic scrap, gold coin, and gold bar. Coin/bar are weight + quantity products and may derive quantity capability from the approved runtime taxonomy when legacy Production metadata lacks `quantityStep`; no Production metadata migration is required. Sale tax/stamp is pricing configuration separate from Opening Cost/WAC. See ADR-009.
