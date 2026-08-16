@@ -213,6 +213,12 @@ const virtualSettlementGainFor = (metal: 'gold' | 'silver' | null): LegacyLedger
 const virtualSettlementLossFor = (metal: 'gold' | 'silver' | null): LegacyLedgerAccountMetadata => metal === 'silver'
   ? virtualAccount('system:income:silver-settlement-loss', '\u062e\u0633\u0627\u0626\u0631 \u062a\u0633\u0648\u064a\u0629 \u0627\u0644\u062a\u0632\u0627\u0645\u0627\u062a \u0627\u0644\u0641\u0636\u0629', 'expenses', '\u0641\u0631\u0642 Merchant Silver WAC \u0639\u0646 Inventory Silver WAC')
   : virtualAccount('system:income:gold-settlement-loss', '\u062e\u0633\u0627\u0626\u0631 \u062a\u0633\u0648\u064a\u0629 \u0627\u0644\u062a\u0632\u0627\u0645\u0627\u062a \u0627\u0644\u0630\u0647\u0628', 'expenses', '\u0641\u0631\u0642 Merchant Gold WAC \u0639\u0646 Inventory Gold WAC');
+const virtualTransferGainFor = (metal: 'gold' | 'silver' | null): LegacyLedgerAccountMetadata => metal === 'silver'
+  ? virtualAccount('system:income:silver-transfer-gain', '\u0645\u0643\u0627\u0633\u0628 \u0641\u0631\u0648\u0642 \u062d\u0648\u0627\u0644\u0627\u062a \u0627\u0644\u0641\u0636\u0629', 'revenue', '\u0641\u0631\u0642 \u0627\u0644\u0642\u064a\u0645\u0629 \u0627\u0644\u062f\u0641\u062a\u0631\u064a\u0629 \u0639\u0646 \u0633\u0639\u0631 \u062d\u0648\u0627\u0644\u0629 \u0627\u0644\u0635\u0627\u0641\u064a')
+  : virtualAccount('system:income:gold-transfer-gain', '\u0645\u0643\u0627\u0633\u0628 \u0641\u0631\u0648\u0642 \u062d\u0648\u0627\u0644\u0627\u062a \u0627\u0644\u0630\u0647\u0628', 'revenue', '\u0641\u0631\u0642 \u0627\u0644\u0642\u064a\u0645\u0629 \u0627\u0644\u062f\u0641\u062a\u0631\u064a\u0629 \u0639\u0646 \u0633\u0639\u0631 \u062d\u0648\u0627\u0644\u0629 \u0627\u0644\u0635\u0627\u0641\u064a');
+const virtualTransferLossFor = (metal: 'gold' | 'silver' | null): LegacyLedgerAccountMetadata => metal === 'silver'
+  ? virtualAccount('system:income:silver-transfer-loss', '\u062e\u0633\u0627\u0626\u0631 \u0641\u0631\u0648\u0642 \u062d\u0648\u0627\u0644\u0627\u062a \u0627\u0644\u0641\u0636\u0629', 'expenses', '\u0641\u0631\u0642 \u0627\u0644\u0642\u064a\u0645\u0629 \u0627\u0644\u062f\u0641\u062a\u0631\u064a\u0629 \u0639\u0646 \u0633\u0639\u0631 \u062d\u0648\u0627\u0644\u0629 \u0627\u0644\u0635\u0627\u0641\u064a')
+  : virtualAccount('system:income:gold-transfer-loss', '\u062e\u0633\u0627\u0626\u0631 \u0641\u0631\u0648\u0642 \u062d\u0648\u0627\u0644\u0627\u062a \u0627\u0644\u0630\u0647\u0628', 'expenses', '\u0641\u0631\u0642 \u0627\u0644\u0642\u064a\u0645\u0629 \u0627\u0644\u062f\u0641\u062a\u0631\u064a\u0629 \u0639\u0646 \u0633\u0639\u0631 \u062d\u0648\u0627\u0644\u0629 \u0627\u0644\u0635\u0627\u0641\u064a');
 
 const isInventoryAccount = (account: Account | undefined): boolean =>
   !!account && (account.is_inventory === true || ['gold_product', 'gold_raw', 'gold_direct', 'silver', 'accessory'].includes(account.type ?? ''));
@@ -308,7 +314,14 @@ const appendCostLegs = (
   merchantLiability.movements.filter(movement => movement.kind === 'opening' || movement.kind === 'merchant_transfer').forEach(movement => {
     const debit = metadataFor(movement.entry, 'debit', index);
     const credit = metadataFor(movement.entry, 'credit', index);
-    pushGenerated(movement.entry, debit, credit, movement.carryingValueMinor, 'carrying_value');
+    if (movement.kind === 'opening') {
+      pushGenerated(movement.entry, debit, credit, movement.carryingValueMinor, 'carrying_value');
+      return;
+    }
+    pushOne(movement.entry, debit, credit, 'debit', movement.merchantDebitValueMinor, 'carrying_value');
+    pushOne(movement.entry, credit, debit, 'credit', movement.merchantCreditValueMinor, 'carrying_value');
+    pushOne(movement.entry, virtualTransferLossFor(movement.metal), credit, 'debit', movement.transferLossMinor, 'carrying_value');
+    pushOne(movement.entry, virtualTransferGainFor(movement.metal), debit, 'credit', movement.transferGainMinor, 'carrying_value');
   });
 
   timeline.results.filter(result => allowedOperationIds.has(result.operationId || operationId(result.entry))).forEach(result => {

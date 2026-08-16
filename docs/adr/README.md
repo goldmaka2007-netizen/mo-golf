@@ -38,3 +38,4 @@ ADRs explain why durable choices exist so future contributors do not remove prot
 - ADR-005 — Central runtime inventory account resolution.
 - ADR-006 — Merchant Gold Liability Carrying-Value WAC (superseded by ADR-007).
 - ADR-007 — Signed Merchant Metal Positions and Carrying Value.
+- ADR-008 — Al-Safi Transfer-Hub Realization (amends ADR-007 for Al-Safi transfers only).

@@ -60,7 +60,20 @@ export interface MerchantGoldLiabilityMovement {
   inventoryBookValueRecognizedMinor: number;
   settlementGainMinor: number;
   settlementLossMinor: number;
-  valuationSource?: 'opening_cost_compatibility' | 'operation_price_snapshot' | 'historical_cost_compatibility' | 'source_merchant_wac';
+  transferInvoiceValueMinor: number;
+  transferGainMinor: number;
+  transferLossMinor: number;
+  sourceTransferGainMinor: number;
+  sourceTransferLossMinor: number;
+  destinationTransferGainMinor: number;
+  destinationTransferLossMinor: number;
+  sourceMerchantReleasedQuantityUnits: number;
+  sourceMerchantReleasedValueMinor: number;
+  sourceMerchantCreatedValueMinor: number;
+  destinationMerchantReleasedQuantityUnits: number;
+  destinationMerchantReleasedValueMinor: number;
+  destinationMerchantCreatedValueMinor: number;
+  valuationSource?: 'opening_cost_compatibility' | 'operation_price_snapshot' | 'historical_cost_compatibility' | 'source_merchant_wac' | 'transfer_operation_price_snapshot';
 }
 
 export interface MerchantGoldLiabilityDiagnostic {
@@ -69,6 +82,7 @@ export interface MerchantGoldLiabilityDiagnostic {
     | 'missing_approved_historical_price'
     | 'missing_opening_price'
     | 'missing_transfer_carrying_basis'
+    | 'missing_transfer_invoice_price'
     | 'inventory_cost_result_missing'
     | 'transfer_carrying_value_sign_mismatch'
     | 'zero_weight_book_value_residue';
@@ -80,11 +94,23 @@ export interface MerchantGoldLiabilityDiagnostic {
 }
 
 export interface MerchantGoldLiabilityTimeline {
-  calculationVersion: 'merchant-metal-signed-wac-v2';
+  calculationVersion: 'merchant-metal-signed-wac-v3';
   movements: MerchantGoldLiabilityMovement[];
   movementsByOperationId: Record<string, MerchantGoldLiabilityMovement>;
   finalStates: Record<string, MerchantGoldLiabilityState>;
   diagnostics: MerchantGoldLiabilityDiagnostic[];
+}
+
+/** Immutable Firestore identity of Makka's single approved transfer hub. */
+export const AL_SAFI_TRANSFER_HUB_ACCOUNT_ID = '3zGclNk6qdAuNxM6y5iP';
+
+interface SignedInvoiceTransition {
+  bookValueChangeMinor: number;
+  releasedQuantityUnits: number;
+  releasedValueMinor: number;
+  createdValueMinor: number;
+  gainMinor: number;
+  lossMinor: number;
 }
 
 interface MutableMerchantState {
@@ -209,6 +235,64 @@ const receiptCost = (
   return { valueMinor: 0 };
 };
 
+const applySignedInvoiceTransition = (
+  state: MutableMerchantState,
+  deltaUnits: number,
+  invoiceValueMinor: number,
+): SignedInvoiceTransition => {
+  const movedUnits = Math.abs(deltaUnits);
+  const deltaSign = Math.sign(deltaUnits);
+  const beforeUnits = state.signedQuantityUnits;
+  const beforeValue = state.signedCarryingValueMinor;
+  const beforeSign = Math.sign(beforeUnits);
+
+  if (beforeUnits === 0 || beforeSign === deltaSign) {
+    state.signedQuantityUnits += deltaUnits;
+    state.signedCarryingValueMinor += deltaSign * invoiceValueMinor;
+    return {
+      bookValueChangeMinor: invoiceValueMinor,
+      releasedQuantityUnits: 0,
+      releasedValueMinor: 0,
+      createdValueMinor: invoiceValueMinor,
+      gainMinor: 0,
+      lossMinor: 0,
+    };
+  }
+
+  const releasedQuantityUnits = Math.min(Math.abs(beforeUnits), movedUnits);
+  const releasedValueMinor = proportionalValue(
+    Math.abs(beforeValue),
+    Math.abs(beforeUnits),
+    releasedQuantityUnits,
+  );
+  const realizedInvoiceValueMinor = proportionalValue(
+    invoiceValueMinor,
+    movedUnits,
+    releasedQuantityUnits,
+  );
+  const excessUnits = movedUnits - releasedQuantityUnits;
+  const createdValueMinor = invoiceValueMinor - realizedInvoiceValueMinor;
+  const difference = realizedInvoiceValueMinor - releasedValueMinor;
+
+  if (excessUnits === 0) {
+    state.signedQuantityUnits += deltaUnits;
+    state.signedCarryingValueMinor -= beforeSign * releasedValueMinor;
+    if (state.signedQuantityUnits === 0) state.signedCarryingValueMinor = 0;
+  } else {
+    state.signedQuantityUnits = deltaSign * excessUnits;
+    state.signedCarryingValueMinor = deltaSign * createdValueMinor;
+  }
+
+  return {
+    bookValueChangeMinor: releasedValueMinor + createdValueMinor,
+    releasedQuantityUnits,
+    releasedValueMinor,
+    createdValueMinor,
+    gainMinor: beforeSign > 0 ? Math.max(0, -difference) : Math.max(0, difference),
+    lossMinor: beforeSign > 0 ? Math.max(0, difference) : Math.max(0, -difference),
+  };
+};
+
 /** Pure in-memory signed carrying-value timeline. Gold, silver, inventory,
  * merchant cash, payable pools, and receivable pools remain independent. */
 export const buildMerchantMetalPositionTimeline = (
@@ -257,7 +341,7 @@ export const buildMerchantMetalPositionTimeline = (
       merchantAccountId: state.merchantAccountId, metal: state.metal,
       message: `Zero merchant ${state.metal} balance retained ${state.signedCarryingValueMinor} signed minor units.`,
     });
-    if (state.signedQuantityUnits !== 0 && state.signedCarryingValueMinor !== 0
+    if (state.signedQuantityUnits !== 0
       && Math.sign(state.signedQuantityUnits) !== Math.sign(state.signedCarryingValueMinor)) diagnostics.push({
       code: 'transfer_carrying_value_sign_mismatch', severity: 'error', operationId: getPhase5OperationId(entry),
       merchantAccountId: state.merchantAccountId, metal: state.metal,
@@ -305,6 +389,13 @@ export const buildMerchantMetalPositionTimeline = (
       merchantPayableCreatedValueMinor: 0, merchantReceivableCreatedValueMinor: 0,
       inventoryBookValueReleasedMinor: 0, inventoryBookValueRecognizedMinor: 0,
       settlementGainMinor: 0, settlementLossMinor: 0,
+      transferInvoiceValueMinor: 0, transferGainMinor: 0, transferLossMinor: 0,
+      sourceTransferGainMinor: 0, sourceTransferLossMinor: 0,
+      destinationTransferGainMinor: 0, destinationTransferLossMinor: 0,
+      sourceMerchantReleasedQuantityUnits: 0, sourceMerchantReleasedValueMinor: 0,
+      sourceMerchantCreatedValueMinor: 0,
+      destinationMerchantReleasedQuantityUnits: 0, destinationMerchantReleasedValueMinor: 0,
+      destinationMerchantCreatedValueMinor: 0,
     });
 
     if (semantic.kind === 'cash_settlement') {
@@ -378,6 +469,46 @@ export const buildMerchantMetalPositionTimeline = (
       const movement = blank('merchant_transfer');
       const source = ensureState(debit, metal);
       const destination = ensureState(credit, metal);
+      const throughAlSafi = source.merchantAccountId === AL_SAFI_TRANSFER_HUB_ACCOUNT_ID
+        || destination.merchantAccountId === AL_SAFI_TRANSFER_HUB_ACCOUNT_ID;
+      if (throughAlSafi) {
+        const transferValue = snapshotValue(entry, metal, requestedUnits, requestedUnits);
+        if (!transferValue.source) {
+          diagnostics.push({
+            code: 'missing_transfer_invoice_price', severity: 'error', operationId,
+            merchantAccountId: AL_SAFI_TRANSFER_HUB_ACCOUNT_ID, metal,
+            message: 'Al-Safi transfer has no usable immutable invoice price snapshot.',
+          });
+          movements.push(movement);
+          return;
+        }
+
+        const sourceTransition = applySignedInvoiceTransition(source, -requestedUnits, transferValue.valueMinor);
+        const destinationTransition = applySignedInvoiceTransition(destination, requestedUnits, transferValue.valueMinor);
+        movement.sourceMerchantAccountId = source.merchantAccountId;
+        movement.destinationMerchantAccountId = destination.merchantAccountId;
+        movement.carryingValueMinor = transferValue.valueMinor;
+        movement.transferInvoiceValueMinor = transferValue.valueMinor;
+        movement.merchantDebitValueMinor = sourceTransition.bookValueChangeMinor;
+        movement.merchantCreditValueMinor = destinationTransition.bookValueChangeMinor;
+        movement.sourceMerchantReleasedQuantityUnits = sourceTransition.releasedQuantityUnits;
+        movement.sourceMerchantReleasedValueMinor = sourceTransition.releasedValueMinor;
+        movement.sourceMerchantCreatedValueMinor = sourceTransition.createdValueMinor;
+        movement.destinationMerchantReleasedQuantityUnits = destinationTransition.releasedQuantityUnits;
+        movement.destinationMerchantReleasedValueMinor = destinationTransition.releasedValueMinor;
+        movement.destinationMerchantCreatedValueMinor = destinationTransition.createdValueMinor;
+        movement.sourceTransferGainMinor = sourceTransition.gainMinor;
+        movement.sourceTransferLossMinor = sourceTransition.lossMinor;
+        movement.destinationTransferGainMinor = destinationTransition.gainMinor;
+        movement.destinationTransferLossMinor = destinationTransition.lossMinor;
+        movement.transferGainMinor = sourceTransition.gainMinor + destinationTransition.gainMinor;
+        movement.transferLossMinor = sourceTransition.lossMinor + destinationTransition.lossMinor;
+        movement.valuationSource = 'transfer_operation_price_snapshot';
+        assertState(source, entry);
+        assertState(destination, entry);
+        movements.push(movement);
+        return;
+      }
       const wac = currentWac(source);
       if (wac === null) diagnostics.push({
         code: 'missing_transfer_carrying_basis', severity: 'error', operationId,
@@ -451,7 +582,7 @@ export const buildMerchantMetalPositionTimeline = (
 
   const finalStates = Object.fromEntries([...states].map(([accountId, state]) => [accountId, stateSnapshot(state)]));
   return {
-    calculationVersion: 'merchant-metal-signed-wac-v2',
+    calculationVersion: 'merchant-metal-signed-wac-v3',
     movements,
     movementsByOperationId: Object.fromEntries(movements.map(movement => [movement.operationId, movement])),
     finalStates,
