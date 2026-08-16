@@ -7,6 +7,7 @@ import { SEED_ACCOUNTS, SEED_RULES } from '../migrationData';
 import { writeBatch } from 'firebase/firestore';
 import { handleFirestoreError, OperationType } from '../firebase';
 import { isAdminEmail } from '../lib/adminAccess';
+import { normalizeGoldSaleTaxStampPerGramEgp } from '../lib/goldPricingAssistant';
 
 export const useDataSync = (user: any, isAuthReady: boolean) => {
   const { 
@@ -23,7 +24,8 @@ export const useDataSync = (user: any, isAuthReady: boolean) => {
     setSilverBuyPrice,
     setSilverSpread,
     setAccountCategories,
-    setOpeningCostConfig
+    setOpeningCostConfig,
+    setGoldSaleTaxStampPerGramEgp
   } = useAppStore();
 
   useEffect(() => {
@@ -184,8 +186,10 @@ export const useDataSync = (user: any, isAuthReady: boolean) => {
         if (data.silverSpread) setSilverSpread(data.silverSpread);
         if (data.accountCategories) setAccountCategories(data.accountCategories);
         setOpeningCostConfig(Array.isArray(data.openingCostConfig) ? data.openingCostConfig : []);
+        setGoldSaleTaxStampPerGramEgp(normalizeGoldSaleTaxStampPerGramEgp(data.goldSaleTaxStampPerGramEgp));
       } else {
         setOpeningCostConfig([]);
+        setGoldSaleTaxStampPerGramEgp(normalizeGoldSaleTaxStampPerGramEgp(undefined));
       }
     }, (error) => {
       console.warn("Settings snapshot error:", error);

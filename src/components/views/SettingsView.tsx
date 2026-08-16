@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { 
   Settings as SettingsIcon, 
@@ -32,9 +32,24 @@ import { buildOpeningCostConfig } from '../../lib/openingCostConfig';
 import { buildWacAuditCsv, wacAuditFilename } from '../../lib/wacAuditExcel';
 import { downloadCsv } from '../../utils/csv';
 import { parseSettingsEntryCsv } from '../../utils/csvImport';
+import {
+  normalizeGoldSaleTaxStampPerGramEgp,
+  parseAssistantNumber,
+} from '../../lib/goldPricingAssistant';
 
 export const SettingsView = React.memo(() => {
-  const { setView, user, entries, accountsDb, setGlobalError, openingCostConfig, setOpeningCostConfig, costCalculationRun } = useAppStore();
+  const {
+    setView,
+    user,
+    entries,
+    accountsDb,
+    setGlobalError,
+    openingCostConfig,
+    setOpeningCostConfig,
+    goldSaleTaxStampPerGramEgp,
+    setGoldSaleTaxStampPerGramEgp,
+    costCalculationRun,
+  } = useAppStore();
   const operationWritesLocked = areOperationWritesLocked(costCalculationRun);
   const [openingPriceForm, setOpeningPriceForm] = useState<{
     year: string;
@@ -45,12 +60,24 @@ export const SettingsView = React.memo(() => {
   const [openingPriceError, setOpeningPriceError] = useState('');
   const [openingPriceSuccess, setOpeningPriceSuccess] = useState('');
   const [isSavingOpeningPrice, setIsSavingOpeningPrice] = useState(false);
+  const [salePricingForm, setSalePricingForm] = useState(() => {
+    const normalized = normalizeGoldSaleTaxStampPerGramEgp(goldSaleTaxStampPerGramEgp);
+    return { rate18: String(normalized[18]), rate21: String(normalized[21]) };
+  });
+  const [salePricingError, setSalePricingError] = useState('');
+  const [salePricingSuccess, setSalePricingSuccess] = useState('');
+  const [isSavingSalePricing, setIsSavingSalePricing] = useState(false);
   const [importText, setImportText] = useState('');
   const [isImporting, setIsImporting] = useState(false);
   const [isDeletingAll, setIsDeletingAll] = useState(false);
   const [isGeneratingWacAudit, setIsGeneratingWacAudit] = useState(false);
   const [showDeleteAllConfirm, setShowDeleteAllConfirm] = useState(false);
   const [activeTab, setActiveTab] = useState<'rules' | 'cost' | 'import' | 'accounts'>('rules');
+
+  useEffect(() => {
+    const normalized = normalizeGoldSaleTaxStampPerGramEgp(goldSaleTaxStampPerGramEgp);
+    setSalePricingForm({ rate18: String(normalized[18]), rate21: String(normalized[21]) });
+  }, [goldSaleTaxStampPerGramEgp]);
 
   const sortedOpeningCostConfig = useMemo(
     () => [...openingCostConfig].sort((a, b) => Number(a.year) - Number(b.year)),
@@ -193,6 +220,35 @@ export const SettingsView = React.memo(() => {
       setOpeningPriceError(error instanceof Error ? error.message : '\u062a\u0639\u0630\u0631 \u062d\u0641\u0638 \u0633\u0639\u0631 \u0627\u0644\u0627\u0641\u062a\u062a\u0627\u062d. \u0631\u0627\u062c\u0639 \u0627\u0644\u0642\u064a\u0645 \u0627\u0644\u0645\u062f\u062e\u0644\u0629.');
     } finally {
       setIsSavingOpeningPrice(false);
+    }
+  };
+
+  const handleSaveSalePricing = async (event: React.FormEvent) => {
+    event.preventDefault();
+    setSalePricingError('');
+    setSalePricingSuccess('');
+    const rate18 = parseAssistantNumber(salePricingForm.rate18);
+    const rate21 = parseAssistantNumber(salePricingForm.rate21);
+    if (rate18 === null || rate18 < 0 || rate21 === null || rate21 < 0) {
+      setSalePricingError('أدخل معدلًا صحيحًا وغير سالب لكل عيار.');
+      return;
+    }
+    if (!user?.uid) {
+      setSalePricingError('لا يوجد مستخدم نشط لحفظ الإعدادات.');
+      return;
+    }
+    const next = normalizeGoldSaleTaxStampPerGramEgp({ 18: rate18, 21: rate21 });
+    const previous = normalizeGoldSaleTaxStampPerGramEgp(goldSaleTaxStampPerGramEgp);
+    setIsSavingSalePricing(true);
+    setGoldSaleTaxStampPerGramEgp(next);
+    try {
+      await setDoc(doc(db, 'settings', user.uid), { goldSaleTaxStampPerGramEgp: next }, { merge: true });
+      setSalePricingSuccess('تم حفظ إعدادات تسعير البيع.');
+    } catch (error) {
+      setGoldSaleTaxStampPerGramEgp(previous);
+      setSalePricingError('تعذر حفظ إعدادات تسعير البيع.');
+    } finally {
+      setIsSavingSalePricing(false);
     }
   };
 
@@ -548,6 +604,43 @@ export const SettingsView = React.memo(() => {
             className="space-y-4"
             dir="rtl"
           >
+            <div className="rounded-3xl border border-[#c9a84c]/35 bg-[#0e1018] p-6 shadow-[0_18px_45px_rgba(0,0,0,0.16)]">
+              <div className="space-y-1">
+                <h3 className="text-sm font-bold text-[#f0cc6b]">إعدادات تسعير البيع</h3>
+                <p className="text-[11px] leading-6 text-[#8a8172]">
+                  ضريبة ودمغة تسعيرية فقط. لا تدخل في Entry أو Opening Cost أو WAC أو COGS.
+                </p>
+              </div>
+              <form onSubmit={handleSaveSalePricing} className="mt-5 space-y-4">
+                <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                  <label className="space-y-1">
+                    <span className="text-[10px] font-bold text-[#c9a84c]">ضريبة ودمغة عيار 18 — ج/جم</span>
+                    <input
+                      value={salePricingForm.rate18}
+                      onChange={event => setSalePricingForm(previous => ({ ...previous, rate18: normalizeNumerals(event.target.value) }))}
+                      inputMode="decimal"
+                      className="w-full rounded-xl border border-[#1a1e2a] bg-[#080a0f] p-3 text-sm text-[#ddd8cc] outline-none focus:border-[#c9a84c55]"
+                    />
+                  </label>
+                  <label className="space-y-1">
+                    <span className="text-[10px] font-bold text-[#c9a84c]">ضريبة ودمغة عيار 21 — ج/جم</span>
+                    <input
+                      value={salePricingForm.rate21}
+                      onChange={event => setSalePricingForm(previous => ({ ...previous, rate21: normalizeNumerals(event.target.value) }))}
+                      inputMode="decimal"
+                      className="w-full rounded-xl border border-[#1a1e2a] bg-[#080a0f] p-3 text-sm text-[#ddd8cc] outline-none focus:border-[#c9a84c55]"
+                    />
+                  </label>
+                </div>
+                <button type="submit" disabled={isSavingSalePricing} className="flex min-h-12 w-full items-center justify-center gap-2 rounded-xl bg-[#c9a84c] px-5 text-xs font-bold text-[#080a0f] disabled:opacity-60">
+                  {isSavingSalePricing ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
+                  حفظ إعدادات التسعير
+                </button>
+              </form>
+              {salePricingError && <div className="mt-3 rounded-2xl border border-red-500/30 bg-red-500/10 p-3 text-xs font-bold text-red-200">{salePricingError}</div>}
+              {salePricingSuccess && <div className="mt-3 rounded-2xl border border-green-500/30 bg-green-500/10 p-3 text-xs font-bold text-green-300">{salePricingSuccess}</div>}
+            </div>
+
             <div className="bg-[#0e1018] border border-[#1a1e2a] rounded-3xl p-6 space-y-5">
               <div className="space-y-1">
                 <h3 className="text-sm font-bold text-[#ddd8cc]">أسعار الافتتاح السنوية للتكلفة</h3>

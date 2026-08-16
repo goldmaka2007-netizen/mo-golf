@@ -30,6 +30,14 @@ import { buildAccountRegistry } from '../../lib/accountRegistry';
 import { buildCanonicalPosting } from '../../lib/postingMatrix';
 import { validateAccountingPolicy } from '../../lib/accountingPolicy';
 import { mergeGoldMerchantSettlementEntryRules } from '../../lib/merchantSettlementEntryOptions';
+import { GoldPricingAssistant } from './GoldPricingAssistant';
+import {
+  createGoldAssistantSession,
+  findCashAccount,
+  GoldAssistantMode,
+  GoldAssistantSession,
+  resolveGoldAssistantProducts,
+} from '../../lib/goldPricingAssistant';
 
 export const normalizeAccessoryEntryPayload = <T extends { weight?: string; count?: string }>(entry: T, isAccessory: boolean): T => (
   isAccessory ? { ...entry, weight: entry.weight || '0', count: '0' } : entry
@@ -88,6 +96,7 @@ export const EntryForm = React.memo(({ onStepChange }: EntryFormProps) => {
     goldPrice, 
     silverPrice,
     openingCostConfig,
+    goldSaleTaxStampPerGramEgp,
     costCalculationRun
     ,canonicalAccounts
   } = useAppStore();
@@ -111,6 +120,7 @@ export const EntryForm = React.memo(({ onStepChange }: EntryFormProps) => {
 
   const [step, setStep] = useState(1);
   const [isSaving, setIsSaving] = useState(false);
+  const [assistantSession, setAssistantSession] = useState<GoldAssistantSession | null>(null);
 
   useEffect(() => {
     onStepChange?.(step);
@@ -193,7 +203,10 @@ export const EntryForm = React.memo(({ onStepChange }: EntryFormProps) => {
     arabicWeight: '',
     karat: null as number | null,
     multiplier: 1,
-    marketPrice: undefined as number | undefined
+    marketPrice: undefined as number | undefined,
+    debitAccountId: undefined as string | undefined,
+    creditAccountId: undefined as string | undefined,
+    priceSnapshotLocked: false,
   };
 
   const [formData, setFormData] = useState(initialFormState);
@@ -214,7 +227,8 @@ export const EntryForm = React.memo(({ onStepChange }: EntryFormProps) => {
         ...prev,
         ...editingEntry,
         date: editingEntry.date || format(new Date(), 'yyyy-MM-dd'),
-        invoiceNumber: generateInvoiceNumber(editingEntry.tx || '')
+        invoiceNumber: generateInvoiceNumber(editingEntry.tx || ''),
+        priceSnapshotLocked: false,
       }));
       
       // Force step 2 (Account Selection) if tx is provided (Shortcut clicked)
@@ -265,6 +279,7 @@ export const EntryForm = React.memo(({ onStepChange }: EntryFormProps) => {
   }, [formData, step]);
 
   useEffect(() => {
+    if (formData.priceSnapshotLocked) return;
     if (formData.tx) {
       let basePrice = 0;
       let mult = formData.multiplier || 1;
@@ -296,7 +311,7 @@ export const EntryForm = React.memo(({ onStepChange }: EntryFormProps) => {
       else if (isSilver) { basePrice = silverPrice || 0; mult = 1; }
       if (basePrice > 0) setFormData(prev => ({ ...prev, marketPrice: calculateKaratPrice(basePrice, mult) }));
     }
-  }, [formData.tx, formData.debit, formData.credit, goldPrice, silverPrice]);
+  }, [formData.tx, formData.debit, formData.credit, formData.priceSnapshotLocked, goldPrice, silverPrice]);
 
   const generateInvoiceNumber = (txType: string) => {
     return getNextInvoiceNumber(txType, entries, lastSavedInvoiceRef.current);
@@ -389,6 +404,8 @@ export const EntryForm = React.memo(({ onStepChange }: EntryFormProps) => {
       multiplier: formData.multiplier || 1,
       karat: formData.karat ?? undefined,
       marketPrice: formData.marketPrice,
+      debitAccountId: formData.debitAccountId,
+      creditAccountId: formData.creditAccountId,
       clientName: formData.clientName || '',
       clientPhone: formData.clientPhone || '',
       userId: user?.uid || '',
@@ -483,6 +500,7 @@ export const EntryForm = React.memo(({ onStepChange }: EntryFormProps) => {
   };
 
   const resetForm = () => {
+    setAssistantSession(null);
     setFormData(prev => ({
       ...initialFormState,
       date: prev.date
@@ -496,6 +514,7 @@ export const EntryForm = React.memo(({ onStepChange }: EntryFormProps) => {
   };
 
   const startSameTypeOperation = () => {
+    setAssistantSession(null);
     setFormData(prev => ({
       ...initialFormState,
       date: prev.date,
@@ -563,6 +582,65 @@ export const EntryForm = React.memo(({ onStepChange }: EntryFormProps) => {
     [accountRegistry, formData.debit, formData.credit],
   );
 
+  const assistantRules = useMemo(() => {
+    if (!assistantSession) return [];
+    const tx = assistantSession.mode === 'sale' ? 'بيع ذهب' : 'شراء ذهب';
+    const storedRules = transactionRules.filter(rule => rule.tx === tx);
+    if (storedRules.length > 0) return storedRules;
+    return [
+      ...RAW_DATA.filter(rule => rule.t === tx).map(rule => ({
+        tx: rule.t,
+        debit: rule.d,
+        credit: rule.c,
+        karat: rule.k,
+        multiplier: rule.m,
+      })),
+      ...customRules.filter(rule => rule.t === tx).map(rule => ({
+        tx: rule.t,
+        debit: rule.d,
+        credit: rule.c,
+        karat: rule.k,
+        multiplier: rule.m,
+      })),
+    ];
+  }, [assistantSession, customRules, transactionRules]);
+
+  const assistantProducts = useMemo(() => assistantSession
+    ? resolveGoldAssistantProducts({
+        mode: assistantSession.mode,
+        accounts: accountsDb,
+        registry: accountRegistry,
+        rules: assistantRules,
+      })
+    : [],
+  [accountRegistry, accountsDb, assistantRules, assistantSession]);
+
+  const assistantCashAccount = useMemo(
+    () => findCashAccount(accountsDb, accountRegistry),
+    [accountRegistry, accountsDb],
+  );
+
+  const startGoldAssistant = (mode: GoldAssistantMode) => {
+    setAssistantSession(createGoldAssistantSession(mode, goldPrice, Date.now()));
+  };
+
+  const handleAssistantReview = (prefill: Partial<Entry>) => {
+    setFormData(previous => {
+      const multiplier = prefill.multiplier || 1;
+      const karat = prefill.karat ?? null;
+      const weight = prefill.weight || '';
+      return {
+        ...previous,
+        ...prefill,
+        arabicWeight: calculateArabicWeight(weight, multiplier, karat),
+        invoiceNumber: previous.invoiceNumber || generateInvoiceNumber(prefill.tx || previous.tx),
+        priceSnapshotLocked: true,
+      };
+    });
+    setAssistantSession(null);
+    setStep(2);
+  };
+
   // Handle weight/count sync for accessories
   useEffect(() => {
     if (isAccessory) {
@@ -579,8 +657,35 @@ export const EntryForm = React.memo(({ onStepChange }: EntryFormProps) => {
     }
   }, [isAccessory, formData.count, formData.weight, formData.tx, formData.debit, formData.credit]);
 
-  const renderStep2 = () => (
+  const renderStep2 = () => assistantSession ? (
+    <GoldPricingAssistant
+      mode={assistantSession.mode}
+      session={assistantSession}
+      products={assistantProducts}
+      cashAccount={assistantCashAccount}
+      taxStampSettings={goldSaleTaxStampPerGramEgp}
+      onCancel={() => setAssistantSession(null)}
+      onReview={handleAssistantReview}
+    />
+  ) : (
     <div className="flex flex-1 flex-col justify-between space-y-2.5 animate-in fade-in">
+      {(formData.tx === 'بيع ذهب' || formData.tx === 'شراء ذهب') && (
+        <div className="flex items-center justify-between gap-3 rounded-2xl border border-[#c9a84c]/35 bg-[#c9a84c]/[0.07] p-3">
+          <div>
+            <div className="text-xs font-black text-[#f1cf72]">تسعير ذكي اختياري</div>
+            <div className="mt-1 text-[9px] font-bold text-[#827c70]">يمكنك متابعة الإدخال اليدوي كما هو.</div>
+          </div>
+          <button
+            type="button"
+            disabled={!(goldPrice > 0) || !Number.isFinite(goldPrice)}
+            onClick={() => startGoldAssistant(formData.tx === 'بيع ذهب' ? 'sale' : 'purchase')}
+            className="min-h-11 shrink-0 rounded-xl bg-[#c9a84c] px-4 text-xs font-black text-[#080a0f] disabled:opacity-40"
+          >
+            {formData.tx === 'بيع ذهب' ? 'مساعد البيع' : 'مساعد الشراء'}
+          </button>
+        </div>
+      )}
+
       <div className="grid grid-cols-2 gap-2">
         <FormInput 
           label="التاريخ"
@@ -607,7 +712,14 @@ export const EntryForm = React.memo(({ onStepChange }: EntryFormProps) => {
           compact
           value={formData.debit}
           options={debits as string[]}
-          onSelect={(val) => setFormData(p => ({ ...p, debit: val, credit: '' }))}
+          onSelect={(val) => setFormData(p => ({
+            ...p,
+            debit: val,
+            credit: '',
+            debitAccountId: undefined,
+            creditAccountId: undefined,
+            priceSnapshotLocked: false,
+          }))}
           inputRef={debitSearchRef}
         />
         <AccountSearchSelect 
@@ -619,7 +731,13 @@ export const EntryForm = React.memo(({ onStepChange }: EntryFormProps) => {
           onSelect={(val, karat, mult) => {
             const activeMult = mult || 1;
             setFormData(p => ({ 
-              ...p, credit: val, karat: karat || p.karat, multiplier: activeMult, arabicWeight: calculateArabicWeight(p.weight, activeMult, karat || p.karat)
+              ...p,
+              credit: val,
+              creditAccountId: undefined,
+              priceSnapshotLocked: false,
+              karat: karat || p.karat,
+              multiplier: activeMult,
+              arabicWeight: calculateArabicWeight(p.weight, activeMult, karat || p.karat)
             }));
           }}
           inputRef={creditSearchRef}

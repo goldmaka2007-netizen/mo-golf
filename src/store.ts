@@ -5,6 +5,10 @@ import { ACCOUNT_CATEGORIES } from './constants';
 import type { CostCalculationRun } from './lib/inventoryCostTypes';
 import { PHASE5_COST_CATALOG_VERSION } from './lib/inventoryCostEngine';
 import { commitCostCalculationRun } from './lib/costRecalculation';
+import {
+  DEFAULT_GOLD_SALE_TAX_STAMP_PER_GRAM_EGP,
+  GoldSaleTaxStampPerGramEgp,
+} from './lib/goldPricingAssistant';
 
 interface AppState {
   user: FirebaseUser | null;
@@ -51,6 +55,9 @@ interface AppState {
 
   openingCostConfig: AnnualOpeningCostConfig[];
   setOpeningCostConfig: (config: AnnualOpeningCostConfig[]) => void;
+
+  goldSaleTaxStampPerGramEgp: GoldSaleTaxStampPerGramEgp;
+  setGoldSaleTaxStampPerGramEgp: (config: GoldSaleTaxStampPerGramEgp) => void;
 
   costCalculationRun: CostCalculationRun;
   costRetryToken: number;
@@ -185,6 +192,9 @@ export const useAppStore = create<AppState>()(
   openingCostConfig: [],
   setOpeningCostConfig: (openingCostConfig) => set({ openingCostConfig }),
 
+  goldSaleTaxStampPerGramEgp: { ...DEFAULT_GOLD_SALE_TAX_STAMP_PER_GRAM_EGP },
+  setGoldSaleTaxStampPerGramEgp: (goldSaleTaxStampPerGramEgp) => set({ goldSaleTaxStampPerGramEgp }),
+
   costCalculationRun: {
     generationId: 0,
     inputRevision: '',
@@ -297,7 +307,8 @@ export const useAppStore = create<AppState>()(
         silverPrice: state.silverPrice,
         silverBuyPrice: state.silverBuyPrice,
         silverSpread: state.silverSpread,
-        openingCostConfig: state.openingCostConfig
+        openingCostConfig: state.openingCostConfig,
+        goldSaleTaxStampPerGramEgp: state.goldSaleTaxStampPerGramEgp
       }),
     }
   )
