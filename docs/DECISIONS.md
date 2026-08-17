@@ -72,4 +72,21 @@ Each merchant gold position is signed in E21 and each merchant silver position i
 
 ## D-018 — Smart Gold Assistants remain outside the accounting write contract
 
-Smart Sale and Smart Purchase are optional pricing/pre-fill helpers; the existing Entry Form review/save pipeline remains authoritative. Smart Purchase is restricted to the four approved stable inventory taxonomies: foreign scrap, Arabic scrap, gold coin, and gold bar. Coin/bar are weight + quantity products and may derive quantity capability from the approved runtime taxonomy when legacy Production metadata lacks `quantityStep`; no Production metadata migration is required. Sale tax/stamp is pricing configuration separate from Opening Cost/WAC. See ADR-009.
+Smart Sale and Smart Purchase are optional pricing/pre-fill helpers; the existing Entry Form review/save pipeline remains authoritative. Smart Purchase is restricted to the four approved stable inventory taxonomies: foreign scrap, Arabic scrap, gold coin, and gold bar. Coin/bar are weight + quantity products and may derive quantity capability from the approved runtime taxonomy when legacy Production metadata lacks `quantityStep`; no Production metadata migration is required. Pricing-only values never become new Entry fields. See ADR-009.
+
+## D-019 — Unified Smart Gold Pricing Configuration
+
+`settings/{uid}.pricingConfig` is the authoritative configurable pricing source for Smart Sale, Smart Purchase defaults, and Story Builder bullion/coin pricing. It remains separate from `openingCostConfig`, is normalized on read, and is written only after an explicit user Save with merge semantics; missing configuration and legacy fallback reads must never trigger automatic Firestore writes.
+
+Approved pricing semantics:
+
+- Product identity uses stable taxonomy/pricing identity first and `account:<id>` only as fallback; Arabic display names are not authoritative keys.
+- Jewelry workmanship defaults store one authoritative `{ mode: 'perGram' | 'perPiece', value }`; the other displayed value is derived live from the entered jewelry weight. Jewelry count remains inventory metadata only and does not alter pricing.
+- Bullion approved unit weights are 0.25, 0.5, 1, 2.5, 5, 10, 20, 31.1, and 50 g; coin approved unit weights are 2, 4, and 8 g. 100 g is excluded from the approved new selector/config list.
+- For bullion/coin, multiple units in one assistant quote are identical units: `totalWeight = unitWeight × count`. Displayed workmanship per piece remains the single-unit value while internal sale workmanship uses `perPiece × count` (equivalent to `perGram × totalWeight`). Entry prefill receives total weight and count separately.
+- Jewelry tax/stamp is automatically applied when applicable and cannot be disabled in Smart Sale. `gold.direct.bar` and `gold.direct.coin` have zero separate tax/stamp and no toggle, including 21k coin; tax behavior is product-identity based, not karat-only.
+- Smart Purchase stays limited to exactly `gold.raw.scrap_foreign`, `gold.raw.scrap_arabic`, `gold.direct.coin`, and `gold.direct.bar`, with independent default discount percentages. Scrap keeps manual weight; bar/coin use fixed unit weight and count-derived total weight. Final agreed total remains manually entered.
+- Story Builder consumes the same saved pricing source. Existing local `bullionCharges` / `coinCharges` are read-only legacy EGP/g fallback data only; saved pricing configuration wins and fallback reads never write Firestore.
+- Negative effective sale workmanship is displayed as a warning only and does not change or block the existing Entry review/save contract.
+
+Detailed release record: `docs/SMART_GOLD_PRICING_CONFIG_RELEASE_2026-08-18.md`.
