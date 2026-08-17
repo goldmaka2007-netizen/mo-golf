@@ -8,6 +8,8 @@ import { commitCostCalculationRun } from './lib/costRecalculation';
 import {
   DEFAULT_GOLD_SALE_TAX_STAMP_PER_GRAM_EGP,
   GoldSaleTaxStampPerGramEgp,
+  GoldPricingConfig,
+  DEFAULT_GOLD_PRICING_CONFIG,
 } from './lib/goldPricingAssistant';
 
 interface AppState {
@@ -58,6 +60,10 @@ interface AppState {
 
   goldSaleTaxStampPerGramEgp: GoldSaleTaxStampPerGramEgp;
   setGoldSaleTaxStampPerGramEgp: (config: GoldSaleTaxStampPerGramEgp) => void;
+
+  /** Firestore settings snapshot only; deliberately excluded from local persistence. */
+  pricingConfig: GoldPricingConfig;
+  setPricingConfig: (config: GoldPricingConfig) => void;
 
   costCalculationRun: CostCalculationRun;
   costRetryToken: number;
@@ -194,6 +200,9 @@ export const useAppStore = create<AppState>()(
 
   goldSaleTaxStampPerGramEgp: { ...DEFAULT_GOLD_SALE_TAX_STAMP_PER_GRAM_EGP },
   setGoldSaleTaxStampPerGramEgp: (goldSaleTaxStampPerGramEgp) => set({ goldSaleTaxStampPerGramEgp }),
+
+  pricingConfig: { ...DEFAULT_GOLD_PRICING_CONFIG },
+  setPricingConfig: (pricingConfig) => set({ pricingConfig }),
 
   costCalculationRun: {
     generationId: 0,

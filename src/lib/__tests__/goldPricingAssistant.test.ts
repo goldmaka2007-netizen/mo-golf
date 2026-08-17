@@ -14,6 +14,14 @@ import {
   DEFAULT_GOLD_SALE_TAX_STAMP_PER_GRAM_EGP,
   goldSaleTaxStampRate,
   normalizeGoldSaleTaxStampPerGramEgp,
+  normalizeGoldPricingConfig,
+  workmanshipForUnitWeight,
+  totalWeightForAssistant,
+  bullionInternalWorkmanshipTotal,
+  APPROVED_BULLION_UNIT_WEIGHTS,
+  APPROVED_COIN_UNIT_WEIGHTS,
+  calculateActualSaleWorkmanship,
+  SMART_PURCHASE_TAXONOMY_KEYS,
   officialGoldKaratPrice,
   purchaseValuesFromDiscountPerGram,
   purchaseValuesFromDiscountPercent,
@@ -35,6 +43,8 @@ const product = (overrides: Partial<ReturnType<typeof makeProduct>> = {}) => ({
 function makeProduct() {
   return {
     accountId: 'gold-21',
+    taxonomyKey: undefined as string | undefined,
+    pricingKey: 'gold.product.test',
     name: 'ذهب 21',
     karat: 21 as const,
     multiplier: 1,
@@ -239,6 +249,44 @@ describe('account rules and EntryForm handoff', () => {
 });
 
 describe('sale pricing settings', () => {
+  it('keeps the approved fixed-weight lists exact and excludes legacy 100g', () => {
+    expect(APPROVED_BULLION_UNIT_WEIGHTS).toEqual([0.25, 0.5, 1, 2.5, 5, 10, 20, 31.1, 50]);
+    expect(APPROVED_BULLION_UNIT_WEIGHTS).not.toContain(100);
+    expect(APPROVED_COIN_UNIT_WEIGHTS).toEqual([2, 4, 8]);
+  });
+
+  it('links jewelry defaults by the manual pricing weight only, not count', () => {
+    expect(workmanshipForUnitWeight({ mode: 'perPiece', value: 400 }, 1)).toEqual({ perGram: 400, perPiece: 400 });
+    expect(workmanshipForUnitWeight({ mode: 'perPiece', value: 400 }, 2)).toEqual({ perGram: 200, perPiece: 400 });
+    expect(workmanshipForUnitWeight({ mode: 'perGram', value: 200 }, 2)).toEqual({ perGram: 200, perPiece: 400 });
+    const jewelry = product({ taxonomyKey: 'gold.product.ring_children' });
+    expect(totalWeightForAssistant(jewelry, 2, 9)).toBe(2);
+    expect(bullionInternalWorkmanshipTotal(jewelry, 400, 9)).toBe(400);
+  });
+
+  it('calculates actual workmanship under the distinct jewelry and bullion rules', () => {
+    expect(calculateActualSaleWorkmanship({ finalTotal: 1250, goldValue: 700, taxStampTotal: 150, totalWeight: 2, unitWeight: 2, count: 9, fixedWeight: false })).toMatchObject({ amount: 400, perGram: 200, perPiece: 400, negative: false });
+    expect(calculateActualSaleWorkmanship({ finalTotal: 5250, goldValue: 4500, taxStampTotal: 0, totalWeight: 0.75, unitWeight: 0.25, count: 3, fixedWeight: true })).toMatchObject({ amount: 750, perGram: 1000, perPiece: 250, negative: false });
+    expect(calculateActualSaleWorkmanship({ finalTotal: 4400, goldValue: 4500, taxStampTotal: 0, totalWeight: 0.75, unitWeight: 0.25, count: 3, fixedWeight: true })).toMatchObject({ amount: -100, negative: true });
+  });
+
+  it('keeps the purchase assistant contract closed to the four configured taxonomies', () => {
+    expect(SMART_PURCHASE_TAXONOMY_KEYS).toEqual(['gold.raw.scrap_foreign', 'gold.raw.scrap_arabic', 'gold.direct.coin', 'gold.direct.bar']);
+    const seeded = purchaseValuesFromDiscountPercent(6000, 5);
+    expect(seeded).toEqual({ discountPercent: 5, discountPerGram: 300, purchasePricePerGram: 5700 });
+    expect(calculateProposedPurchaseTotal(totalWeightForAssistant(product({ taxonomyKey: 'gold.direct.coin' }), 2, 3)!, seeded!.purchasePricePerGram)).toBe(34200);
+  });
+  it('normalizes pricing config safely without creating any persisted value', () => {
+    expect(normalizeGoldPricingConfig(undefined)).toMatchObject({ version: 1, saleWorkmanshipDefaults: {}, bullionWorkmanshipByWeight: {}, coinWorkmanshipByWeight: {}, purchaseDiscountPercent: {} });
+    expect(normalizeGoldPricingConfig({ saleWorkmanshipDefaults: { 'gold.product.ring_children': { mode: 'perPiece', value: 400 }, bad: { mode: 'bad', value: -1 } }, purchaseDiscountPercent: { good: 5, bad: -1 } })).toEqual({ version: 1, saleWorkmanshipDefaults: { 'gold.product.ring_children': { mode: 'perPiece', value: 400 } }, bullionWorkmanshipByWeight: {}, coinWorkmanshipByWeight: {}, purchaseDiscountPercent: { good: 5 } });
+  });
+
+  it('keeps bullion unit rates separate from total count pricing', () => {
+    expect(workmanshipForUnitWeight({ mode: 'perPiece', value: 250 }, 0.25)).toEqual({ perGram: 1000, perPiece: 250 });
+    const bullion = product({ taxonomyKey: 'gold.direct.bar' });
+    expect(totalWeightForAssistant(bullion, 0.25, 3)).toBe(0.75);
+    expect(bullionInternalWorkmanshipTotal(bullion, 250, 3)).toBe(750);
+  });
   it('uses safe defaults and ignores a configurable 24k field', () => {
     expect(normalizeGoldSaleTaxStampPerGramEgp(undefined)).toEqual(DEFAULT_GOLD_SALE_TAX_STAMP_PER_GRAM_EGP);
     expect(normalizeGoldSaleTaxStampPerGramEgp({ 18: 20, 21: 10, 24: 99 })).toEqual({ 18: 20, 21: 10 });

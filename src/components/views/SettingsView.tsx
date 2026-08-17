@@ -34,6 +34,12 @@ import { downloadCsv } from '../../utils/csv';
 import { parseSettingsEntryCsv } from '../../utils/csvImport';
 import {
   normalizeGoldSaleTaxStampPerGramEgp,
+  normalizeGoldPricingConfig,
+  GoldPricingConfig,
+  APPROVED_BULLION_UNIT_WEIGHTS,
+  APPROVED_COIN_UNIT_WEIGHTS,
+  SUPPORTED_JEWELRY_TAXONOMY_KEYS,
+  SMART_PURCHASE_TAXONOMY_KEYS,
   parseAssistantNumber,
 } from '../../lib/goldPricingAssistant';
 
@@ -48,6 +54,8 @@ export const SettingsView = React.memo(() => {
     setOpeningCostConfig,
     goldSaleTaxStampPerGramEgp,
     setGoldSaleTaxStampPerGramEgp,
+    pricingConfig,
+    setPricingConfig,
     costCalculationRun,
   } = useAppStore();
   const operationWritesLocked = areOperationWritesLocked(costCalculationRun);
@@ -67,6 +75,7 @@ export const SettingsView = React.memo(() => {
   const [salePricingError, setSalePricingError] = useState('');
   const [salePricingSuccess, setSalePricingSuccess] = useState('');
   const [isSavingSalePricing, setIsSavingSalePricing] = useState(false);
+  const [pricingConfigForm, setPricingConfigForm] = useState<GoldPricingConfig>(() => normalizeGoldPricingConfig(pricingConfig));
   const [importText, setImportText] = useState('');
   const [isImporting, setIsImporting] = useState(false);
   const [isDeletingAll, setIsDeletingAll] = useState(false);
@@ -78,6 +87,7 @@ export const SettingsView = React.memo(() => {
     const normalized = normalizeGoldSaleTaxStampPerGramEgp(goldSaleTaxStampPerGramEgp);
     setSalePricingForm({ rate18: String(normalized[18]), rate21: String(normalized[21]) });
   }, [goldSaleTaxStampPerGramEgp]);
+  useEffect(() => setPricingConfigForm(normalizeGoldPricingConfig(pricingConfig)), [pricingConfig]);
 
   const sortedOpeningCostConfig = useMemo(
     () => [...openingCostConfig].sort((a, b) => Number(a.year) - Number(b.year)),
@@ -251,6 +261,27 @@ export const SettingsView = React.memo(() => {
       setIsSavingSalePricing(false);
     }
   };
+
+  const savePricingConfig = async () => {
+    if (!user?.uid) { setSalePricingError('لا يوجد مستخدم نشط لحفظ الإعدادات.'); return; }
+    const next = normalizeGoldPricingConfig(pricingConfigForm);
+    const previous = pricingConfig;
+    setIsSavingSalePricing(true);
+    setPricingConfig(next);
+    try {
+      await setDoc(doc(db, 'settings', user.uid), { pricingConfig: next }, { merge: true });
+      setSalePricingSuccess('تم حفظ إعدادات المصنعية والخصم.');
+    } catch {
+      setPricingConfig(previous);
+      setSalePricingError('تعذر حفظ إعدادات المصنعية والخصم.');
+    } finally { setIsSavingSalePricing(false); }
+  };
+  const setJewelryDefault = (key: string, mode: 'perGram' | 'perPiece', value: string) => setPricingConfigForm(previous => ({
+    ...previous, saleWorkmanshipDefaults: { ...previous.saleWorkmanshipDefaults, [key]: { mode, value: Math.max(0, Number(normalizeNumerals(value)) || 0) } },
+  }));
+  const setPurchaseDefault = (key: string, value: string) => setPricingConfigForm(previous => ({
+    ...previous, purchaseDiscountPercent: { ...previous.purchaseDiscountPercent, [key]: Math.min(100, Math.max(0, Number(normalizeNumerals(value)) || 0)) },
+  }));
 
   const handleExportWacAudit = async () => {
     if (costCalculationRun.status !== 'valid' || !costCalculationRun.timeline?.valid) {
@@ -639,6 +670,30 @@ export const SettingsView = React.memo(() => {
               </form>
               {salePricingError && <div className="mt-3 rounded-2xl border border-red-500/30 bg-red-500/10 p-3 text-xs font-bold text-red-200">{salePricingError}</div>}
               {salePricingSuccess && <div className="mt-3 rounded-2xl border border-green-500/30 bg-green-500/10 p-3 text-xs font-bold text-green-300">{salePricingSuccess}</div>}
+            </div>
+
+            <div className="rounded-3xl border border-[#c9a84c]/35 bg-[#0e1018] p-4 space-y-4" dir="rtl">
+              <div><h3 className="text-sm font-bold text-[#f0cc6b]">مصنعية السبائك والجنيهات</h3><p className="text-[11px] leading-6 text-[#8a8172]">قيمة واحدة فقط تُحفظ لكل وزن؛ الإدخال الآخر مشتق مباشرة. لا يتم الحفظ إلا بالزر.</p></div>
+              {([['bullionWorkmanshipByWeight', 'سبيكة', APPROVED_BULLION_UNIT_WEIGHTS], ['coinWorkmanshipByWeight', 'جنيه', APPROVED_COIN_UNIT_WEIGHTS]] as const).map(([field, title, weights]) => <div key={field} className="space-y-2"><strong className="text-xs text-[#ddd8cc]">{title}</strong>{weights.map(unitWeight => {
+                const saved = pricingConfigForm[field][String(unitWeight)] ?? { mode: 'perGram' as const, value: 0 };
+                const perGram = saved.mode === 'perGram' ? saved.value : saved.value / unitWeight;
+                const perPiece = saved.mode === 'perPiece' ? saved.value : saved.value * unitWeight;
+                const setValue = (mode: 'perGram' | 'perPiece', value: string) => setPricingConfigForm(previous => ({ ...previous, [field]: { ...previous[field], [String(unitWeight)]: { mode, value: Math.max(0, Number(normalizeNumerals(value)) || 0) } } }));
+                return <div key={unitWeight} className="grid grid-cols-1 gap-2 rounded-2xl border border-[#252b37] p-3 sm:grid-cols-3"><span className="text-xs font-bold text-[#f0cc6b]">{unitWeight} جم</span><input value={String(Number(perGram.toFixed(2)))} onChange={event => setValue('perGram', event.target.value)} inputMode="decimal" aria-label={`مصنعية ${unitWeight} للجرام`} className="min-w-0 rounded-xl border border-[#1a1e2a] bg-[#080a0f] p-2 text-sm text-[#ddd8cc]"/><input value={String(Number(perPiece.toFixed(2)))} onChange={event => setValue('perPiece', event.target.value)} inputMode="decimal" aria-label={`مصنعية ${unitWeight} للقطعة`} className="min-w-0 rounded-xl border border-[#1a1e2a] bg-[#080a0f] p-2 text-sm text-[#ddd8cc]"/></div>;
+              })}</div>)}
+              <button type="button" onClick={savePricingConfig} disabled={isSavingSalePricing} className="flex min-h-12 w-full items-center justify-center gap-2 rounded-xl bg-[#c9a84c] px-5 text-xs font-bold text-[#080a0f] disabled:opacity-60"><Save className="h-4 w-4" />حفظ إعدادات المصنعية</button>
+            </div>
+
+            <div className="rounded-3xl border border-[#c9a84c]/35 bg-[#0e1018] p-4 space-y-4" dir="rtl">
+              <div><h3 className="text-sm font-bold text-[#f0cc6b]">مصنعية المشغولات الذهبية</h3><p className="text-[11px] leading-6 text-[#8a8172]">لكل taxonomy قيمة مرجعية واحدة فقط؛ لا تُشتق قيمة ثانية في الإعدادات.</p></div>
+              <div className="space-y-2">{SUPPORTED_JEWELRY_TAXONOMY_KEYS.map(key => { const saved = pricingConfigForm.saleWorkmanshipDefaults[key] ?? { mode: 'perGram' as const, value: 0 }; return <div key={key} className="grid grid-cols-1 gap-2 rounded-2xl border border-[#252b37] p-3 sm:grid-cols-[1fr_120px_1fr]"><span className="break-all text-[10px] font-bold text-[#ddd8cc]">{key}</span><select value={saved.mode} onChange={event => setJewelryDefault(key, event.target.value as 'perGram' | 'perPiece', String(saved.value))} className="rounded-xl border border-[#1a1e2a] bg-[#080a0f] p-2 text-xs text-[#ddd8cc]"><option value="perGram">EGP/gram</option><option value="perPiece">EGP/piece</option></select><input value={String(saved.value)} onChange={event => setJewelryDefault(key, saved.mode, event.target.value)} inputMode="decimal" className="rounded-xl border border-[#1a1e2a] bg-[#080a0f] p-2 text-sm text-[#ddd8cc]" /></div>; })}</div>
+              <button type="button" onClick={savePricingConfig} disabled={isSavingSalePricing} className="flex min-h-12 w-full items-center justify-center gap-2 rounded-xl bg-[#c9a84c] px-5 text-xs font-bold text-[#080a0f] disabled:opacity-60"><Save className="h-4 w-4" />حفظ مصنعية المشغولات</button>
+            </div>
+
+            <div className="rounded-3xl border border-[#c9a84c]/35 bg-[#0e1018] p-4 space-y-4" dir="rtl">
+              <div><h3 className="text-sm font-bold text-[#f0cc6b]">خصم الشراء الافتراضي</h3><p className="text-[11px] leading-6 text-[#8a8172]">للمنتجات الأربعة المعتمدة في مساعد الشراء فقط.</p></div>
+              {SMART_PURCHASE_TAXONOMY_KEYS.map(key => <label key={key} className="grid grid-cols-1 gap-2 rounded-2xl border border-[#252b37] p-3 sm:grid-cols-[1fr_150px]"><span className="break-all text-[10px] font-bold text-[#ddd8cc]">{key}</span><input value={String(pricingConfigForm.purchaseDiscountPercent[key] ?? 0)} onChange={event => setPurchaseDefault(key, event.target.value)} inputMode="decimal" aria-label={`Default discount ${key}`} className="rounded-xl border border-[#1a1e2a] bg-[#080a0f] p-2 text-sm text-[#ddd8cc]" /></label>)}
+              <button type="button" onClick={savePricingConfig} disabled={isSavingSalePricing} className="flex min-h-12 w-full items-center justify-center gap-2 rounded-xl bg-[#c9a84c] px-5 text-xs font-bold text-[#080a0f] disabled:opacity-60"><Save className="h-4 w-4" />حفظ خصم الشراء</button>
             </div>
 
             <div className="bg-[#0e1018] border border-[#1a1e2a] rounded-3xl p-6 space-y-5">

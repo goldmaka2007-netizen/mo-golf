@@ -13,8 +13,13 @@ import {
   GoldAssistantMode,
   GoldAssistantProduct,
   GoldAssistantSession,
+  GoldPricingConfig,
   GoldSaleTaxStampPerGramEgp,
   goldSaleTaxStampRate,
+  approvedWeightsForProduct,
+  bullionInternalWorkmanshipTotal,
+  calculateActualSaleWorkmanship,
+  isFixedWeightGoldProduct,
   officialGoldKaratPrice,
   parseAssistantNumber,
   purchaseValuesFromDiscountPerGram,
@@ -23,6 +28,8 @@ import {
   resetGoldAssistantState,
   workmanshipPerGramFromPiece,
   workmanshipPieceFromPerGram,
+  workmanshipForUnitWeight,
+  totalWeightForAssistant,
 } from '../../lib/goldPricingAssistant';
 import { cn } from '../../lib/utils';
 
@@ -32,6 +39,9 @@ interface GoldPricingAssistantProps {
   products: GoldAssistantProduct[];
   cashAccount: Account | null;
   taxStampSettings: GoldSaleTaxStampPerGramEgp;
+  pricingConfig: GoldPricingConfig;
+  legacyBullionCharges: Record<number, number>;
+  legacyCoinCharges: Record<number, number>;
   onCancel: () => void;
   onReview: (prefill: Partial<Entry>) => void;
 }
@@ -87,6 +97,9 @@ export const GoldPricingAssistant = ({
   products,
   cashAccount,
   taxStampSettings,
+  pricingConfig,
+  legacyBullionCharges,
+  legacyCoinCharges,
   onCancel,
   onReview,
 }: GoldPricingAssistantProps) => {
@@ -95,10 +108,12 @@ export const GoldPricingAssistant = ({
   const sale = mode === 'sale';
   const product = state.product;
   const officialPrice = product ? officialGoldKaratPrice(session.gold21PriceSnapshot, product.multiplier) : null;
-  const weight = parseAssistantNumber(state.weight);
+  const unitWeight = parseAssistantNumber(state.weight);
   const count = parseAssistantNumber(state.count);
   const finalTotal = parseAssistantNumber(state.finalTotal);
-  const workmanshipTotal = parseAssistantNumber(state.pieceWorkmanship) ?? 0;
+  const weight = totalWeightForAssistant(product, unitWeight, count);
+  const fixedWeight = isFixedWeightGoldProduct(product);
+  const workmanshipTotal = bullionInternalWorkmanshipTotal(product, parseAssistantNumber(state.pieceWorkmanship) ?? 0, count);
   const workmanshipPerGram = parseAssistantNumber(state.workmanshipPerGram);
   const purchasePricePerGram = parseAssistantNumber(state.purchasePricePerGram);
   const discountPercent = parseAssistantNumber(state.discountPercent);
@@ -109,7 +124,7 @@ export const GoldPricingAssistant = ({
         weight,
         officialPrice,
         workmanshipTotal,
-        taxStampEnabled: state.taxStampEnabled,
+        taxStampEnabled: product.taxonomyKey?.startsWith('gold.product.') ? true : state.taxStampEnabled,
         karat: product.karat,
         taxStampSettings,
       })
@@ -130,13 +145,28 @@ export const GoldPricingAssistant = ({
     const nextProduct = products.find(item => item.accountId === accountId);
     if (!nextProduct) return;
     const next = changeGoldAssistantProduct(nextProduct);
+    const defaultWorkmanship = nextProduct.taxonomyKey === 'gold.direct.bar'
+      ? pricingConfig.bullionWorkmanshipByWeight
+      : nextProduct.taxonomyKey === 'gold.direct.coin'
+        ? pricingConfig.coinWorkmanshipByWeight
+        : null;
+    if (sale && !defaultWorkmanship) {
+      const saved = pricingConfig.saleWorkmanshipDefaults[nextProduct.pricingKey];
+      if (saved) {
+        if (saved.mode === 'perGram') next.workmanshipPerGram = displayNumber(saved.value);
+        else next.pieceWorkmanship = displayNumber(saved.value);
+        workmanshipSource.current = saved.mode === 'perPiece' ? 'piece' : 'perGram';
+      }
+    }
     const nextOfficialPrice = officialGoldKaratPrice(session.gold21PriceSnapshot, nextProduct.multiplier);
     if (!sale && nextOfficialPrice !== null) {
-      next.discountPercent = '0';
-      next.discountPerGram = '0';
-      next.purchasePricePerGram = displayNumber(nextOfficialPrice);
+      const discount = pricingConfig.purchaseDiscountPercent[nextProduct.pricingKey] ?? 0;
+      const linked = purchaseValuesFromDiscountPercent(nextOfficialPrice, discount)!;
+      next.discountPercent = displayNumber(linked.discountPercent);
+      next.discountPerGram = displayNumber(linked.discountPerGram);
+      next.purchasePricePerGram = displayNumber(linked.purchasePricePerGram);
     }
-    workmanshipSource.current = 'perGram';
+    if (!sale || defaultWorkmanship) workmanshipSource.current = 'perGram';
     setState(next);
   };
 
@@ -162,12 +192,27 @@ export const GoldPricingAssistant = ({
     });
   };
 
+  const selectUnitWeight = (value: string) => {
+    const selected = parseAssistantNumber(value);
+    setState(previous => {
+      const next = { ...previous, weight: value };
+      if (!product || !selected || !fixedWeight) return next;
+      const configured = product.taxonomyKey === 'gold.direct.bar'
+        ? pricingConfig.bullionWorkmanshipByWeight[String(selected)]
+        : pricingConfig.coinWorkmanshipByWeight[String(selected)];
+      const legacy = product.taxonomyKey === 'gold.direct.bar' ? legacyBullionCharges[selected] : legacyCoinCharges[selected];
+      const values = workmanshipForUnitWeight(configured ?? (Number.isFinite(legacy) && legacy! >= 0 ? { mode: 'perGram', value: legacy! } : undefined), selected);
+      if (sale && values) { next.workmanshipPerGram = displayNumber(values.perGram); next.pieceWorkmanship = displayNumber(values.perPiece); workmanshipSource.current = 'perGram'; }
+      return next;
+    });
+  };
+
   const updateWorkmanshipPerGram = (value: string) => {
     workmanshipSource.current = 'perGram';
     setState(previous => {
       const next = { ...previous, workmanshipPerGram: value };
       const parsed = parseAssistantNumber(value);
-      const parsedWeight = parseAssistantNumber(previous.weight);
+      const parsedWeight = fixedWeight ? parseAssistantNumber(previous.weight) : parseAssistantNumber(previous.weight);
       if (parsed !== null && parsedWeight !== null) {
         const piece = workmanshipPieceFromPerGram(parsedWeight, parsed);
         if (piece !== null) next.pieceWorkmanship = displayNumber(piece);
@@ -181,7 +226,7 @@ export const GoldPricingAssistant = ({
     setState(previous => {
       const next = { ...previous, pieceWorkmanship: value };
       const parsed = parseAssistantNumber(value);
-      const parsedWeight = parseAssistantNumber(previous.weight);
+      const parsedWeight = fixedWeight ? parseAssistantNumber(previous.weight) : parseAssistantNumber(previous.weight);
       if (parsed !== null && parsedWeight !== null) {
         const perGram = workmanshipPerGramFromPiece(parsedWeight, parsed);
         if (perGram !== null) next.workmanshipPerGram = displayNumber(perGram);
@@ -218,9 +263,9 @@ export const GoldPricingAssistant = ({
     workmanshipPerGram !== null
     && workmanshipPerGram >= 0
     && workmanshipTotal >= 0
-    && weight !== null
-    && workmanshipPieceFromPerGram(weight, workmanshipPerGram) !== null
-    && Math.abs((workmanshipPieceFromPerGram(weight, workmanshipPerGram) ?? 0) - workmanshipTotal) <= 0.02
+    && unitWeight !== null
+    && workmanshipPieceFromPerGram(fixedWeight ? unitWeight : unitWeight, workmanshipPerGram) !== null
+    && Math.abs((workmanshipPieceFromPerGram(fixedWeight ? unitWeight : unitWeight, workmanshipPerGram) ?? 0) - (parseAssistantNumber(state.pieceWorkmanship) ?? 0)) <= 0.02
   );
   const validPurchaseLinkage = officialPrice !== null
     && discountPercent !== null && discountPercent >= 0 && discountPercent <= 100
@@ -307,7 +352,9 @@ export const GoldPricingAssistant = ({
       {product && (
         <>
           <div className="grid grid-cols-1 gap-3 rounded-3xl border border-[#252b37] bg-[#0d1119] p-4 sm:grid-cols-2">
-            <AssistantInput label="الوزن" value={state.weight} onChange={updateWeight} suffix="جم" />
+            {fixedWeight ? (
+              <label className="block space-y-1.5"><span className="block text-[11px] font-black text-[#b8af9b]">وزن الوحدة</span><select value={state.weight} onChange={event => selectUnitWeight(event.target.value)} className="min-h-14 w-full rounded-2xl border border-[#242a36] bg-[#080b12] px-3 font-mono text-lg font-black text-[#f5f1e8]"><option value="">اختر الوزن</option>{approvedWeightsForProduct(product).map(item => <option key={item} value={item}>{item} جم</option>)}</select></label>
+            ) : <AssistantInput label="الوزن" value={state.weight} onChange={updateWeight} suffix="جم" />}
             {product.tracksQuantity && (
               <AssistantInput
                 label="العدد"
@@ -317,6 +364,7 @@ export const GoldPricingAssistant = ({
               />
             )}
           </div>
+          {fixedWeight && unitWeight !== null && weight !== null && <div className="rounded-2xl border border-[#252b37] bg-[#0b0f17] p-3 text-xs font-bold text-[#d8d2c6]">إجمالي الوزن: {weight} جم</div>}
 
           {sale ? (
             <>
@@ -328,21 +376,15 @@ export const GoldPricingAssistant = ({
                 </div>
               </div>
 
-              {product.karat !== 24 && (
+              {product.taxonomyKey?.startsWith('gold.product.') && (
                 <div className="rounded-3xl border border-[#252b37] bg-[#0d1119] p-4">
-                  <label className="flex min-h-12 cursor-pointer items-center justify-between gap-4">
+                  <div className="flex min-h-12 items-center justify-between gap-4">
                     <span>
-                      <strong className="block text-sm text-[#eee8dc]">تفعيل الضريبة والدمغة</strong>
+                      <strong className="block text-sm text-[#eee8dc]">الضريبة والدمغة مطبقة</strong>
                       <small className="mt-1 block text-[10px] text-[#827b6d]">المعدل: {goldSaleTaxStampRate(product.karat, taxStampSettings)} ج/جم</small>
                     </span>
-                    <input
-                      type="checkbox"
-                      checked={state.taxStampEnabled}
-                      onChange={event => setState(previous => ({ ...previous, taxStampEnabled: event.target.checked }))}
-                      className="h-6 w-6 accent-[#d2ad4a]"
-                    />
-                  </label>
-                  {state.taxStampEnabled && salePricing && <div className="mt-2 text-xs font-black text-[#d8d2c6]">الإجمالي: {formatEgpAmount(salePricing.taxStampTotal, 2)}</div>}
+                  </div>
+                  {salePricing && <div className="mt-2 text-xs font-black text-[#d8d2c6]">الإجمالي: {formatEgpAmount(salePricing.taxStampTotal, 2)}</div>}
                 </div>
               )}
 
@@ -356,7 +398,7 @@ export const GoldPricingAssistant = ({
                   {salePricing && (
                     <div className="mt-3 space-y-2 text-[#d7d1c5]">
                       <div className="flex justify-between"><span>قيمة الذهب</span><span>{formatEgpAmount(salePricing.goldValue, 2)}</span></div>
-                      <div className="flex justify-between"><span>المصنعية</span><span>{formatEgpAmount(salePricing.workmanshipTotal, 2)}</span></div>
+                      {!fixedWeight && <div className="flex justify-between"><span>المصنعية</span><span>{formatEgpAmount(salePricing.workmanshipTotal, 2)}</span></div>}
                       <div className="flex justify-between"><span>الضريبة والدمغة</span><span>{formatEgpAmount(salePricing.taxStampTotal, 2)}</span></div>
                     </div>
                   )}
@@ -398,6 +440,10 @@ export const GoldPricingAssistant = ({
                 <div className="rounded-xl bg-[#080b12] p-2"><span className="block text-[8px] text-[#777165]">نسبة الخصم</span><strong className="mt-1 block text-xs text-[#eee8dc]">{actualPurchase.discountPercent}%</strong></div>
               </div>
             )}
+            {sale && salePricing && finalTotal !== null && (() => {
+              const actual = calculateActualSaleWorkmanship({ finalTotal, goldValue: salePricing.goldValue, taxStampTotal: salePricing.taxStampTotal, totalWeight: weight ?? 0, unitWeight: unitWeight ?? 0, count: count ?? 1, fixedWeight });
+              return actual && <div className={cn('mt-3 rounded-xl p-2 text-center text-xs font-bold', actual.negative ? 'bg-red-500/15 text-red-300' : 'bg-[#080b12] text-[#d8d2c6]')}>{actual.negative && 'تحذير: مصنعية فعلية سالبة. '}المصنعية الفعلية/جم: {actual.perGram} — /قطعة: {actual.perPiece}</div>;
+            })()}
             {sale && salePricing && finalTotal !== null && (
               <div className="mt-3 text-center text-[10px] font-bold text-[#8f887a]">
                 الفرق عن المقترح: {formatEgpAmount(finalTotal - salePricing.suggestedTotal, 2)}

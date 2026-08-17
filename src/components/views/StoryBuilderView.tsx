@@ -3,10 +3,11 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { Share2, Image as ImageIcon, Settings2, Coins, Package, X } from 'lucide-react';
 import { useAppStore } from '../../store';
 import { cn } from '../../lib/utils';
+import { APPROVED_BULLION_UNIT_WEIGHTS, APPROVED_COIN_UNIT_WEIGHTS, workmanshipForUnitWeight } from '../../lib/goldPricingAssistant';
 
 // --- Configuration & Constants ---
 
-const BULLION_LIST = [
+const LEGACY_BULLION_LIST = [
   { weight: 0.25, label: '0.25 جرام' },
   { weight: 0.5, label: '0.50 جرام' },
   { weight: 1, label: '1 جرام' },
@@ -15,11 +16,14 @@ const BULLION_LIST = [
   { weight: 10, label: '10 جرام' },
 ];
 
-const COIN_LIST = [
+const LEGACY_COIN_LIST = [
   { weight: 8, label: 'جنيه ذهب 8 جرام' },
   { weight: 4, label: 'نصف جنيه 4 جرام' },
   { weight: 2, label: 'ربع جنيه 2 جرام' },
 ];
+
+const BULLION_LIST = APPROVED_BULLION_UNIT_WEIGHTS.map(weight => ({ weight, label: `${weight} جم` }));
+const COIN_LIST = APPROVED_COIN_UNIT_WEIGHTS.map(weight => ({ weight, label: `جنيه ذهب ${weight} جم` }));
 
 const CUSTOMER_MSG_DEFAULT = 'نتعهد بأن هذه الاسعار الحقيقية للسوق المصري و ليس لنا علاقة باي اسعار اخري ولا يوجد خصم من سعر الشراء للسبائك و المشغولات تقديرية حسب سياسة الخصم الخاصة بكل مصنع';
 
@@ -333,8 +337,9 @@ export const StoryBuilderView = () => {
   const silverSwissSell = store.silverPrice || 50;
   const silverSwissBuy = store.silverBuyPrice || 48;
 
-  const currentBullionCharges = store.bullionCharges || {};
-  const currentCoinCharges = store.coinCharges || {};
+  // Firestore pricingConfig is authoritative; legacy charges are read-only per-gram fallback.
+  const currentBullionCharges = Object.fromEntries(BULLION_LIST.map(item => [item.weight, workmanshipForUnitWeight(store.pricingConfig.bullionWorkmanshipByWeight[String(item.weight)], item.weight)?.perGram ?? store.bullionCharges?.[item.weight] ?? 0]));
+  const currentCoinCharges = Object.fromEntries(COIN_LIST.map(item => [item.weight, workmanshipForUnitWeight(store.pricingConfig.coinWorkmanshipByWeight[String(item.weight)], item.weight)?.perGram ?? store.coinCharges?.[item.weight] ?? 0]));
 
   const handleManualCapture = async () => {
     setIsProcessing(true);
@@ -364,18 +369,6 @@ export const StoryBuilderView = () => {
       }
     }
     setIsProcessing(false);
-  };
-
-  const updateBullionCharge = (weight: number, val: string) => {
-    const newCharges = { ...currentBullionCharges };
-    newCharges[weight] = parseFloat(val) || 0;
-    store.setBullionCharges(newCharges);
-  };
-
-  const updateCoinCharge = (weight: number, val: string) => {
-    const newCharges = { ...currentCoinCharges };
-    newCharges[weight] = parseFloat(val) || 0;
-    store.setCoinCharges(newCharges);
   };
 
   // --- Quick Components for Clean Render ---
@@ -447,7 +440,7 @@ export const StoryBuilderView = () => {
                        <input
                         type="number"
                         value={currentBullionCharges[b.weight] || ''}
-                        onChange={(e) => updateBullionCharge(b.weight, e.target.value)}
+                        readOnly
                         className="w-full bg-transparent text-xs text-[#ddd8cc] font-mono outline-none placeholder:text-[#3a3530]"
                         placeholder="0"
                       />
@@ -467,7 +460,7 @@ export const StoryBuilderView = () => {
                        <input
                         type="number"
                         value={currentCoinCharges[c.weight] || ''}
-                        onChange={(e) => updateCoinCharge(c.weight, e.target.value)}
+                        readOnly
                         className="w-full bg-transparent text-xs text-[#ddd8cc] font-mono outline-none placeholder:text-[#3a3530]"
                         placeholder="0"
                       />

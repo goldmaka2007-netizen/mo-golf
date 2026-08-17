@@ -97,6 +97,9 @@ export const EntryForm = React.memo(({ onStepChange }: EntryFormProps) => {
     silverPrice,
     openingCostConfig,
     goldSaleTaxStampPerGramEgp,
+    pricingConfig,
+    bullionCharges,
+    coinCharges,
     costCalculationRun
     ,canonicalAccounts
   } = useAppStore();
@@ -664,6 +667,9 @@ export const EntryForm = React.memo(({ onStepChange }: EntryFormProps) => {
       products={assistantProducts}
       cashAccount={assistantCashAccount}
       taxStampSettings={goldSaleTaxStampPerGramEgp}
+      pricingConfig={pricingConfig}
+      legacyBullionCharges={bullionCharges}
+      legacyCoinCharges={coinCharges}
       onCancel={() => setAssistantSession(null)}
       onReview={handleAssistantReview}
     />

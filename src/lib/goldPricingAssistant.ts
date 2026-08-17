@@ -1,7 +1,7 @@
 import type { Account, Entry, TransactionRule } from '../types';
 import { calculateKaratPrice, normalizeNumerals } from './accounting';
 import type { AccountRegistry } from './accountRegistry';
-import { CURRENT_DATASET_INVENTORY_BINDINGS } from './inventoryCostCatalog';
+import { CURRENT_DATASET_INVENTORY_BINDINGS, INVENTORY_COST_TAXONOMY } from './inventoryCostCatalog';
 import { buildRuntimeStableInventoryIdAliases } from './runtimeCostAccountResolver';
 
 export type GoldAssistantMode = 'sale' | 'purchase';
@@ -19,11 +19,83 @@ export const DEFAULT_GOLD_SALE_TAX_STAMP_PER_GRAM_EGP: GoldSaleTaxStampPerGramEg
 
 export interface GoldAssistantProduct {
   accountId: string;
+  /** Stable inventory taxonomy where it is resolvable; never a display-name key. */
+  taxonomyKey?: string;
+  /** taxonomyKey is preferred; accountId is a compatibility fallback only. */
+  pricingKey: string;
   name: string;
   karat: GoldAssistantKarat;
   multiplier: number;
   tracksQuantity: boolean;
 }
+
+export type WorkmanshipMode = 'perGram' | 'perPiece';
+export interface WorkmanshipDefault { mode: WorkmanshipMode; value: number; }
+export interface GoldPricingConfig {
+  version: 1;
+  saleWorkmanshipDefaults: Record<string, WorkmanshipDefault>;
+  bullionWorkmanshipByWeight: Record<string, WorkmanshipDefault>;
+  coinWorkmanshipByWeight: Record<string, WorkmanshipDefault>;
+  purchaseDiscountPercent: Record<string, number>;
+}
+
+export const APPROVED_BULLION_UNIT_WEIGHTS = Object.freeze([0.25, 0.5, 1, 2.5, 5, 10, 20, 31.1, 50] as const);
+export const APPROVED_COIN_UNIT_WEIGHTS = Object.freeze([2, 4, 8] as const);
+export const SUPPORTED_JEWELRY_TAXONOMY_KEYS = Object.freeze(INVENTORY_COST_TAXONOMY.filter(item => item.taxonomyKey.startsWith('gold.product.')).map(item => item.taxonomyKey));
+export const SMART_PURCHASE_TAXONOMY_KEYS = Object.freeze(['gold.raw.scrap_foreign', 'gold.raw.scrap_arabic', 'gold.direct.coin', 'gold.direct.bar'] as const);
+export const DEFAULT_GOLD_PRICING_CONFIG: GoldPricingConfig = Object.freeze({ version: 1, saleWorkmanshipDefaults: {}, bullionWorkmanshipByWeight: {}, coinWorkmanshipByWeight: {}, purchaseDiscountPercent: {} });
+
+const weightKey = (weight: number): string => String(Number(weight.toFixed(4)));
+const normalizeWorkmanship = (value: unknown): WorkmanshipDefault | null => {
+  if (!value || typeof value !== 'object') return null;
+  const raw = value as Record<string, unknown>;
+  const numeric = Number(raw.value);
+  return (raw.mode === 'perGram' || raw.mode === 'perPiece') && Number.isFinite(numeric) && numeric >= 0
+    ? { mode: raw.mode, value: roundMoney(numeric) }
+    : null;
+};
+const normalizeWorkmanshipMap = (value: unknown): Record<string, WorkmanshipDefault> => {
+  if (!value || typeof value !== 'object') return {};
+  return Object.fromEntries(Object.entries(value as Record<string, unknown>)
+    .map(([key, item]) => [key, normalizeWorkmanship(item)] as const)
+    .filter((entry): entry is [string, WorkmanshipDefault] => !!entry[1]));
+};
+const normalizePercentMap = (value: unknown): Record<string, number> => {
+  if (!value || typeof value !== 'object') return {};
+  return Object.fromEntries(Object.entries(value as Record<string, unknown>)
+    .map(([key, item]) => [key, Number(item)] as const)
+    .filter(([, item]) => Number.isFinite(item) && item >= 0 && item <= 100)
+    .map(([key, item]) => [key, roundMoney(item)]));
+};
+/** Read-only normalization. Calling this must never imply a Firestore write. */
+export const normalizeGoldPricingConfig = (value: unknown): GoldPricingConfig => {
+  const raw = value && typeof value === 'object' ? value as Record<string, unknown> : {};
+  return {
+    version: 1,
+    saleWorkmanshipDefaults: normalizeWorkmanshipMap(raw.saleWorkmanshipDefaults),
+    bullionWorkmanshipByWeight: normalizeWorkmanshipMap(raw.bullionWorkmanshipByWeight),
+    coinWorkmanshipByWeight: normalizeWorkmanshipMap(raw.coinWorkmanshipByWeight),
+    purchaseDiscountPercent: normalizePercentMap(raw.purchaseDiscountPercent),
+  };
+};
+export const isFixedWeightGoldProduct = (product: Pick<GoldAssistantProduct, 'taxonomyKey'> | null | undefined): boolean => product?.taxonomyKey === 'gold.direct.bar' || product?.taxonomyKey === 'gold.direct.coin';
+export const approvedWeightsForProduct = (product: Pick<GoldAssistantProduct, 'taxonomyKey'> | null | undefined): readonly number[] => product?.taxonomyKey === 'gold.direct.bar' ? APPROVED_BULLION_UNIT_WEIGHTS : product?.taxonomyKey === 'gold.direct.coin' ? APPROVED_COIN_UNIT_WEIGHTS : [];
+export const workmanshipForUnitWeight = (value: WorkmanshipDefault | undefined, unitWeight: number): { perGram: number; perPiece: number } | null => {
+  if (!value || !(unitWeight > 0)) return null;
+  return value.mode === 'perGram'
+    ? { perGram: value.value, perPiece: roundMoney(value.value * unitWeight) }
+    : { perGram: roundMoney(value.value / unitWeight), perPiece: value.value };
+};
+export const totalWeightForAssistant = (product: Pick<GoldAssistantProduct, 'taxonomyKey'> | null, weight: number | null, count: number | null): number | null => {
+  if (!(weight && weight > 0)) return null;
+  return isFixedWeightGoldProduct(product) ? roundMoney(weight * (count && count >= 1 ? count : 1)) : weight;
+};
+export const bullionInternalWorkmanshipTotal = (product: Pick<GoldAssistantProduct, 'taxonomyKey'> | null, displayedPerPiece: number, count: number | null): number => isFixedWeightGoldProduct(product) ? roundMoney(displayedPerPiece * (count && count >= 1 ? count : 1)) : displayedPerPiece;
+export const calculateActualSaleWorkmanship = (args: { finalTotal: number; goldValue: number; taxStampTotal: number; totalWeight: number; unitWeight: number; count: number; fixedWeight: boolean }) => {
+  const amount = roundMoney(args.finalTotal - args.goldValue - args.taxStampTotal);
+  if (!(args.totalWeight > 0)) return null;
+  return { amount, perGram: roundMoney(amount / args.totalWeight), perPiece: args.fixedWeight ? roundMoney(amount / Math.max(args.count, 1)) : amount, negative: amount < 0 };
+};
 
 export interface GoldAssistantSession {
   mode: GoldAssistantMode;
@@ -50,7 +122,7 @@ export interface PurchaseLinkedValues {
   purchasePricePerGram: number;
 }
 
-const SMART_PURCHASE_TAXONOMY_KEYS = new Set([
+const SMART_PURCHASE_TAXONOMY_SET = new Set([
   'gold.raw.scrap_foreign',
   'gold.raw.scrap_arabic',
   'gold.direct.coin',
@@ -59,7 +131,7 @@ const SMART_PURCHASE_TAXONOMY_KEYS = new Set([
 
 const SMART_PURCHASE_STABLE_ACCOUNT_IDS = new Set(
   CURRENT_DATASET_INVENTORY_BINDINGS
-    .filter(binding => SMART_PURCHASE_TAXONOMY_KEYS.has(binding.taxonomyKey))
+    .filter(binding => SMART_PURCHASE_TAXONOMY_SET.has(binding.taxonomyKey))
     .map(binding => binding.inventoryAccountId),
 );
 
@@ -68,6 +140,11 @@ const approvedSmartPurchaseAccountIds = (accounts: Account[]): Set<string> => ne
     .filter(([, stableAccountId]) => SMART_PURCHASE_STABLE_ACCOUNT_IDS.has(stableAccountId))
     .map(([runtimeAccountId]) => runtimeAccountId),
 );
+
+const taxonomyForRuntimeAccount = (accounts: Account[], accountId: string): string | undefined => {
+  const stableId = buildRuntimeStableInventoryIdAliases(accounts).get(accountId) ?? accountId;
+  return CURRENT_DATASET_INVENTORY_BINDINGS.find(binding => binding.inventoryAccountId === stableId)?.taxonomyKey;
+};
 
 export interface GoldAssistantRule {
   tx: string;
@@ -294,8 +371,11 @@ export const resolveGoldAssistantProducts = (args: {
     if (resolution.status !== 'resolved') continue;
     const karat = Number(productAccount.karat) as GoldAssistantKarat;
     const ruleMultiplier = Number(rule.multiplier);
+    const taxonomyKey = taxonomyForRuntimeAccount(accounts, productAccount.id);
     products.set(productAccount.id, {
       accountId: productAccount.id,
+      taxonomyKey,
+      pricingKey: taxonomyKey ?? `account:${productAccount.id}`,
       name: productAccount.name,
       karat,
       multiplier: ruleMultiplier > 0 && Number.isFinite(ruleMultiplier) ? ruleMultiplier : karat / 21,
