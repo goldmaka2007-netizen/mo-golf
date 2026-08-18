@@ -8,7 +8,8 @@ Last reviewed: 2026-08-19
 - Production: https://makka-central-accounting.web.app
 - Firebase project: `makka-central-accounting`
 - Latest deployed application feature commit: `5086600f740b86277f635fa2f4113470ee4b7669`
-- Latest GitHub documentation commit before this sync: `30c2590bd861261cbcb451959718b612c4589413`
+- Operational Home release documentation commit: `30c2590bd861261cbcb451959718b612c4589413`
+- Cross-system knowledge hard-sync receipt commit: `a401f2256f19987b57683f8c5d2a295510f3f6f2`
 - Production asset: `/assets/index-BBtYn-2M.js`
 - Deployment scope for the latest release: Firebase Hosting only.
 - Firestore Data/Rules/Indexes/Functions/Storage/Auth were not changed by the Operational Home release.
@@ -104,9 +105,12 @@ The latest releases did not change:
 - `b511a8a357453aa56876973d7a947080504bac39` — Smart Daily release documentation.
 - `5086600f740b86277f635fa2f4113470ee4b7669` — Operational Home feature release currently deployed.
 - `30c2590bd861261cbcb451959718b612c4589413` — Operational Home release documentation.
+- `a401f2256f19987b57683f8c5d2a295510f3f6f2` — cross-system knowledge hard-sync receipt before this documentation cleanup.
 
 ## Source-of-truth order
 
 Use `CONSTITUTION.md`, `docs/DECISIONS.md`, active ADRs, this file, executable tests/contracts, then current implementation code. Verify technical paths against the current branch before editing.
 
 Notion and Google Drive are synchronized knowledge/decision surfaces and must reflect completed work, but they do not override the repository's protected authority order.
+
+Project-uploaded or attached copies of project documents are snapshots only. If an uploaded copy differs from the live GitHub, Notion, or Google Drive source, verify and use the live source before analysis, review, or implementation.
