@@ -8,6 +8,7 @@ import { writeBatch } from 'firebase/firestore';
 import { handleFirestoreError, OperationType } from '../firebase';
 import { isAdminEmail } from '../lib/adminAccess';
 import { normalizeGoldPricingConfig, normalizeGoldSaleTaxStampPerGramEgp } from '../lib/goldPricingAssistant';
+import { normalizeSmartMarginSettings } from '../lib/dailyJournalSmartDashboard';
 
 export const useDataSync = (user: any, isAuthReady: boolean) => {
   const { 
@@ -26,7 +27,8 @@ export const useDataSync = (user: any, isAuthReady: boolean) => {
     setAccountCategories,
     setOpeningCostConfig,
     setGoldSaleTaxStampPerGramEgp,
-    setPricingConfig
+    setPricingConfig,
+    setSmartMarginSettings
   } = useAppStore();
 
   useEffect(() => {
@@ -189,10 +191,12 @@ export const useDataSync = (user: any, isAuthReady: boolean) => {
         setOpeningCostConfig(Array.isArray(data.openingCostConfig) ? data.openingCostConfig : []);
         setGoldSaleTaxStampPerGramEgp(normalizeGoldSaleTaxStampPerGramEgp(data.goldSaleTaxStampPerGramEgp));
         setPricingConfig(normalizeGoldPricingConfig(data.pricingConfig));
+        setSmartMarginSettings(normalizeSmartMarginSettings(data.smartMarginSettings));
       } else {
         setOpeningCostConfig([]);
         setGoldSaleTaxStampPerGramEgp(normalizeGoldSaleTaxStampPerGramEgp(undefined));
         setPricingConfig(normalizeGoldPricingConfig(undefined));
+        setSmartMarginSettings(normalizeSmartMarginSettings(undefined));
       }
     }, (error) => {
       console.warn("Settings snapshot error:", error);

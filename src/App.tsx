@@ -289,11 +289,11 @@ export default function App() {
   return (
     <ErrorBoundary>
       <div
-        className={`pb-[calc(var(--bottom-nav-height)+env(safe-area-inset-bottom)+16px)] font-sans ${isEntryDarkShell ? 'flex min-h-[100svh] flex-col bg-[#020408] text-[#f5f1e8]' : view === 'entry' ? 'min-h-[100dvh] bg-[#fffdf7] text-[#15203b]' : 'min-h-[100dvh] bg-[#020408] text-[#f5f1e8]'}`}
+        className={`pb-[calc(var(--bottom-nav-height)+env(safe-area-inset-bottom)+2rem)] font-sans ${isEntryDarkShell ? 'flex min-h-[100svh] flex-col bg-[#020408] text-[#f5f1e8]' : view === 'entry' ? 'min-h-[100dvh] bg-[#fffdf7] text-[#15203b]' : 'min-h-[100dvh] bg-[#020408] text-[#f5f1e8]'}`}
         dir="rtl"
       >
         <main className={`mx-auto max-w-2xl px-4 pt-4 sm:pt-6 ${isEntryDarkShell ? 'flex w-full flex-1 flex-col' : ''}`}>
-          <header className={`sticky top-0 z-30 -mx-4 border-b px-4 py-3 backdrop-blur-xl ${isEntryDarkShell ? 'mb-3 border-[#1a1e2a]/80 bg-[#020408]/92' : view === 'entry' ? 'mb-4 border-[#15203b]/10 bg-[#fffdf7]/94' : 'mb-4 border-[#1a1e2a]/80 bg-[#020408]/92'}`}>
+          <header className={`sticky top-0 z-30 -mx-4 border-b px-4 pb-3 pt-[calc(0.75rem+env(safe-area-inset-top))] backdrop-blur-xl ${isEntryDarkShell ? 'mb-3 border-[#1a1e2a]/80 bg-[#020408]/92' : view === 'entry' ? 'mb-4 border-[#15203b]/10 bg-[#fffdf7]/94' : 'mb-4 border-[#1a1e2a]/80 bg-[#020408]/92'}`}>
             <div className="flex items-center justify-between gap-3">
               <div className="min-w-0">
                 {view === 'entry' ? (

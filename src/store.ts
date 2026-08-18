@@ -11,6 +11,7 @@ import {
   GoldPricingConfig,
   DEFAULT_GOLD_PRICING_CONFIG,
 } from './lib/goldPricingAssistant';
+import { DEFAULT_SMART_MARGIN_SETTINGS, SmartMarginSettings } from './lib/dailyJournalSmartDashboard';
 
 interface AppState {
   user: FirebaseUser | null;
@@ -64,6 +65,9 @@ interface AppState {
   /** Firestore settings snapshot only; deliberately excluded from local persistence. */
   pricingConfig: GoldPricingConfig;
   setPricingConfig: (config: GoldPricingConfig) => void;
+
+  smartMarginSettings: SmartMarginSettings;
+  setSmartMarginSettings: (settings: SmartMarginSettings) => void;
 
   costCalculationRun: CostCalculationRun;
   costRetryToken: number;
@@ -203,6 +207,8 @@ export const useAppStore = create<AppState>()(
 
   pricingConfig: { ...DEFAULT_GOLD_PRICING_CONFIG },
   setPricingConfig: (pricingConfig) => set({ pricingConfig }),
+  smartMarginSettings: { ...DEFAULT_SMART_MARGIN_SETTINGS },
+  setSmartMarginSettings: (smartMarginSettings) => set({ smartMarginSettings }),
 
   costCalculationRun: {
     generationId: 0,
@@ -317,7 +323,8 @@ export const useAppStore = create<AppState>()(
         silverBuyPrice: state.silverBuyPrice,
         silverSpread: state.silverSpread,
         openingCostConfig: state.openingCostConfig,
-        goldSaleTaxStampPerGramEgp: state.goldSaleTaxStampPerGramEgp
+        goldSaleTaxStampPerGramEgp: state.goldSaleTaxStampPerGramEgp,
+        smartMarginSettings: state.smartMarginSettings
       }),
     }
   )

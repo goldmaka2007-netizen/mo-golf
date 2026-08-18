@@ -30,6 +30,7 @@ import { normalizeNumerals } from '../../lib/accounting';
 import { areOperationWritesLocked } from '../../lib/costRecalculation';
 import { buildOpeningCostConfig } from '../../lib/openingCostConfig';
 import { buildWacAuditCsv, wacAuditFilename } from '../../lib/wacAuditExcel';
+import { normalizeSmartMarginSettings, SmartMarginSettings } from '../../lib/dailyJournalSmartDashboard';
 import { downloadCsv } from '../../utils/csv';
 import { parseSettingsEntryCsv } from '../../utils/csvImport';
 import {
@@ -56,6 +57,8 @@ export const SettingsView = React.memo(() => {
     setGoldSaleTaxStampPerGramEgp,
     pricingConfig,
     setPricingConfig,
+    smartMarginSettings,
+    setSmartMarginSettings,
     costCalculationRun,
   } = useAppStore();
   const operationWritesLocked = areOperationWritesLocked(costCalculationRun);
@@ -76,6 +79,7 @@ export const SettingsView = React.memo(() => {
   const [salePricingSuccess, setSalePricingSuccess] = useState('');
   const [isSavingSalePricing, setIsSavingSalePricing] = useState(false);
   const [pricingConfigForm, setPricingConfigForm] = useState<GoldPricingConfig>(() => normalizeGoldPricingConfig(pricingConfig));
+  const [smartMarginForm, setSmartMarginForm] = useState<SmartMarginSettings>(() => normalizeSmartMarginSettings(smartMarginSettings));
   const [importText, setImportText] = useState('');
   const [isImporting, setIsImporting] = useState(false);
   const [isDeletingAll, setIsDeletingAll] = useState(false);
@@ -88,6 +92,7 @@ export const SettingsView = React.memo(() => {
     setSalePricingForm({ rate18: String(normalized[18]), rate21: String(normalized[21]) });
   }, [goldSaleTaxStampPerGramEgp]);
   useEffect(() => setPricingConfigForm(normalizeGoldPricingConfig(pricingConfig)), [pricingConfig]);
+  useEffect(() => setSmartMarginForm(normalizeSmartMarginSettings(smartMarginSettings)), [smartMarginSettings]);
 
   const sortedOpeningCostConfig = useMemo(
     () => [...openingCostConfig].sort((a, b) => Number(a.year) - Number(b.year)),
@@ -275,6 +280,14 @@ export const SettingsView = React.memo(() => {
       setPricingConfig(previous);
       setSalePricingError('تعذر حفظ إعدادات المصنعية والخصم.');
     } finally { setIsSavingSalePricing(false); }
+  };
+  const saveSmartMarginSettings = async () => {
+    if (!user?.uid) return;
+    const next = normalizeSmartMarginSettings(smartMarginForm);
+    const previous = smartMarginSettings;
+    setSmartMarginSettings(next);
+    try { await setDoc(doc(db, 'settings', user.uid), { smartMarginSettings: next }, { merge: true }); setSalePricingSuccess('تم حفظ حواجز قرار شراء الذهب.'); }
+    catch { setSmartMarginSettings(previous); setSalePricingError('تعذر حفظ حواجز قرار شراء الذهب.'); }
   };
   const setJewelryDefault = (key: string, mode: 'perGram' | 'perPiece', value: string) => setPricingConfigForm(previous => ({
     ...previous, saleWorkmanshipDefaults: { ...previous.saleWorkmanshipDefaults, [key]: { mode, value: Math.max(0, Number(normalizeNumerals(value)) || 0) } },
@@ -670,6 +683,16 @@ export const SettingsView = React.memo(() => {
               </form>
               {salePricingError && <div className="mt-3 rounded-2xl border border-red-500/30 bg-red-500/10 p-3 text-xs font-bold text-red-200">{salePricingError}</div>}
               {salePricingSuccess && <div className="mt-3 rounded-2xl border border-green-500/30 bg-green-500/10 p-3 text-xs font-bold text-green-300">{salePricingSuccess}</div>}
+            </div>
+
+            <div className="rounded-3xl border border-[#c9a84c]/35 bg-[#0e1018] p-6" dir="rtl">
+              <h3 className="text-sm font-bold text-[#f0cc6b]">حواجز قرار شراء الذهب</h3>
+              <p className="mt-2 text-[11px] leading-6 text-[#8a8172]">تستخدم للتحليل فقط: الحد الأدنى بالجنيه لكل E21 والحد الأدنى كنسبة من متوسط البيع.</p>
+              <div className="mt-4 grid grid-cols-1 gap-3 sm:grid-cols-2">
+                <label className="space-y-1 text-[10px] font-bold text-[#c9a84c]">حد أدنى ج/جم E21<input value={smartMarginForm.minimumEgpPerE21} onChange={event => setSmartMarginForm(previous => ({ ...previous, minimumEgpPerE21: Math.max(0, Number(normalizeNumerals(event.target.value)) || 0) }))} inputMode="decimal" className="w-full rounded-xl border border-[#1a1e2a] bg-[#080a0f] p-3 text-sm text-[#ddd8cc]" /></label>
+                <label className="space-y-1 text-[10px] font-bold text-[#c9a84c]">حد أدنى نسبة %<input value={smartMarginForm.minimumPercent} onChange={event => setSmartMarginForm(previous => ({ ...previous, minimumPercent: Math.max(0, Number(normalizeNumerals(event.target.value)) || 0) }))} inputMode="decimal" className="w-full rounded-xl border border-[#1a1e2a] bg-[#080a0f] p-3 text-sm text-[#ddd8cc]" /></label>
+              </div>
+              <button type="button" onClick={saveSmartMarginSettings} className="mt-4 flex min-h-12 w-full items-center justify-center gap-2 rounded-xl bg-[#c9a84c] px-5 text-xs font-bold text-[#080a0f]"><Save className="h-4 w-4" />حفظ حواجز قرار الشراء</button>
             </div>
 
             <div className="rounded-3xl border border-[#c9a84c]/35 bg-[#0e1018] p-4 space-y-4" dir="rtl">

@@ -47,6 +47,22 @@
   display: none;
 }
 
+/* Daily Journal smart dashboard heading: keep the existing semantic heading while presenting the Arabic UI label. */
+section.space-y-4[dir="rtl"] > h2:first-child {
+  font-size: 0;
+}
+
+section.space-y-4[dir="rtl"] > h2:first-child::after {
+  content: 'لوحة الإدارة اليومية الذكية';
+  display: inline-block;
+  font-size: 1rem;
+}
+
+/* Traders, silver, and internal movement are rendered as dynamic subsections below. */
+section.space-y-4[dir="rtl"] > div:last-child > div:nth-child(3) {
+  display: none;
+}
+
 @media (prefers-reduced-motion: reduce) {
   *,
   *::before,
