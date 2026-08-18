@@ -1,6 +1,6 @@
 ﻿import React from 'react';
-import { DashboardView } from './DashboardView';
+import { OperationalHomeView } from './OperationalHomeView';
 
-export const MainDashboard = React.memo(({ refreshData }: { refreshData: () => void }) => {
-  return <DashboardView refreshData={refreshData} />;
+export const MainDashboard = React.memo((_props: { refreshData: () => void }) => {
+  return <OperationalHomeView />;
 });

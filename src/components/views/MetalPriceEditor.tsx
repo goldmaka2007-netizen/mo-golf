@@ -50,7 +50,7 @@ const PriceField = ({ id, label, value, onChange, accent }: {
   </label>
 );
 
-export const MetalPriceEditor = React.memo(() => {
+export const MetalPriceEditor = React.memo(({ goldOnly = false }: { goldOnly?: boolean }) => {
   const {
     user,
     goldPrice,
@@ -82,7 +82,7 @@ export const MetalPriceEditor = React.memo(() => {
 
   const handleSave = async () => {
     const nextGoldPrice = parseMetalPrice(goldDraft);
-    const nextSilverPrice = parseMetalPrice(silverDraft);
+    const nextSilverPrice = goldOnly ? silverPrice : parseMetalPrice(silverDraft);
     if (nextGoldPrice === null || nextSilverPrice === null) {
       setMessage({ kind: 'error', text: 'أدخل سعرًا صحيحًا أكبر من صفر.' });
       return;
@@ -112,9 +112,9 @@ export const MetalPriceEditor = React.memo(() => {
   };
 
   return (
-    <section aria-labelledby="metal-price-editor-title" className="rounded-[24px] border border-[#c9a84c]/20 bg-[#0d1017] p-4 shadow-[0_18px_44px_rgba(0,0,0,0.2)]" dir="rtl">
+    <section aria-labelledby="metal-price-editor-title" className={`rounded-[24px] border border-[#c9a84c]/20 bg-[#0d1017] p-4 shadow-[0_18px_44px_rgba(0,0,0,0.2)] ${goldOnly ? '[&>div:nth-of-type(2)>label:nth-child(2)]:hidden' : ''}`} dir="rtl">
       <div className="mb-3">
-        <h2 id="metal-price-editor-title" className="text-sm font-black text-[#f5f1e8]">أسعار المعادن الحالية</h2>
+        <h2 id="metal-price-editor-title" className="text-sm font-black text-[#f5f1e8]">{goldOnly ? 'سعر الذهب الرسمي الحالي' : 'أسعار المعادن الحالية'}</h2>
         <p className="mt-1 text-[10px] font-bold text-[#78736a]">سعر بيع الجرام المستخدم للعرض والعمليات الجديدة</p>
       </div>
       <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
@@ -132,7 +132,7 @@ export const MetalPriceEditor = React.memo(() => {
           className="flex min-h-11 shrink-0 items-center justify-center gap-2 rounded-xl bg-[#c9a84c] px-5 py-2.5 text-xs font-black text-[#080a0f] disabled:cursor-not-allowed disabled:opacity-60"
         >
           <Save className="h-4 w-4" />
-          {saving ? 'جاري الحفظ...' : 'حفظ الأسعار'}
+          {saving ? 'جاري الحفظ...' : goldOnly ? 'حفظ السعر' : 'حفظ الأسعار'}
         </button>
       </div>
     </section>

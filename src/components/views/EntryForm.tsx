@@ -100,8 +100,10 @@ export const EntryForm = React.memo(({ onStepChange }: EntryFormProps) => {
     pricingConfig,
     bullionCharges,
     coinCharges,
-    costCalculationRun
-    ,canonicalAccounts
+    costCalculationRun,
+    canonicalAccounts,
+    entryAssistantMode,
+    setEntryAssistantMode
   } = useAppStore();
   
   const normalize = normalizeNumerals;
@@ -128,6 +130,13 @@ export const EntryForm = React.memo(({ onStepChange }: EntryFormProps) => {
   useEffect(() => {
     onStepChange?.(step);
   }, [onStepChange, step]);
+
+  useEffect(() => {
+    if (!entryAssistantMode) return;
+    setAssistantSession(createGoldAssistantSession(entryAssistantMode, goldPrice, Date.now()));
+    setStep(2);
+    setEntryAssistantMode(null);
+  }, [entryAssistantMode, goldPrice, setEntryAssistantMode]);
 
   const [usageStats, setUsageStats] = useState<Record<string, number>>({});
 

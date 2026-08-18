@@ -84,6 +84,8 @@ interface AppState {
 
   view: 'home' | 'entry' | 'database' | 'reports' | 'settings' | 'chart-of-accounts' | 'journal' | 'guide' | 'inventory' | 'story' | 'profit-analysis' | 'advanced-analytics' | 'more';
   setView: (view: 'home' | 'entry' | 'database' | 'reports' | 'settings' | 'chart-of-accounts' | 'journal' | 'guide' | 'inventory' | 'story' | 'profit-analysis' | 'advanced-analytics' | 'more') => void;
+  entryAssistantMode: 'sale' | 'purchase' | null;
+  setEntryAssistantMode: (mode: 'sale' | 'purchase' | null) => void;
 
   printEntry: Entry | null;
   setPrintEntry: (entry: Entry | null) => void;
@@ -252,6 +254,8 @@ export const useAppStore = create<AppState>()(
 
   view: 'home',
   setView: (view) => set({ view }),
+  entryAssistantMode: null,
+  setEntryAssistantMode: (entryAssistantMode) => set({ entryAssistantMode }),
 
   printEntry: null,
   setPrintEntry: (printEntry) => set({ printEntry }),
