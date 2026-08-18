@@ -1,20 +1,43 @@
-<div align="center">
-<img width="1200" height="475" alt="GHBanner" src="https://github.com/user-attachments/assets/0aa67016-6eaf-458a-adb2-6e31a0763ed6" />
-</div>
+# Makka Application
 
-# Run and deploy your AI Studio app
+Production accounting and inventory application for a gold, silver, and accessories business in Egypt.
 
-This contains everything you need to run your app locally.
+- Production: https://makka-central-accounting.web.app
+- Firebase project: `makka-central-accounting`
+- Repository: `goldmaka2007-netizen/mo-golf`
+- Current technical state: [`docs/CURRENT_STATE.md`](docs/CURRENT_STATE.md)
+- Engineering rules: [`CONSTITUTION.md`](CONSTITUTION.md)
+- Durable decisions: [`docs/DECISIONS.md`](docs/DECISIONS.md)
+- Accounting architecture: [`docs/ACCOUNTING_ARCHITECTURE.md`](docs/ACCOUNTING_ARCHITECTURE.md)
 
-View your app in AI Studio: https://ai.studio/apps/031a525c-7a85-4304-b0ca-6d60bd34adbf
+## Local development
 
-## Run Locally
+Prerequisite: Node.js.
 
-**Prerequisites:**  Node.js
+```bash
+npm install
+npm run dev
+```
 
+Useful checks:
 
-1. Install dependencies:
-   `npm install`
-2. Set the `GEMINI_API_KEY` in [.env.local](.env.local) to your Gemini API key
-3. Run the app:
-   `npm run dev`
+```bash
+npm run typecheck
+npm run check:balance-contract
+npm test
+npm run build
+```
+
+## Production deployment
+
+The repository is configured for Firebase project `makka-central-accounting` and the normal deployment command is:
+
+```bash
+npm run deploy
+```
+
+Deployment is Firebase Hosting only unless a wider Firebase change is explicitly approved.
+
+## Documentation rule
+
+Do not treat historical release notes as the current state. Start with `docs/CURRENT_STATE.md`, then follow the relevant decision/ADR/release links. Significant releases must keep `docs/CURRENT_STATE.md` synchronized with the deployed production baseline.
