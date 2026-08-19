@@ -7,7 +7,7 @@ const BULLION_LIST = APPROVED_BULLION_UNIT_WEIGHTS.map(weight => ({ weight, labe
 const COIN_LIST = APPROVED_COIN_UNIT_WEIGHTS.map(weight => ({ weight, label: `جنيه ذهب ${weight} جم` }));
 const CUSTOMER_MSG_DEFAULT = 'نتعهد بأن هذه الاسعار الحقيقية للسوق المصري و ليس لنا علاقة باي اسعار اخري ولا يوجد خصم من سعر الشراء للسبائك و المشغولات تقديرية حسب سياسة الخصم الخاصة بكل مصنع';
 const FACEBOOK_PAGE_NAME = 'مكة للمصوغات والمجوهرات';
-const FACEBOOK_QR_SRC = '/facebook-page-qr.svg';
+const FACEBOOK_QR_SRC = '/facebook-page-qr.png';
 
 interface StoryData {
   p24Sell: number;
