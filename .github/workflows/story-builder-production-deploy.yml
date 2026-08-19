@@ -1,0 +1,71 @@
+name: Story Builder Production Deploy
+
+on:
+  push:
+    branches:
+      - feat/story-share-facebook-qr
+
+permissions:
+  contents: read
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Checkout release tree
+        uses: actions/checkout@v4
+
+      - name: Verify tree matches merged main
+        run: |
+          git fetch origin main --depth=1
+          test "$(git rev-parse HEAD^{tree})" = "$(git rev-parse origin/main^{tree})"
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Load public Firebase web config
+        run: |
+          curl -fsSL https://makka-central-accounting.web.app/__/firebase/init.json -o /tmp/firebase-init.json
+          node <<'NODE'
+          const fs = require('fs');
+          const cfg = JSON.parse(fs.readFileSync('/tmp/firebase-init.json', 'utf8'));
+          const map = {
+            VITE_FIREBASE_API_KEY: cfg.apiKey,
+            VITE_FIREBASE_AUTH_DOMAIN: cfg.authDomain,
+            VITE_FIREBASE_PROJECT_ID: cfg.projectId,
+            VITE_FIREBASE_STORAGE_BUCKET: cfg.storageBucket,
+            VITE_FIREBASE_MESSAGING_SENDER_ID: cfg.messagingSenderId,
+            VITE_FIREBASE_APP_ID: cfg.appId,
+          };
+          for (const [key, value] of Object.entries(map)) {
+            if (!value) throw new Error(`Missing public Firebase config value: ${key}`);
+            fs.appendFileSync(process.env.GITHUB_ENV, `${key}=${value}\n`);
+          }
+          NODE
+
+      - name: Production build
+        run: npm run build
+
+      - name: Verify Story asset in build
+        run: test -s dist/facebook-page-qr.png
+
+      - name: Require Firebase deployment credential
+        env:
+          FIREBASE_TOKEN: ${{ secrets.FIREBASE_TOKEN }}
+        run: |
+          if [ -z "$FIREBASE_TOKEN" ]; then
+            echo "::error::FIREBASE_TOKEN repository secret is not configured"
+            exit 1
+          fi
+
+      - name: Deploy Firebase Hosting only
+        env:
+          FIREBASE_TOKEN: ${{ secrets.FIREBASE_TOKEN }}
+        run: npx firebase deploy --only hosting --project makka-central-accounting --token "$FIREBASE_TOKEN" --non-interactive
