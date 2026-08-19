@@ -1,5 +1,5 @@
 import React from 'react';
-import { ArrowLeft, Gem, HandCoins, ShoppingBag, Vault } from 'lucide-react';
+import { ArrowLeft, Gem, HandCoins, Image, ShoppingBag, Vault } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
 import { useShallow } from 'zustand/react/shallow';
 import { useAppStore } from '../../store';
@@ -15,12 +15,12 @@ const ActionCard = React.memo(({ label, icon: Icon, onClick, tone }: {
   label: string;
   icon: LucideIcon;
   onClick: () => void;
-  tone: 'blue' | 'green';
+  tone: 'blue' | 'green' | 'gold';
 }) => (
   <button
     type="button"
     onClick={onClick}
-    className={`flex min-h-[112px] items-center justify-between gap-3 rounded-[22px] border px-4 text-right shadow-[0_14px_34px_rgba(0,0,0,0.2)] transition-transform active:scale-[0.985] ${tone === 'blue' ? 'border-blue-400/25 bg-blue-950/55' : 'border-emerald-400/25 bg-emerald-950/45'}`}
+    className={`flex min-h-[112px] items-center justify-between gap-3 rounded-[22px] border px-4 text-right shadow-[0_14px_34px_rgba(0,0,0,0.2)] transition-transform active:scale-[0.985] ${tone === 'blue' ? 'border-blue-400/25 bg-blue-950/55' : tone === 'green' ? 'border-emerald-400/25 bg-emerald-950/45' : 'border-[#c9a84c]/45 bg-[#6b501c]/30'}`}
   >
     <span className="flex h-14 w-14 shrink-0 items-center justify-center rounded-2xl border border-[#d8ae45]/35 bg-[#d8ae45]/10 text-[#f1cf72]">
       <Icon className="h-8 w-8" aria-hidden="true" />
@@ -64,6 +64,8 @@ export const OperationalHomeView = React.memo(() => {
     setView('entry');
   };
 
+  const openStory = () => setView('story');
+
   return (
     <div className="space-y-4 pb-8" dir="rtl">
       <div className="flex items-center gap-3 px-1 pb-1">
@@ -76,6 +78,7 @@ export const OperationalHomeView = React.memo(() => {
       <div className="grid grid-cols-2 gap-3">
         <ActionCard label="مساعد البيع" icon={ShoppingBag} tone="blue" onClick={() => openAssistant('sale')} />
         <ActionCard label="مساعد الشراء" icon={HandCoins} tone="green" onClick={() => openAssistant('purchase')} />
+        <ActionCard label="حالة واتساب" icon={Image} tone="gold" onClick={openStory} />
       </div>
 
       <OperationalCard title="الخزنة" value={money(operational.treasuryCash)} unit="ج.م" icon={Vault} />

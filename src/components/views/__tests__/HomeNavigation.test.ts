@@ -29,3 +29,13 @@ describe('HomeView secondary navigation actions', () => {
     expect(inventoryButton).not.toContain('\u0642\u0627\u0639\u062f\u0629 \u0627\u0644\u0628\u064a\u0627\u0646\u0627\u062a');
   });
 });
+
+describe('Operational Home quick actions', () => {
+  const source = readFileSync(new URL('../OperationalHomeView.tsx', import.meta.url), 'utf8');
+
+  it('opens the existing Story Builder from the WhatsApp Status action', () => {
+    expect(source).toContain('label="حالة واتساب"');
+    expect(source).toContain("const openStory = () => setView('story')");
+    expect(source).toContain('onClick={openStory}');
+  });
+});
