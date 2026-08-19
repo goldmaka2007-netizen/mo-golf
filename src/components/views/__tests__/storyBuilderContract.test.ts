@@ -22,10 +22,15 @@ describe('StoryBuilderView contract', () => {
     expect(storySource).toContain('navigator.canShare');
     expect(storySource).toContain('navigator.share');
     expect(storySource).toContain('saveStoryImage();');
+    expect(storySource).toContain("return `makka-prices-${localDate}.png`");
   });
 
-  it('keeps the approved disclaimer and Facebook QR call-to-action in the generated story', () => {
+  it('keeps the approved Arabic copy and Facebook QR call-to-action intact', () => {
     expect(storySource).toContain(ORIGINAL_DISCLAIMER);
+    expect(storySource).toContain("ctx.fillText('مكة للذهب والمجوهرات'");
+    expect(storySource).toContain("title: 'أسعار مكة للذهب والمجوهرات'");
+    expect(storySource).toContain('الصورة بتتجهز تلقائيًا من الأسعار وإعدادات المصنعية الحالية.');
+    expect(storySource).toContain('تعذر تجهيز صورة الستوري. جرّب إعادة فتح الصفحة.');
     expect(storySource).toContain("const FACEBOOK_QR_SRC = '/facebook-page-qr.png'");
     expect(storySource).toContain("const FACEBOOK_PAGE_NAME = 'مكة للمصوغات والمجوهرات'");
     expect(storySource).not.toContain('@mohamedyasser2400');
