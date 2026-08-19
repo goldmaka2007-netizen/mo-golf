@@ -1,592 +1,485 @@
-import React, { useState, useRef } from 'react';
-import { motion, AnimatePresence } from 'framer-motion';
-import { Share2, Image as ImageIcon, Settings2, Coins, Package, X } from 'lucide-react';
+import React, { useEffect, useMemo, useState } from 'react';
+import { Download, Image as ImageIcon, Share2 } from 'lucide-react';
 import { useAppStore } from '../../store';
-import { cn } from '../../lib/utils';
 import { APPROVED_BULLION_UNIT_WEIGHTS, APPROVED_COIN_UNIT_WEIGHTS, workmanshipForUnitWeight } from '../../lib/goldPricingAssistant';
-
-// --- Configuration & Constants ---
-
-const LEGACY_BULLION_LIST = [
-  { weight: 0.25, label: '0.25 جرام' },
-  { weight: 0.5, label: '0.50 جرام' },
-  { weight: 1, label: '1 جرام' },
-  { weight: 2.5, label: '2.5 جرام' },
-  { weight: 5, label: '5 جرام' },
-  { weight: 10, label: '10 جرام' },
-];
-
-const LEGACY_COIN_LIST = [
-  { weight: 8, label: 'جنيه ذهب 8 جرام' },
-  { weight: 4, label: 'نصف جنيه 4 جرام' },
-  { weight: 2, label: 'ربع جنيه 2 جرام' },
-];
 
 const BULLION_LIST = APPROVED_BULLION_UNIT_WEIGHTS.map(weight => ({ weight, label: `${weight} جم` }));
 const COIN_LIST = APPROVED_COIN_UNIT_WEIGHTS.map(weight => ({ weight, label: `جنيه ذهب ${weight} جم` }));
-
 const CUSTOMER_MSG_DEFAULT = 'نتعهد بأن هذه الاسعار الحقيقية للسوق المصري و ليس لنا علاقة باي اسعار اخري ولا يوجد خصم من سعر الشراء للسبائك و المشغولات تقديرية حسب سياسة الخصم الخاصة بكل مصنع';
-
-// --- Canvas Drawing Logic ---
+const FACEBOOK_PAGE_NAME = 'مكة للمصوغات والمجوهرات';
+const FACEBOOK_QR_SRC = '/facebook-page-qr.svg';
 
 interface StoryData {
-  p24Sell: number; p24Buy: number;
-  p21Sell: number; p21Buy: number;
-  p18Sell: number; p18Buy: number;
-  silverSwissSell: number; silverSwissBuy: number;
+  p24Sell: number;
+  p24Buy: number;
+  p21Sell: number;
+  p21Buy: number;
+  p18Sell: number;
+  p18Buy: number;
+  silverSwissSell: number;
+  silverSwissBuy: number;
   bullionCharges: Record<number, number>;
   coinCharges: Record<number, number>;
   customerMessage: string;
 }
 
-const drawSectionHeader = (ctx: CanvasRenderingContext2D, title: string, y: number, centerX: number) => {
-  ctx.textAlign = 'center';
-  ctx.fillStyle = '#c9a84c'; // Luxury Gold
-  ctx.font = 'bold 44px "Tajawal", sans-serif';
-  ctx.fillText(title, centerX, y);
-  
-  const tw = ctx.measureText(title).width;
-  ctx.strokeStyle = 'rgba(201, 168, 76, 0.4)';
-  ctx.lineWidth = 3;
-  
-  // Decorative lines
-  ctx.beginPath();
-  ctx.moveTo(centerX - 100, y + 15);
-  ctx.lineTo(centerX + 100, y + 15);
-  ctx.stroke();
+const formatPrice = (num: number) => Math.ceil(num / 5) * 5;
 
-  // Fine accent lines
-  ctx.strokeStyle = 'rgba(201, 168, 76, 0.15)';
-  ctx.lineWidth = 1;
+const roundedPanel = (
+  ctx: CanvasRenderingContext2D,
+  x: number,
+  y: number,
+  width: number,
+  height: number,
+  radius = 24,
+  fill = 'rgba(8, 10, 15, 0.84)',
+  stroke = 'rgba(201, 168, 76, 0.45)',
+) => {
   ctx.beginPath();
-  ctx.moveTo(centerX - tw/2 - 150, y - 14); ctx.lineTo(centerX - tw/2 - 50, y - 14);
-  ctx.stroke();
-  ctx.beginPath();
-  ctx.moveTo(centerX + tw/2 + 50, y - 14); ctx.lineTo(centerX + tw/2 + 150, y - 14);
+  ctx.roundRect(x, y, width, height, radius);
+  ctx.fillStyle = fill;
+  ctx.fill();
+  ctx.strokeStyle = stroke;
+  ctx.lineWidth = 2;
   ctx.stroke();
 };
 
-const formatPrice = (num: number) => Math.ceil(num / 5) * 5;
+const loadImage = (src: string) => new Promise<HTMLImageElement>((resolve, reject) => {
+  const image = new Image();
+  image.onload = () => resolve(image);
+  image.onerror = () => reject(new Error(`Unable to load story asset: ${src}`));
+  image.src = src;
+});
 
-const generateStoryCanvas = (canvas: HTMLCanvasElement, ctx: CanvasRenderingContext2D, data: StoryData) => {
-  canvas.dir = 'ltr'; 
+const wrapCenteredText = (
+  ctx: CanvasRenderingContext2D,
+  text: string,
+  centerX: number,
+  startY: number,
+  maxWidth: number,
+  lineHeight: number,
+) => {
+  const words = text.split(' ');
+  const lines: string[] = [];
+  let line = '';
 
+  for (const word of words) {
+    const testLine = line ? `${line} ${word}` : word;
+    if (ctx.measureText(testLine).width > maxWidth && line) {
+      lines.push(line);
+      line = word;
+    } else {
+      line = testLine;
+    }
+  }
+  if (line) lines.push(line);
+
+  lines.forEach((value, index) => ctx.fillText(value, centerX, startY + (index * lineHeight)));
+  return lines.length;
+};
+
+const generateStoryCanvas = (
+  canvas: HTMLCanvasElement,
+  ctx: CanvasRenderingContext2D,
+  data: StoryData,
+  facebookQr: HTMLImageElement,
+) => {
+  canvas.dir = 'ltr';
   const centerX = canvas.width / 2;
-  let currentY = 180;
+  const contentX = 64;
+  const contentWidth = canvas.width - (contentX * 2);
 
-  // 1. Background & Frame - Luxury Dark
-  const bgGrad = ctx.createLinearGradient(0, 0, 0, canvas.height);
-  bgGrad.addColorStop(0, '#0a0c10');
-  bgGrad.addColorStop(1, '#020305');
-  ctx.fillStyle = bgGrad;
+  const bg = ctx.createLinearGradient(0, 0, 0, canvas.height);
+  bg.addColorStop(0, '#0b0d12');
+  bg.addColorStop(0.58, '#05070a');
+  bg.addColorStop(1, '#020304');
+  ctx.fillStyle = bg;
   ctx.fillRect(0, 0, canvas.width, canvas.height);
 
-  // Subtle luxury texture (radial glow)
-  const glow = ctx.createRadialGradient(centerX, 500, 0, centerX, 500, 1200);
-  glow.addColorStop(0, 'rgba(201, 168, 76, 0.05)');
-  glow.addColorStop(1, 'transparent');
-  ctx.fillStyle = glow;
-  ctx.fillRect(0, 0, canvas.width, canvas.height);
+  const topGlow = ctx.createRadialGradient(centerX, 240, 20, centerX, 240, 900);
+  topGlow.addColorStop(0, 'rgba(201, 168, 76, 0.12)');
+  topGlow.addColorStop(1, 'rgba(201, 168, 76, 0)');
+  ctx.fillStyle = topGlow;
+  ctx.fillRect(0, 0, canvas.width, 900);
 
-  // Decorative Border
-  ctx.strokeStyle = 'rgba(201, 168, 76, 0.25)';
-  ctx.lineWidth = 2;
-  ctx.strokeRect(50, 50, canvas.width - 100, canvas.height - 100);
-  
-  // Outer double line
-  ctx.strokeStyle = 'rgba(201, 168, 76, 0.08)';
+  ctx.strokeStyle = 'rgba(201, 168, 76, 0.35)';
+  ctx.lineWidth = 3;
+  ctx.strokeRect(42, 42, canvas.width - 84, canvas.height - 84);
+  ctx.strokeStyle = 'rgba(201, 168, 76, 0.1)';
   ctx.lineWidth = 10;
-  ctx.strokeRect(35, 35, canvas.width - 70, canvas.height - 70);
+  ctx.strokeRect(28, 28, canvas.width - 56, canvas.height - 56);
 
-  // Corner Accents
-  const cornerSize = 120;
-  ctx.strokeStyle = '#c9a84c';
-  ctx.lineWidth = 4;
-  
-  // Top-left
-  ctx.beginPath(); ctx.moveTo(50, 50 + cornerSize); ctx.lineTo(50, 50); ctx.lineTo(50 + cornerSize, 50); ctx.stroke();
-  // Top-right
-  ctx.beginPath(); ctx.moveTo(canvas.width - 50, 50 + cornerSize); ctx.lineTo(canvas.width - 50, 50); ctx.lineTo(canvas.width - 50 - cornerSize, 50); ctx.stroke();
-  // Bottom-left
-  ctx.beginPath(); ctx.moveTo(50, canvas.height - 50 - cornerSize); ctx.lineTo(50, canvas.height - 50); ctx.lineTo(50 + cornerSize, canvas.height - 50); ctx.stroke();
-  // Bottom-right
-  ctx.beginPath(); ctx.moveTo(canvas.width - 50, canvas.height - 50 - cornerSize); ctx.lineTo(canvas.width - 50, canvas.height - 50); ctx.lineTo(canvas.width - 50 - cornerSize, canvas.height - 50); ctx.stroke();
+  const corner = 112;
+  ctx.strokeStyle = '#d5ae4e';
+  ctx.lineWidth = 5;
+  [[42, 42, 1, 1], [canvas.width - 42, 42, -1, 1], [42, canvas.height - 42, 1, -1], [canvas.width - 42, canvas.height - 42, -1, -1]].forEach(([x, y, dx, dy]) => {
+    ctx.beginPath();
+    ctx.moveTo(x, y + (dy * corner));
+    ctx.lineTo(x, y);
+    ctx.lineTo(x + (dx * corner), y);
+    ctx.stroke();
+  });
 
-  // 2. Main Branding
   ctx.textAlign = 'center';
-  ctx.fillStyle = '#c9a84c';
-  ctx.font = 'bold 90px "Tajawal", sans-serif';
-  ctx.shadowColor = 'rgba(0,0,0,0.8)';
-  ctx.shadowBlur = 15;
-  ctx.fillText('مكة للذهب والمجوهرات', centerX, currentY);
+  ctx.fillStyle = '#d8b24f';
+  ctx.font = 'bold 78px "Tajawal", sans-serif';
+  ctx.shadowColor = 'rgba(0, 0, 0, 0.75)';
+  ctx.shadowBlur = 18;
+  ctx.fillText('مكة للذهب والمجوهرات', centerX, 148);
   ctx.shadowBlur = 0;
 
-  currentY += 65;
-  ctx.fillStyle = '#8a8578';
-  ctx.font = '500 32px "Tajawal", sans-serif';
-  ctx.fillText('تــأســس مـنــذ ٢٠٠٣', centerX, currentY);
+  ctx.fillStyle = '#a69d8d';
+  ctx.font = '600 28px "Tajawal", sans-serif';
+  ctx.fillText('تأسس منذ ٢٠٠٣', centerX, 202);
 
-  currentY += 100;
   const dateStr = new Date().toLocaleDateString('ar-EG', { day: 'numeric', month: 'long', year: 'numeric' });
+  roundedPanel(ctx, 245, 228, 590, 62, 31, 'rgba(201, 168, 76, 0.045)', 'rgba(201, 168, 76, 0.35)');
   ctx.fillStyle = '#ddd8cc';
-  ctx.font = '600 40px "Tajawal", sans-serif';
-  ctx.fillText(`أسعار اليوم • ${dateStr}`, centerX, currentY);
-  
-  // Decorative separator
-  currentY += 40;
-  ctx.strokeStyle = 'rgba(201, 168, 76, 0.15)';
-  ctx.lineWidth = 1;
-  ctx.beginPath();
-  ctx.moveTo(centerX - 200, currentY); ctx.lineTo(centerX + 200, currentY);
-  ctx.stroke();
-  
-  currentY += 80;
+  ctx.font = '600 30px "Tajawal", sans-serif';
+  ctx.fillText(`أسعار اليوم  •  ${dateStr}`, centerX, 269);
 
-  // 3. Karat Prices Section
-  drawSectionHeader(ctx, 'الجرام (شراء/بيع)', currentY, centerX);
-  currentY += 75;
+  roundedPanel(ctx, contentX, 316, contentWidth, 400, 28);
+  ctx.fillStyle = '#d8b24f';
+  ctx.font = 'bold 38px "Tajawal", sans-serif';
+  ctx.fillText('الجرام (شراء/بيع)', centerX, 365);
 
-  const tableWidth = 920;
-  const startX = (canvas.width - tableWidth) / 2;
-  
-  // Table Header
-  ctx.fillStyle = 'rgba(201, 168, 76, 0.05)';
-  ctx.fillRect(startX, currentY, tableWidth, 75);
-  ctx.strokeStyle = 'rgba(201, 168, 76, 0.2)';
-  ctx.lineWidth = 2;
-  ctx.strokeRect(startX, currentY, tableWidth, 75);
-  
+  const tableTop = 390;
+  const tableHeight = 300;
+  const colWidth = contentWidth / 3;
+  ctx.strokeStyle = 'rgba(201, 168, 76, 0.22)';
+  ctx.lineWidth = 1.5;
   ctx.beginPath();
-  ctx.moveTo(startX + tableWidth/ 2.7, currentY); ctx.lineTo(startX + tableWidth/2.7, currentY + 75);
-  ctx.moveTo(startX + 2*tableWidth/2.7, currentY); ctx.lineTo(startX + 2*tableWidth/2.7, currentY + 75);
+  ctx.moveTo(contentX + colWidth, tableTop); ctx.lineTo(contentX + colWidth, tableTop + tableHeight);
+  ctx.moveTo(contentX + (colWidth * 2), tableTop); ctx.lineTo(contentX + (colWidth * 2), tableTop + tableHeight);
+  [tableTop + 58, tableTop + 139, tableTop + 220, tableTop + 300].forEach(y => {
+    ctx.moveTo(contentX, y); ctx.lineTo(contentX + contentWidth, y);
+  });
   ctx.stroke();
 
-  ctx.fillStyle = '#8a8578';
-  ctx.font = 'bold 30px "Tajawal", sans-serif';
-  ctx.textAlign = 'center';
-  ctx.fillText('شراء', startX + tableWidth/5.4, currentY + 48);
-  ctx.fillText('بيـــــع', startX + tableWidth/2 + 20, currentY + 48);
-  ctx.fillText('الصنف', startX + 5.5*tableWidth/6, currentY + 48);
-  
-  currentY += 75;
+  ctx.fillStyle = '#a69d8d';
+  ctx.font = 'bold 26px "Tajawal", sans-serif';
+  ctx.fillText('شراء', contentX + (colWidth * 0.5), tableTop + 39);
+  ctx.fillText('بيع', contentX + (colWidth * 1.5), tableTop + 39);
+  ctx.fillText('العيار', contentX + (colWidth * 2.5), tableTop + 39);
 
   const karats = [
     { label: 'عيار ٢٤', sell: data.p24Sell, buy: data.p24Buy },
     { label: 'عيار ٢١', sell: data.p21Sell, buy: data.p21Buy },
     { label: 'عيار ١٨', sell: data.p18Sell, buy: data.p18Buy },
   ];
-
-  karats.forEach((k, i) => {
-    const rowHeight = 90;
-    ctx.fillStyle = i % 2 === 0 ? 'transparent' : 'rgba(201, 168, 76, 0.03)';
-    ctx.fillRect(startX, currentY, tableWidth, rowHeight);
-    
-    ctx.strokeStyle = 'rgba(201, 168, 76, 0.15)';
-    ctx.strokeRect(startX, currentY, tableWidth, rowHeight);
-
-    ctx.beginPath();
-    ctx.moveTo(startX + tableWidth/2.7, currentY); ctx.lineTo(startX + tableWidth/2.7, currentY + rowHeight);
-    ctx.moveTo(startX + 2*tableWidth/2.7, currentY); ctx.lineTo(startX + 2*tableWidth/2.7, currentY + rowHeight);
-    ctx.stroke();
-
-    ctx.textAlign = 'center';
-    
-    ctx.fillStyle = '#ddd8cc';
-    ctx.font = 'bold 42px "JetBrains Mono", sans-serif';
-    ctx.fillText(k.buy.toLocaleString(), startX + tableWidth/5.4, currentY + 58);
-    
-    ctx.fillStyle = '#c9a84c';
-    ctx.font = 'bold 48px "JetBrains Mono", sans-serif';
-    ctx.fillText(k.sell.toLocaleString(), startX + tableWidth/2 + 20, currentY + 60);
-
+  karats.forEach((karat, index) => {
+    const y = tableTop + 111 + (index * 81);
+    ctx.font = 'bold 38px "JetBrains Mono", monospace';
+    ctx.fillStyle = '#f0eee9';
+    ctx.fillText(karat.buy.toLocaleString(), contentX + (colWidth * 0.5), y);
+    ctx.fillStyle = '#d8b24f';
+    ctx.font = 'bold 44px "JetBrains Mono", monospace';
+    ctx.fillText(karat.sell.toLocaleString(), contentX + (colWidth * 1.5), y + 1);
     ctx.fillStyle = '#ffffff';
-    ctx.font = 'bold 36px "Tajawal", sans-serif';
-    ctx.fillText(k.label, startX + 5.5*tableWidth/6, currentY + 56);
-
-    currentY += rowHeight;
+    ctx.font = 'bold 31px "Tajawal", sans-serif';
+    ctx.fillText(karat.label, contentX + (colWidth * 2.5), y - 1);
   });
 
-  currentY += 60;
+  roundedPanel(ctx, contentX, 738, contentWidth, 570, 28);
+  ctx.fillStyle = '#d8b24f';
+  ctx.font = 'bold 38px "Tajawal", sans-serif';
+  ctx.fillText('السبائك والجنيهات', centerX, 790);
 
-  // 4. Bullion Section
-  drawSectionHeader(ctx, 'السبائك والجنيهات', currentY, centerX);
-  currentY += 70;
-  
-  const bRowHeight = 70;
-  const bTableWidth = 920;
-  const bStartX = (canvas.width - bTableWidth) / 2;
-  const halfTable = bTableWidth / 2;
-
-  // Combine items to a compact list for 2-column display
   const allItems = [
-    ...BULLION_LIST.map(b => ({ label: `سبيكة ${b.label}`, weight: b.weight, type: 'bullion' })),
-    ...COIN_LIST.map(c => ({ label: c.label, weight: c.weight, type: 'coin' }))
+    ...BULLION_LIST.map(item => ({ label: `سبيكة ${item.label}`, weight: item.weight, type: 'bullion' as const })),
+    ...COIN_LIST.map(item => ({ label: item.label, weight: item.weight, type: 'coin' as const })),
   ];
+  const halfWidth = contentWidth / 2;
+  const listTop = 818;
+  const rowHeight = 76;
 
-  for(let row = 0; row < Math.ceil(allItems.length/2); row++) {
-    ctx.fillStyle = row % 2 === 0 ? 'transparent' : 'rgba(201, 168, 76, 0.03)';
-    ctx.fillRect(bStartX, currentY, bTableWidth, bRowHeight);
-    
-    ctx.strokeStyle = 'rgba(201, 168, 76, 0.1)';
-    ctx.strokeRect(bStartX, currentY, bTableWidth, bRowHeight);
-
-    ctx.beginPath();
-    ctx.moveTo(bStartX + halfTable, currentY); ctx.lineTo(bStartX + halfTable, currentY + bRowHeight);
-    ctx.stroke();
-
-    for(let col = 0; col < 2; col++) {
-      const idx = row * 2 + col;
-      if (idx < allItems.length) {
-        const item = allItems[idx];
-        const charges = item.type === 'bullion' ? data.bullionCharges : data.coinCharges;
-        const basePrice = item.type === 'bullion' ? data.p24Sell : data.p21Sell;
-        const charge = charges[item.weight] || 0;
-        const finalPrice = formatPrice(item.weight * (basePrice + charge));
-
-        const xPos = bStartX + (col === 0 ? halfTable : 0);
-
-        ctx.textAlign = 'right';
-        ctx.fillStyle = '#8a8578';
-        ctx.font = 'bold 26px "Tajawal", sans-serif';
-        ctx.fillText(item.label, xPos + halfTable - 20, currentY + 44);
-
-        ctx.textAlign = 'left';
-        ctx.fillStyle = '#c9a84c';
-        ctx.font = 'bold 32px "JetBrains Mono", sans-serif';
-        ctx.fillText(finalPrice.toLocaleString(), xPos + 20, currentY + 46);
-      }
-    }
-    currentY += bRowHeight;
+  ctx.strokeStyle = 'rgba(201, 168, 76, 0.18)';
+  ctx.lineWidth = 1.25;
+  ctx.beginPath();
+  ctx.moveTo(centerX, listTop); ctx.lineTo(centerX, listTop + (rowHeight * 6));
+  for (let row = 0; row <= 6; row += 1) {
+    ctx.moveTo(contentX, listTop + (rowHeight * row));
+    ctx.lineTo(contentX + contentWidth, listTop + (rowHeight * row));
   }
-  
-  currentY += 60;
+  ctx.stroke();
 
-  // 5. Silver
-  ctx.fillStyle = 'rgba(138, 133, 120, 0.05)';
-  ctx.fillRect(bStartX, currentY, bTableWidth, 80);
-  ctx.strokeStyle = 'rgba(106, 138, 158, 0.3)';
-  ctx.strokeRect(bStartX, currentY, bTableWidth, 80);
-  
+  allItems.forEach((item, index) => {
+    const row = Math.floor(index / 2);
+    const isRight = index % 2 === 0;
+    const left = isRight ? centerX : contentX;
+    const right = left + halfWidth;
+    const charges = item.type === 'bullion' ? data.bullionCharges : data.coinCharges;
+    const basePrice = item.type === 'bullion' ? data.p24Sell : data.p21Sell;
+    const charge = charges[item.weight] || 0;
+    const finalPrice = formatPrice(item.weight * (basePrice + charge));
+    const y = listTop + 49 + (row * rowHeight);
+
+    ctx.textAlign = 'right';
+    ctx.fillStyle = '#ddd8cc';
+    ctx.font = '600 25px "Tajawal", sans-serif';
+    ctx.fillText(item.label, right - 24, y);
+    ctx.textAlign = 'left';
+    ctx.fillStyle = '#d8b24f';
+    ctx.font = 'bold 31px "JetBrains Mono", monospace';
+    ctx.fillText(finalPrice.toLocaleString(), left + 24, y + 1);
+  });
+
   ctx.textAlign = 'center';
-  ctx.fillStyle = '#6a8a9e';
-  ctx.font = 'bold 30px "Tajawal", sans-serif';
-  ctx.fillText('الفضة (ش/ب): ', bStartX + bTableWidth - 150, currentY + 50);
-  
+  roundedPanel(ctx, contentX, 1328, contentWidth, 112, 24, 'rgba(9, 12, 16, 0.92)', 'rgba(106, 138, 158, 0.45)');
+  ctx.fillStyle = '#8ea8b8';
+  ctx.font = 'bold 29px "Tajawal", sans-serif';
+  ctx.fillText('الفضة (شراء/بيع)', centerX + 210, 1373);
+  ctx.fillStyle = '#f0eee9';
+  ctx.font = 'bold 38px "JetBrains Mono", monospace';
+  ctx.fillText(`${data.silverSwissBuy.toLocaleString()} / ${data.silverSwissSell.toLocaleString()}`, centerX - 170, 1377);
+
+  roundedPanel(ctx, contentX, 1460, contentWidth, 238, 26, 'rgba(201, 168, 76, 0.035)', 'rgba(201, 168, 76, 0.42)');
+  ctx.fillStyle = '#d8b24f';
+  ctx.font = 'bold 31px "Tajawal", sans-serif';
+  ctx.fillText('نلتزم بالشفافية والثقة', centerX, 1504);
   ctx.fillStyle = '#ddd8cc';
-  ctx.font = 'bold 36px "JetBrains Mono", sans-serif';
-  ctx.fillText(`${data.silverSwissBuy.toLocaleString()} / ${data.silverSwissSell.toLocaleString()}`, bStartX + 250, currentY + 50);
+  ctx.font = '500 23px "Tajawal", sans-serif';
+  const disclaimerLines = wrapCenteredText(ctx, data.customerMessage, centerX, 1546, 800, 34);
+  const noteY = Math.min(1664, 1546 + (disclaimerLines * 34) + 14);
+  ctx.fillStyle = '#b99847';
+  ctx.font = 'bold 21px "Tajawal", sans-serif';
+  ctx.fillText('الأسعار استرشادية وتتحدد بدقة عند التنفيذ الفعلي', centerX, noteY);
 
-  currentY += 120;
+  roundedPanel(ctx, contentX, 1718, contentWidth, 154, 26, 'rgba(7, 9, 13, 0.94)', 'rgba(201, 168, 76, 0.55)');
 
-  // 6. Message Box
-  if (data.customerMessage) {
-    ctx.textAlign = 'center';
-    ctx.fillStyle = '#8a8578';
-    ctx.font = 'italic 500 28px "Tajawal", sans-serif';
-    
-    const words = data.customerMessage.split(' ');
-    let line = '';
-    let yPos = currentY;
-    const maxWidth = 800;
-    const lineHeight = 42;
-    
-    for (let n = 0; n < words.length; n++) {
-      const testLine = line + words[n] + ' ';
-      const metrics = ctx.measureText(testLine);
-      if (metrics.width > maxWidth && n > 0) {
-        ctx.fillText(line, centerX, yPos);
-        line = words[n] + ' ';
-        yPos += lineHeight;
-      } else {
-        line = testLine;
-      }
-    }
-    ctx.fillText(line, centerX, yPos);
-    currentY = yPos + 60;
-  }
+  ctx.beginPath();
+  ctx.arc(contentX + 78, 1795, 48, 0, Math.PI * 2);
+  const fbGlow = ctx.createLinearGradient(contentX + 30, 1747, contentX + 126, 1843);
+  fbGlow.addColorStop(0, '#f0cc6b');
+  fbGlow.addColorStop(1, '#a77b24');
+  ctx.fillStyle = fbGlow;
+  ctx.fill();
+  ctx.fillStyle = '#0b0d12';
+  ctx.font = 'bold 66px Arial, sans-serif';
+  ctx.fillText('f', contentX + 78, 1819);
 
-  // 7. Footer
+  ctx.textAlign = 'right';
+  ctx.fillStyle = '#d8b24f';
+  ctx.font = 'bold 29px "Tajawal", sans-serif';
+  ctx.fillText('تابع صفحتنا على فيسبوك', 620, 1764);
+  ctx.fillStyle = '#ddd8cc';
+  ctx.font = '500 21px "Tajawal", sans-serif';
+  ctx.fillText('اعمل لايك وتابعنا ليصلك كل جديد', 620, 1801);
+  ctx.fillStyle = '#d8b24f';
+  ctx.font = 'bold 24px "Tajawal", sans-serif';
+  ctx.fillText(FACEBOOK_PAGE_NAME, 620, 1840);
+
+  const qrSize = 118;
+  const qrX = 686;
+  const qrY = 1736;
+  ctx.fillStyle = '#ffffff';
+  ctx.beginPath();
+  ctx.roundRect(qrX - 8, qrY - 8, qrSize + 16, qrSize + 16, 14);
+  ctx.fill();
+  ctx.drawImage(facebookQr, qrX, qrY, qrSize, qrSize);
   ctx.textAlign = 'center';
-  ctx.fillStyle = '#c9a84c';
-  ctx.font = 'bold 34px "Tajawal", sans-serif';
-  ctx.fillText('مكة للذهب والمجوهرات', centerX, canvas.height - 180);
-  
-  ctx.fillStyle = '#5a5548';
+  ctx.fillStyle = '#d8b24f';
   ctx.font = 'bold 22px "Tajawal", sans-serif';
-  ctx.fillText('الأسعار استرشادية وتتحدد بدقة عند التنفيذ الفعلي', centerX, canvas.height - 135);
+  ctx.fillText('امسح الكود', 872, 1802);
 };
 
-// --- Main Component ---
+const renderStoryBlob = async (data: StoryData) => {
+  if ('fonts' in document) await document.fonts.ready;
+  const facebookQr = await loadImage(FACEBOOK_QR_SRC);
+  const canvas = document.createElement('canvas');
+  canvas.width = 1080;
+  canvas.height = 1920;
+  const ctx = canvas.getContext('2d');
+  if (!ctx) throw new Error('Canvas is unavailable');
+  generateStoryCanvas(canvas, ctx, data, facebookQr);
+  const blob = await new Promise<Blob>((resolve, reject) => {
+    canvas.toBlob(result => result ? resolve(result) : reject(new Error('PNG generation failed')), 'image/png', 1);
+  });
+  return blob;
+};
+
+const storyFilename = () => {
+  const date = new Date().toISOString().slice(0, 10);
+  return `makka-prices-${date}.png`;
+};
 
 export const StoryBuilderView = () => {
   const store = useAppStore();
-  const [isProcessing, setIsProcessing] = useState(false);
-  const [capturedImage, setCapturedImage] = useState<string | null>(null);
-  const [customerMessage, setCustomerMessage] = useState(CUSTOMER_MSG_DEFAULT);
-  const storyRef = useRef<HTMLDivElement>(null);
+  const [storyBlob, setStoryBlob] = useState<Blob | null>(null);
+  const [previewUrl, setPreviewUrl] = useState<string | null>(null);
+  const [isProcessing, setIsProcessing] = useState(true);
+  const [error, setError] = useState('');
 
-  // Derived Prices
   const p21Sell = store.goldPrice || 3500;
   const p24Sell = Math.round((p21Sell / 21) * 24);
   const p18Sell = Math.round((p21Sell / 21) * 18);
-
   const p21Buy = store.goldBuyPrice || (p21Sell - 20);
   const p24Buy = Math.round((p21Buy / 21) * 24);
   const p18Buy = Math.round((p21Buy / 21) * 18);
-
   const silverSwissSell = store.silverPrice || 50;
   const silverSwissBuy = store.silverBuyPrice || 48;
 
-  // Firestore pricingConfig is authoritative; legacy charges are read-only per-gram fallback.
-  const currentBullionCharges = Object.fromEntries(BULLION_LIST.map(item => [item.weight, workmanshipForUnitWeight(store.pricingConfig.bullionWorkmanshipByWeight[String(item.weight)], item.weight)?.perGram ?? store.bullionCharges?.[item.weight] ?? 0]));
-  const currentCoinCharges = Object.fromEntries(COIN_LIST.map(item => [item.weight, workmanshipForUnitWeight(store.pricingConfig.coinWorkmanshipByWeight[String(item.weight)], item.weight)?.perGram ?? store.coinCharges?.[item.weight] ?? 0]));
+  const currentBullionCharges = useMemo(() => Object.fromEntries(
+    BULLION_LIST.map(item => [
+      item.weight,
+      workmanshipForUnitWeight(store.pricingConfig.bullionWorkmanshipByWeight[String(item.weight)], item.weight)?.perGram
+        ?? store.bullionCharges?.[item.weight]
+        ?? 0,
+    ]),
+  ), [store.pricingConfig.bullionWorkmanshipByWeight, store.bullionCharges]);
 
-  const handleManualCapture = async () => {
+  const currentCoinCharges = useMemo(() => Object.fromEntries(
+    COIN_LIST.map(item => [
+      item.weight,
+      workmanshipForUnitWeight(store.pricingConfig.coinWorkmanshipByWeight[String(item.weight)], item.weight)?.perGram
+        ?? store.coinCharges?.[item.weight]
+        ?? 0,
+    ]),
+  ), [store.pricingConfig.coinWorkmanshipByWeight, store.coinCharges]);
+
+  const storyData = useMemo<StoryData>(() => ({
+    p24Sell,
+    p24Buy,
+    p21Sell,
+    p21Buy,
+    p18Sell,
+    p18Buy,
+    silverSwissSell,
+    silverSwissBuy,
+    bullionCharges: currentBullionCharges,
+    coinCharges: currentCoinCharges,
+    customerMessage: CUSTOMER_MSG_DEFAULT,
+  }), [
+    p24Sell,
+    p24Buy,
+    p21Sell,
+    p21Buy,
+    p18Sell,
+    p18Buy,
+    silverSwissSell,
+    silverSwissBuy,
+    currentBullionCharges,
+    currentCoinCharges,
+  ]);
+
+  useEffect(() => {
+    let cancelled = false;
     setIsProcessing(true);
-    setCapturedImage(null);
+    setError('');
+    setStoryBlob(null);
 
-    // Create virtual canvas
-    const canvas = document.createElement('canvas');
-    canvas.width = 1080;
-    canvas.height = 1920;
-    const ctx = canvas.getContext('2d');
-    
-    if (ctx) {
-      try {
-        const storyData: StoryData = {
-          p24Sell, p24Buy, p21Sell, p21Buy, p18Sell, p18Buy,
-          silverSwissSell, silverSwissBuy,
-          bullionCharges: currentBullionCharges,
-          coinCharges: currentCoinCharges,
-          customerMessage
-        };
-        
-        generateStoryCanvas(canvas, ctx, storyData);
-        setCapturedImage(canvas.toDataURL('image/png', 1.0));
-      } catch (err) {
+    renderStoryBlob(storyData)
+      .then(blob => {
+        if (!cancelled) setStoryBlob(blob);
+      })
+      .catch(err => {
         console.error(err);
-        alert('حدث خطأ فني أثناء إنشاء الصورة، يرجى المحاولة مرة أخرى.');
-      }
+        if (!cancelled) setError('تعذر تجهيز صورة الستوري. جرّب إعادة فتح الصفحة.');
+      })
+      .finally(() => {
+        if (!cancelled) setIsProcessing(false);
+      });
+
+    return () => { cancelled = true; };
+  }, [storyData]);
+
+  useEffect(() => {
+    if (!storyBlob) {
+      setPreviewUrl(null);
+      return undefined;
     }
-    setIsProcessing(false);
+    const url = URL.createObjectURL(storyBlob);
+    setPreviewUrl(url);
+    return () => URL.revokeObjectURL(url);
+  }, [storyBlob]);
+
+  const saveStoryImage = () => {
+    if (!storyBlob) return;
+    const url = URL.createObjectURL(storyBlob);
+    const anchor = document.createElement('a');
+    anchor.href = url;
+    anchor.download = storyFilename();
+    document.body.appendChild(anchor);
+    anchor.click();
+    anchor.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 1000);
   };
 
-  // --- Quick Components for Clean Render ---
-  const PriceDisplayCard = ({ title, sell, buy, ringColor }: { title: string, sell: number, buy: number, ringColor: string }) => (
-    <div className={`bg-[#1a1e2a] rounded-xl p-3 text-center border ${ringColor}`}>
-      <div className="text-[10px] text-[#8a8578] font-bold mb-1">{title}</div>
-      <div className="text-xs font-bold text-[#6a9e6a] mb-1">ش: {buy.toLocaleString()}</div>
-      <div className="text-sm font-bold text-[#c9a84c] font-mono">{sell.toLocaleString()}</div>
-    </div>
-  );
+  const handleShare = async () => {
+    if (!storyBlob || isProcessing) return;
+    const file = new File([storyBlob], storyFilename(), { type: 'image/png' });
+    const canNativeShare = typeof navigator.share === 'function'
+      && (typeof navigator.canShare !== 'function' || navigator.canShare({ files: [file] }));
+
+    if (!canNativeShare) {
+      saveStoryImage();
+      return;
+    }
+
+    try {
+      await navigator.share({
+        files: [file],
+        title: 'أسعار مكة للذهب والمجوهرات',
+      });
+    } catch (shareError) {
+      if (shareError instanceof DOMException && shareError.name === 'AbortError') return;
+      console.error(shareError);
+      saveStoryImage();
+    }
+  };
 
   return (
-    <div className="space-y-6 pb-20">
-      {/* Captured Image Modal */}
-      <AnimatePresence>
-        {capturedImage && (
-          <motion.div 
-            initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
-            className="fixed inset-0 z-[100] bg-black/95 backdrop-blur-xl flex items-center justify-center p-4 flex-col gap-4 overflow-y-auto"
-          >
-            <div className="w-full max-w-sm text-center space-y-4 font-sans" style={{ direction: 'rtl' }}>
-              <div className="p-4 bg-[#1a1e2a] rounded-3xl border border-[#c9a84c33] shadow-2xl relative">
-                <button onClick={() => setCapturedImage(null)} className="absolute top-4 right-4 p-2 rounded-full bg-[#c9a84c11] text-[#c9a84c] hover:bg-[#c9a84c22] transition-colors">
-                  <X className="w-4 h-4" />
-                </button>
-                <div className="w-14 h-14 bg-[#c9a84c11] rounded-2xl flex items-center justify-center mx-auto mb-4 border border-[#c9a84c22]">
-                  <ImageIcon className="w-7 h-7 text-[#c9a84c]" />
-                </div>
-                <h3 className="text-xl font-bold text-[#c9a84c] mb-1">جاهز للمشاركة</h3>
-                <p className="text-xs text-[#8a8578] mb-6 leading-relaxed">
-                  <span className="text-[#ddd8cc] font-bold">لمستخدمي الايفون:</span> اضغط مطولاً على الصورة ثم اختر <span className="text-[#c9a84c]">"حفظ في الصور"</span>.
-                </p>
-                <img src={capturedImage} alt="Story Result" className="rounded-2xl shadow-2xl border border-[#ffffff11] w-full object-contain mb-6 pointer-events-auto ring-1 ring-white/10" />
-                <button onClick={() => setCapturedImage(null)} className="w-full py-4 bg-[#c9a84c] text-[#080a0f] rounded-2xl font-bold shadow-[0_4px_20px_rgba(201,168,76,0.3)] flex items-center justify-center gap-2 hover:bg-[#e5d08f] transition-all">
-                  إغلاق
-                </button>
-              </div>
-            </div>
-          </motion.div>
-        )}
-      </AnimatePresence>
-
-      <div className="flex flex-col xl:flex-row gap-8">
-        {/* Left Side: Settings Panel */}
-        <div className="flex-1 space-y-6">
-          <div className="bg-[#0e1018] rounded-3xl p-6 border border-[#1a1e2a] shadow-2xl">
-            <h3 className="text-xl font-bold text-[#ddd8cc] mb-6 flex items-center gap-3">
-              <div className="p-2 bg-[#c9a84c11] rounded-xl">
-                <Settings2 className="w-6 h-6 text-[#c9a84c]" />
-              </div>
-              تخصيص البيانات
-            </h3>
-            
-            <div className="grid grid-cols-3 gap-3 mb-8">
-              <PriceDisplayCard title="ع 18" sell={p18Sell} buy={p18Buy} ringColor="border-[#1a1e2a]" />
-              <PriceDisplayCard title="ع 21" sell={p21Sell} buy={p21Buy} ringColor="border-[#c9a84c22]" />
-              <PriceDisplayCard title="ع 24" sell={p24Sell} buy={p24Buy} ringColor="border-[#6a8a9e22]" />
-            </div>
-
-            <div className="space-y-6">
-              <div>
-                <h4 className="text-sm font-bold text-[#8a8578] mb-4 flex items-center gap-2 uppercase tracking-wider">
-                  <Package className="w-4 h-4 text-[#c9a84c]" /> مصنعية الســــبائك (جم / ع 24)
-                </h4>
-                <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
-                  {BULLION_LIST.map((b, idx) => (
-                    <div key={idx} className="bg-[#1a1e2a]/30 border border-[#1a1e2a] rounded-xl p-2 flex items-center gap-2">
-                       <span className="text-[10px] font-bold text-[#5a5548] min-w-[35px] text-center border-l border-[#1a1e2a] pl-2">{b.weight}ج</span>
-                       <input
-                        type="number"
-                        value={currentBullionCharges[b.weight] || ''}
-                        readOnly
-                        className="w-full bg-transparent text-xs text-[#ddd8cc] font-mono outline-none placeholder:text-[#3a3530]"
-                        placeholder="0"
-                      />
-                    </div>
-                  ))}
-                </div>
-              </div>
-
-              <div>
-                <h4 className="text-sm font-bold text-[#8a8578] mb-4 flex items-center gap-2 uppercase tracking-wider">
-                  <Coins className="w-4 h-4 text-[#c9a84c]" /> الجنيــــهات (جم / ع 21)
-                </h4>
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                  {COIN_LIST.map((c, idx) => (
-                    <div key={idx} className="bg-[#1a1e2a]/30 border border-[#1a1e2a] rounded-xl p-2 flex items-center gap-2">
-                       <span className="text-[10px] font-bold text-[#5a5548] min-w-[100px] text-right border-l border-[#1a1e2a] pl-2">{c.label}</span>
-                       <input
-                        type="number"
-                        value={currentCoinCharges[c.weight] || ''}
-                        readOnly
-                        className="w-full bg-transparent text-xs text-[#ddd8cc] font-mono outline-none placeholder:text-[#3a3530]"
-                        placeholder="0"
-                      />
-                    </div>
-                  ))}
-                </div>
-              </div>
-
-              <div>
-                <h4 className="text-sm font-bold text-[#8a8578] mb-4 flex items-center gap-2 uppercase tracking-wider">
-                  <Share2 className="w-4 h-4 text-[#c9a84c]" /> رسالة العميل
-                </h4>
-                <textarea
-                  value={customerMessage}
-                  onChange={(e) => setCustomerMessage(e.target.value)}
-                  className="w-full bg-[#1a1e2a]/30 border border-[#1a1e2a] rounded-2xl p-4 text-xs text-[#ddd8cc] outline-none focus:border-[#c9a84c33] h-28 resize-none transition-all leading-relaxed"
-                  placeholder="اكتب هنا ملاحظات إضافية تظهر أسفل الصورة..."
-                />
-              </div>
-            </div>
+    <div className="mx-auto flex w-full max-w-3xl flex-col items-center gap-5 pb-24" dir="rtl">
+      <div className="w-full rounded-3xl border border-[#1a1e2a] bg-[#0e1018] p-4 shadow-2xl sm:p-6">
+        <div className="mb-4 flex items-center justify-between gap-3">
+          <div>
+            <h3 className="text-lg font-bold text-[#ddd8cc]">حالة واتساب</h3>
+            <p className="mt-1 text-xs text-[#8a8578]">الصورة بتتجهز تلقائيًا من الأسعار وإعدادات المصنعية الحالية.</p>
+          </div>
+          <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl border border-[#c9a84c22] bg-[#c9a84c0d]">
+            <ImageIcon className="h-5 w-5 text-[#c9a84c]" />
           </div>
         </div>
 
-        {/* Right Side: Preview & Export Panel */}
-        <div className="flex-1 flex flex-col items-center gap-6">
-          <div className="bg-[#0a0c10] p-2 rounded-[32px] border border-[#1a1e2a] shadow-2xl w-full max-w-[380px] ring-1 ring-white/5">
-            <div ref={storyRef} className="relative w-full aspect-[9/16] bg-[#0a0c10] rounded-[26px] overflow-hidden flex flex-col p-6 shadow-inner" style={{ direction: 'rtl', fontFamily: '"Tajawal", sans-serif' }}>
-              
-              {/* Background Glow */}
-              <div className="absolute inset-0 bg-radial from-[#c9a84c11] to-transparent opacity-50" />
-              
-              {/* Luxury Frame Corner Accents */}
-              <div className="absolute top-4 left-4 w-12 h-12 border-t-2 border-l-2 border-[#c9a84c] rounded-tl-lg pointer-events-none" />
-              <div className="absolute top-4 right-4 w-12 h-12 border-t-2 border-r-2 border-[#c9a84c] rounded-tr-lg pointer-events-none" />
-              <div className="absolute bottom-4 left-4 w-12 h-12 border-b-2 border-l-2 border-[#c9a84c] rounded-bl-lg pointer-events-none" />
-              <div className="absolute bottom-4 right-4 w-12 h-12 border-b-2 border-r-2 border-[#c9a84c] rounded-br-lg pointer-events-none" />
-
-              <div className="text-center z-10 mb-8 mt-4">
-                <h2 className="text-3xl font-extrabold text-[#c9a84c] mb-1 tracking-tight drop-shadow-[0_2px_10px_rgba(201,168,76,0.3)]">مكة للذهب والمجوهرات</h2>
-                <div className="text-[11px] text-[#8a8578] font-bold tracking-widest mb-4">تأسس منذ ٢٠٠٣</div>
-                <div className="inline-flex items-center gap-2 px-5 py-2 rounded-full bg-[#c9a84c]/5 border border-[#c9a84c15] text-[#ddd8cc] text-[11px] font-bold shadow-lg shadow-black/40">
-                   أسعار اليوم • {new Date().toLocaleDateString('ar-EG', { day: 'numeric', month: 'long', year: 'numeric' })}
-                </div>
-              </div>
-
-              <div className="space-y-4 z-10 flex-1 overflow-hidden">
-                <div className="bg-black/40 backdrop-blur-md rounded-2xl border border-[#c9a84c11] p-4 shadow-xl">
-                  <div className="grid grid-cols-3 text-[10px] text-[#8a8578] font-bold mb-3 text-center pb-2 border-b border-[#c9a84c11]">
-                    <span>شراء</span><span>بيــــع</span><span>الصنف</span>
-                  </div>
-                  {[
-                    { label: 'عيار ٢٤', sell: p24Sell, buy: p24Buy },
-                    { label: 'عيار ٢١', sell: p21Sell, buy: p21Buy },
-                    { label: 'عيار ١٨', sell: p18Sell, buy: p18Buy },
-                  ].map((k, idx) => (
-                    <div key={idx} className="grid grid-cols-3 text-center py-2.5 border-b border-white/5 last:border-0 items-center">
-                      <span className="text-[#ddd8cc] font-bold font-mono text-sm">{k.buy.toLocaleString()}</span>
-                      <span className="font-bold font-mono text-lg text-[#c9a84c]">{k.sell.toLocaleString()}</span>
-                      <span className="text-[#ffffff] text-[13px] font-bold">{k.label}</span>
-                    </div>
-                  ))}
-                </div>
-
-                <div className="bg-black/40 backdrop-blur-md rounded-2xl border border-[#c9a84c11] p-4 shadow-xl">
-                  <h3 className="text-center text-[10px] font-bold text-[#c9a84c] mb-3 flex items-center justify-center gap-2 tracking-widest uppercase pb-1 border-b border-[#c9a84c11]">
-                    السبائك والجنيهات
-                  </h3>
-                  <div className="grid grid-cols-1 gap-2 text-right overflow-hidden max-h-[320px]">
-                    {[
-                      ...BULLION_LIST.map(b => ({ label: `سبيكة ${b.label}`, weight: b.weight, type: 'bullion' })),
-                      ...COIN_LIST.map(c => ({ label: c.label, weight: c.weight, type: 'coin' }))
-                    ].slice(0, 9).map((item, i) => {
-                      const charges = item.type === 'bullion' ? currentBullionCharges : currentCoinCharges;
-                      const basePrice = item.type === 'bullion' ? p24Sell : p21Sell;
-                      const charge = charges[item.weight] || 0;
-                      const finalPrice = formatPrice(item.weight * (basePrice + charge));
-                      return (
-                        <div key={i} className="flex justify-between items-center text-[11px] border-b border-white/5 pb-1">
-                          <span className="text-[#8a8578] font-bold">{item.label}</span>
-                          <span className="font-mono text-[#c9a84c] font-bold">{finalPrice.toLocaleString()} ج</span>
-                        </div>
-                      );
-                    })}
-                  </div>
-                </div>
-
-                <div className="bg-black/40 backdrop-blur-md rounded-2xl border border-[#6a8a9e22] p-4 shadow-xl flex justify-between items-center ring-1 ring-[#6a8a9e11]">
-                   <span className="text-xs font-bold text-[#6a8a9e]">سعر جرام الفضة:</span>
-                   <span className="text-[13px] font-mono font-bold text-[#ddd8cc]">{silverSwissBuy.toLocaleString()} / {silverSwissSell.toLocaleString()}</span>
-                </div>
-
-                {customerMessage && (
-                  <div className="mt-2 p-3 bg-[#c9a84c]/5 border border-[#c9a84c11] rounded-xl text-center">
-                    <p className="text-[10px] text-[#8a8578] font-medium leading-relaxed italic">{customerMessage}</p>
-                  </div>
-                )}
-              </div>
-              
-              <div className="z-10 mt-auto text-center pt-6 border-t border-[#c9a84c11]">
-                <p className="text-[10px] text-[#5a5548] mb-1 font-bold underline decoration-[#c9a84c33]">الأسعار استرشادية وتتحدد بدقة وقت التنفيــــذ</p>
-                <div className="text-sm text-[#c9a84c] font-black tracking-[0.2em] uppercase">Makkah Jewelry</div>
-              </div>
-            </div>
-          </div>
-
-          <button 
-            onClick={handleManualCapture}
-            disabled={isProcessing}
-            className={cn(
-              "flex items-center justify-center gap-3 bg-gradient-to-r from-[#c9a84c] to-[#9a7830] text-[#0f172a] px-10 py-5 rounded-2xl text-xl font-bold transition-all shadow-[0_10px_30px_rgba(201,168,76,0.25)] w-full max-w-[380px] hover:-translate-y-1 active:scale-95",
-              isProcessing ? "opacity-50 cursor-not-allowed hover:translate-y-0" : ""
-            )}
-          >
-            {isProcessing ? (
-              <>
-                <motion.div animate={{ rotate: 360 }} transition={{ duration: 1, repeat: Infinity, ease: "linear" }} className="w-6 h-6 border-2 border-[#0f172a] border-t-transparent rounded-full" />
-                جاري التجهيز...
-              </>
+        <div className="mx-auto w-full max-w-[430px] overflow-hidden rounded-[28px] border border-[#c9a84c22] bg-[#07090d] p-2 shadow-[0_24px_60px_rgba(0,0,0,0.45)]">
+          <div className="aspect-[9/16] overflow-hidden rounded-[22px] bg-[#05070a]">
+            {previewUrl ? (
+              <img src={previewUrl} alt="معاينة ستوري أسعار مكة" className="h-full w-full object-cover" />
             ) : (
-              <>
-                <ImageIcon className="w-6 h-6" />
-                حفظ الصورة للواتساب
-              </>
+              <div className="flex h-full w-full flex-col items-center justify-center gap-3 text-[#8a8578]">
+                <div className="h-8 w-8 animate-spin rounded-full border-2 border-[#c9a84c] border-t-transparent" />
+                <span className="text-xs font-bold">جاري تجهيز الستوري...</span>
+              </div>
             )}
-          </button>
+          </div>
         </div>
+
+        {error && (
+          <div className="mx-auto mt-4 max-w-[430px] rounded-2xl border border-red-500/20 bg-red-500/5 p-3 text-center text-xs font-bold text-red-300">
+            {error}
+          </div>
+        )}
+
+        <button
+          type="button"
+          onClick={handleShare}
+          disabled={!storyBlob || isProcessing || !!error}
+          className="mx-auto mt-5 flex min-h-14 w-full max-w-[430px] items-center justify-center gap-3 rounded-2xl bg-gradient-to-r from-[#d9b557] to-[#a47b2b] px-6 text-lg font-black text-[#080a0f] shadow-[0_12px_32px_rgba(201,168,76,0.25)] transition active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-50"
+        >
+          <Share2 className="h-5 w-5" />
+          {isProcessing ? 'جاري تجهيز الصورة...' : 'مشاركة الصورة'}
+        </button>
+
+        {storyBlob && !isProcessing && (
+          <button
+            type="button"
+            onClick={saveStoryImage}
+            className="mx-auto mt-2 flex min-h-10 w-full max-w-[430px] items-center justify-center gap-2 rounded-xl text-xs font-bold text-[#8a8578] transition hover:bg-white/5 hover:text-[#ddd8cc]"
+          >
+            <Download className="h-4 w-4" />
+            حفظ نسخة من الصورة
+          </button>
+        )}
       </div>
     </div>
   );
