@@ -1,0 +1,38 @@
+name: Story Builder Validation
+
+on:
+  push:
+    branches:
+      - feat/story-share-facebook-qr
+
+permissions:
+  contents: read
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Story Builder focused test
+        run: npm test -- src/components/views/__tests__/storyBuilderContract.test.ts
+
+      - name: TypeScript
+        run: npm run typecheck
+
+      - name: Balance contract
+        run: npm run check:balance-contract
+
+      - name: Production build
+        run: npm run build
