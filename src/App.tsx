@@ -1,4 +1,4 @@
-﻿import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, Suspense } from 'react';
 import { deleteDoc, doc, updateDoc, serverTimestamp, addDoc, collection, getDocsFromServer, query, where } from 'firebase/firestore';
 import { AnimatePresence, motion } from 'framer-motion';
 import { useAppStore } from './store';
@@ -17,12 +17,17 @@ import { SettingsView } from './components/views/SettingsView';
 import { EditingEntryModal } from './components/views/EditingEntryModal';
 import { DailyJournalView } from './components/views/DailyJournalView';
 import { AccountingGuideView } from './components/views/AccountingGuideView';
-import { ReportsView } from './components/views/ReportsView';
 import { StoryBuilderView } from './components/views/StoryBuilderView';
 import { InvoicePrintModal } from './components/views/InvoicePrintModal';
 import { MoreView } from './components/views/MoreView';
 import { CanonicalAccountsView } from './components/views/CanonicalAccountsView';
 import { InventoryCheckView } from './components/views/InventoryCheckView';
+
+const ReportsView = React.lazy(() =>
+  import('./components/views/ReportsView').then(module => ({
+    default: module.ReportsView,
+  }))
+);
 
 import { ErrorBoundary } from './components/ErrorBoundary';
 import { NavButton } from './components/ui/NavButton';
@@ -360,7 +365,20 @@ export default function App() {
               )}
               {view === 'journal' && <DailyJournalView />}
               {view === 'database' && <InventoryCheckView />}
-              {reportViews.includes(view) && <ReportsView />}
+              {reportViews.includes(view) && (
+                <Suspense
+                  fallback={
+                    <div className="flex min-h-[320px] items-center justify-center rounded-2xl border border-[#1a1e2a] bg-[#0e1018] p-8 text-center text-sm font-bold text-[#8a8172]" dir="rtl">
+                      <div className="flex flex-col items-center gap-3">
+                        <div className="h-6 w-6 animate-spin rounded-full border-2 border-[#c9a84c] border-t-transparent" />
+                        <span>جارٍ تحميل التقارير...</span>
+                      </div>
+                    </div>
+                  }
+                >
+                  <ReportsView />
+                </Suspense>
+              )}
               {view === 'more' && <MoreView isFullscreen={isFullscreen} onToggleFullscreen={toggleFullscreen} onLogOut={logOut} />}
               {view === 'story' && <StoryBuilderView />}
               {view === 'guide' && <AccountingGuideView />}
