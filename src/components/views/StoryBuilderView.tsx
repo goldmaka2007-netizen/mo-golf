@@ -141,7 +141,7 @@ const generateStoryCanvas = (
   roundedPanel(ctx, contentX, 316, contentWidth, 400, 28);
   ctx.fillStyle = '#d8b24f';
   ctx.font = 'bold 38px "Tajawal", sans-serif';
-  ctx.fillText('الجرام (شراء/بيع)', centerX, 365);
+  ctx.fillText('الجرام — شراء / بيع', centerX, 365);
 
   const tableTop = 390;
   const tableHeight = 300;
@@ -228,7 +228,7 @@ const generateStoryCanvas = (
   roundedPanel(ctx, contentX, 1326, contentWidth, 100, 24, 'rgba(9, 12, 16, 0.92)', 'rgba(106, 138, 158, 0.45)');
   ctx.fillStyle = '#8ea8b8';
   ctx.font = 'bold 29px "Tajawal", sans-serif';
-  ctx.fillText('الفضة (شراء/بيع)', centerX + 210, 1367);
+  ctx.fillText('الفضة — شراء / بيع', centerX + 210, 1367);
   ctx.fillStyle = '#f0eee9';
   ctx.font = 'bold 38px "JetBrains Mono", monospace';
   ctx.fillText(`${data.silverSwissBuy.toLocaleString()} / ${data.silverSwissSell.toLocaleString()}`, centerX - 170, 1371);

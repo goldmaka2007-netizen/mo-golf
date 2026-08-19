@@ -35,4 +35,11 @@ describe('StoryBuilderView contract', () => {
     expect(storySource).toContain("const FACEBOOK_PAGE_NAME = 'مكة للمصوغات والمجوهرات'");
     expect(storySource).not.toContain('@mohamedyasser2400');
   });
+
+  it('avoids RTL-sensitive parentheses in Canvas section headings', () => {
+    expect(storySource).toContain("ctx.fillText('الجرام — شراء / بيع'");
+    expect(storySource).toContain("ctx.fillText('الفضة — شراء / بيع'");
+    expect(storySource).not.toContain("ctx.fillText('الجرام (شراء/بيع)'");
+    expect(storySource).not.toContain("ctx.fillText('الفضة (شراء/بيع)'");
+  });
 });
