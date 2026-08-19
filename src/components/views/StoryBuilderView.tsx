@@ -243,7 +243,7 @@ const generateStoryCanvas = (
   const noteY = Math.min(1636, 1528 + (disclaimerLines * 33) + 12);
   ctx.fillStyle = '#b99847';
   ctx.font = 'bold 21px "Tajawal", sans-serif';
-  ctx.fillText('الأسعار استرادية وتتصدٯ بدقه عند التنفيذال القعلي', centerX, noteY);
+  ctx.fillText('الأسعار استرشادية وتتحدد بدقة عند التنفيذ الفعلي', centerX, noteY);
 
   roundedPanel(ctx, contentX, 1670, contentWidth, 200, 26, 'rgba(7, 9, 13, 0.94)', 'rgba(201, 168, 76, 0.55)');
 
@@ -301,7 +301,7 @@ const storyFilename = () => {
     String(now.getMonth() + 1).padStart(2, '0'),
     String(now.getDate()).padStart(2, '0'),
   ].join('-');
-  return `makk-prices-${localDate}.png`;
+  return `makka-prices-${localDate}.png`;
 };
 
 export const StoryBuilderView = () => {
@@ -375,7 +375,7 @@ export const StoryBuilderView = () => {
       })
       .catch(err => {
         console.error(err);
-        if (!cancelled) setError('تعذر تجهيز صورة الستوري. جرّب إعادة فقح الصفحة.');
+        if (!cancelled) setError('تعذر تجهيز صورة الستوري. جرّب إعادة فتح الصفحة.');
       })
       .finally(() => {
         if (!cancelled) setIsProcessing(false);
@@ -426,7 +426,7 @@ export const StoryBuilderView = () => {
     try {
       await navigator.share({
         files: [file],
-        title: 'أسعار مكة للٰهب والمجوهرائ',
+        title: 'أسعار مكة للذهب والمجوهرات',
       });
     } catch (shareError) {
       if (shareError instanceof DOMException && shareError.name === 'AbortError') return;
@@ -441,7 +441,7 @@ export const StoryBuilderView = () => {
         <div className="mb-4 flex items-center justify-between gap-3">
           <div>
             <h3 className="text-lg font-bold text-[#ddd8cc]">حالة واتساب</h3>
-            <p className="mt-1 text-xs text-[#8a8578]">الحورة بتتجهيز بلقائيًا من الأسعار وإعدادات المصنعية الحالية.</p>
+            <p className="mt-1 text-xs text-[#8a8578]">الصورة بتتجهز تلقائيًا من الأسعار وإعدادات المصنعية الحالية.</p>
           </div>
           <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl border border-[#c9a84c22] bg-[#c9a84c0d]">
             <ImageIcon className="h-5 w-5 text-[#c9a84c]" />
