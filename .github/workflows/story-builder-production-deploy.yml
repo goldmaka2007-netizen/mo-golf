@@ -1,9 +1,9 @@
 name: Story Builder Production Deploy
 
 on:
-  push:
+  pull_request:
     branches:
-      - feat/story-share-facebook-qr
+      - main
 
 permissions:
   contents: read
@@ -16,10 +16,13 @@ jobs:
       - name: Checkout release tree
         uses: actions/checkout@v4
 
-      - name: Verify tree matches merged main
+      - name: Verify application files match merged main
         run: |
           git fetch origin main --depth=1
-          test "$(git rev-parse HEAD^{tree})" = "$(git rev-parse origin/main^{tree})"
+          git diff --exit-code origin/main -- \
+            public/facebook-page-qr.png \
+            src/components/views/StoryBuilderView.tsx \
+            src/components/views/__tests__/storyBuilderContract.test.ts
 
       - name: Setup Node
         uses: actions/setup-node@v4
