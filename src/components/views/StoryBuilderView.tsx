@@ -225,62 +225,58 @@ const generateStoryCanvas = (
   });
 
   ctx.textAlign = 'center';
-  roundedPanel(ctx, contentX, 1328, contentWidth, 112, 24, 'rgba(9, 12, 16, 0.92)', 'rgba(106, 138, 158, 0.45)');
+  roundedPanel(ctx, contentX, 1326, contentWidth, 100, 24, 'rgba(9, 12, 16, 0.92)', 'rgba(106, 138, 158, 0.45)');
   ctx.fillStyle = '#8ea8b8';
   ctx.font = 'bold 29px "Tajawal", sans-serif';
-  ctx.fillText('الفضة (شراء/بيع)', centerX + 210, 1373);
+  ctx.fillText('الفضة (شراء/بيع)', centerX + 210, 1367);
   ctx.fillStyle = '#f0eee9';
   ctx.font = 'bold 38px "JetBrains Mono", monospace';
-  ctx.fillText(`${data.silverSwissBuy.toLocaleString()} / ${data.silverSwissSell.toLocaleString()}`, centerX - 170, 1377);
+  ctx.fillText(`${data.silverSwissBuy.toLocaleString()} / ${data.silverSwissSell.toLocaleString()}`, centerX - 170, 1371);
 
-  roundedPanel(ctx, contentX, 1460, contentWidth, 238, 26, 'rgba(201, 168, 76, 0.035)', 'rgba(201, 168, 76, 0.42)');
+  roundedPanel(ctx, contentX, 1448, contentWidth, 202, 26, 'rgba(201, 168, 76, 0.035)', 'rgba(201, 168, 76, 0.42)');
   ctx.fillStyle = '#d8b24f';
   ctx.font = 'bold 31px "Tajawal", sans-serif';
-  ctx.fillText('نلتزم بالشفافية والثقة', centerX, 1504);
+  ctx.fillText('نلتزم بالشفافية والثقة', centerX, 1490);
   ctx.fillStyle = '#ddd8cc';
   ctx.font = '500 23px "Tajawal", sans-serif';
-  const disclaimerLines = wrapCenteredText(ctx, data.customerMessage, centerX, 1546, 800, 34);
-  const noteY = Math.min(1664, 1546 + (disclaimerLines * 34) + 14);
+  const disclaimerLines = wrapCenteredText(ctx, data.customerMessage, centerX, 1528, 820, 33);
+  const noteY = Math.min(1636, 1528 + (disclaimerLines * 33) + 12);
   ctx.fillStyle = '#b99847';
   ctx.font = 'bold 21px "Tajawal", sans-serif';
-  ctx.fillText('الأسعار استرشادية وتتحدد بدقة عند التنفيذ الفعلي', centerX, noteY);
+  ctx.fillText('الأسعار استرادية وتتصدٯ بدقه عند التنفيذال القعلي', centerX, noteY);
 
-  roundedPanel(ctx, contentX, 1718, contentWidth, 154, 26, 'rgba(7, 9, 13, 0.94)', 'rgba(201, 168, 76, 0.55)');
+  roundedPanel(ctx, contentX, 1670, contentWidth, 200, 26, 'rgba(7, 9, 13, 0.94)', 'rgba(201, 168, 76, 0.55)');
 
   ctx.beginPath();
-  ctx.arc(contentX + 78, 1795, 48, 0, Math.PI * 2);
-  const fbGlow = ctx.createLinearGradient(contentX + 30, 1747, contentX + 126, 1843);
+  ctx.arc(contentX + 78, 1770, 48, 0, Math.PI * 2);
+  const fbGlow = ctx.createLinearGradient(contentX + 30, 1722, contentX + 126, 1818);
   fbGlow.addColorStop(0, '#f0cc6b');
   fbGlow.addColorStop(1, '#a77b24');
   ctx.fillStyle = fbGlow;
   ctx.fill();
   ctx.fillStyle = '#0b0d12';
   ctx.font = 'bold 66px Arial, sans-serif';
-  ctx.fillText('f', contentX + 78, 1819);
+  ctx.fillText('f', contentX + 78, 1794);
 
   ctx.textAlign = 'right';
   ctx.fillStyle = '#d8b24f';
   ctx.font = 'bold 29px "Tajawal", sans-serif';
-  ctx.fillText('تابع صفحتنا على فيسبوك', 620, 1764);
+  ctx.fillText('تابع صفحتنا على فيسبوك', 700, 1728);
   ctx.fillStyle = '#ddd8cc';
   ctx.font = '500 21px "Tajawal", sans-serif';
-  ctx.fillText('اعمل لايك وتابعنا ليصلك كل جديد', 620, 1801);
+  ctx.fillText('اعمل لايك وتابعنا ليصلك كل جديد', 700, 1773);
   ctx.fillStyle = '#d8b24f';
   ctx.font = 'bold 24px "Tajawal", sans-serif';
-  ctx.fillText(FACEBOOK_PAGE_NAME, 620, 1840);
+  ctx.fillText(FACEBOOK_PAGE_NAME, 700, 1822);
 
-  const qrSize = 118;
-  const qrX = 686;
-  const qrY = 1736;
+  const qrSize = 190;
+  const qrX = 790;
+  const qrY = 1675;
   ctx.fillStyle = '#ffffff';
   ctx.beginPath();
   ctx.roundRect(qrX - 8, qrY - 8, qrSize + 16, qrSize + 16, 14);
   ctx.fill();
   ctx.drawImage(facebookQr, qrX, qrY, qrSize, qrSize);
-  ctx.textAlign = 'center';
-  ctx.fillStyle = '#d8b24f';
-  ctx.font = 'bold 22px "Tajawal", sans-serif';
-  ctx.fillText('امسح الكود', 872, 1802);
 };
 
 const renderStoryBlob = async (data: StoryData) => {
@@ -299,8 +295,13 @@ const renderStoryBlob = async (data: StoryData) => {
 };
 
 const storyFilename = () => {
-  const date = new Date().toISOString().slice(0, 10);
-  return `makka-prices-${date}.png`;
+  const now = new Date();
+  const localDate = [
+    now.getFullYear(),
+    String(now.getMonth() + 1).padStart(2, '0'),
+    String(now.getDate()).padStart(2, '0'),
+  ].join('-');
+  return `makk-prices-${localDate}.png`;
 };
 
 export const StoryBuilderView = () => {
@@ -374,7 +375,7 @@ export const StoryBuilderView = () => {
       })
       .catch(err => {
         console.error(err);
-        if (!cancelled) setError('تعذر تجهيز صورة الستوري. جرّب إعادة فتح الصفحة.');
+        if (!cancelled) setError('تعذر تجهيز صورة الستوري. جرّب إعادة فقح الصفحة.');
       })
       .finally(() => {
         if (!cancelled) setIsProcessing(false);
@@ -408,8 +409,14 @@ export const StoryBuilderView = () => {
   const handleShare = async () => {
     if (!storyBlob || isProcessing) return;
     const file = new File([storyBlob], storyFilename(), { type: 'image/png' });
-    const canNativeShare = typeof navigator.share === 'function'
-      && (typeof navigator.canShare !== 'function' || navigator.canShare({ files: [file] }));
+    let canNativeShare = typeof navigator.share === 'function';
+    if (canNativeShare && typeof navigator.canShare === 'function') {
+      try {
+        canNativeShare = navigator.canShare({ files: [file] });
+      } catch {
+        canNativeShare = false;
+      }
+    }
 
     if (!canNativeShare) {
       saveStoryImage();
@@ -419,7 +426,7 @@ export const StoryBuilderView = () => {
     try {
       await navigator.share({
         files: [file],
-        title: 'أسعار مكة للذهب والمجوهرات',
+        title: 'أسعار مكة للٰهب والمجوهرائ',
       });
     } catch (shareError) {
       if (shareError instanceof DOMException && shareError.name === 'AbortError') return;
@@ -434,7 +441,7 @@ export const StoryBuilderView = () => {
         <div className="mb-4 flex items-center justify-between gap-3">
           <div>
             <h3 className="text-lg font-bold text-[#ddd8cc]">حالة واتساب</h3>
-            <p className="mt-1 text-xs text-[#8a8578]">الصورة بتتجهز تلقائيًا من الأسعار وإعدادات المصنعية الحالية.</p>
+            <p className="mt-1 text-xs text-[#8a8578]">الحورة بتتجهيز بلقائيًا من الأسعار وإعدادات المصنعية الحالية.</p>
           </div>
           <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl border border-[#c9a84c22] bg-[#c9a84c0d]">
             <ImageIcon className="h-5 w-5 text-[#c9a84c]" />
