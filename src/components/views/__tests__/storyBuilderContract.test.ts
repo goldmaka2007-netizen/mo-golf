@@ -26,7 +26,7 @@ describe('StoryBuilderView contract', () => {
 
   it('keeps the approved disclaimer and Facebook QR call-to-action in the generated story', () => {
     expect(storySource).toContain(ORIGINAL_DISCLAIMER);
-    expect(storySource).toContain("const FACEBOOK_QR_SRC = '/facebook-page-qr.svg'");
+    expect(storySource).toContain("const FACEBOOK_QR_SRC = '/facebook-page-qr.png'");
     expect(storySource).toContain("const FACEBOOK_PAGE_NAME = 'مكة للمصوغات والمجوهرات'");
     expect(storySource).not.toContain('@mohamedyasser2400');
   });
