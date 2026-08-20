@@ -1,116 +1,106 @@
 # Current Project State
 
-Last reviewed: 2026-08-19
+Last reviewed: 2026-08-20
 
 ## Production baseline
 
 - Repository: `goldmaka2007-netizen/mo-golf`
 - Production: https://makka-central-accounting.web.app
 - Firebase project: `makka-central-accounting`
-- Latest deployed application feature commit: `5086600f740b86277f635fa2f4113470ee4b7669`
-- Operational Home release documentation commit: `30c2590bd861261cbcb451959718b612c4589413`
-- Cross-system knowledge hard-sync receipt commit: `a401f2256f19987b57683f8c5d2a295510f3f6f2`
-- Production asset: `/assets/index-BBtYn-2M.js`
-- Deployment scope for the latest release: Firebase Hosting only.
-- Firestore Data/Rules/Indexes/Functions/Storage/Auth were not changed by the Operational Home release.
+- Latest deployed application commit: `b304f1205fe92fea49f1de209b9a180233761a73`
+- Latest production asset: `/assets/index-DBvzrIuJ.js`
+- Asset SHA-256: `3888888fa7458c49af2e83cd46fe2dce3214e16e0462e61607464d91b571f5a9`
+- Deployment scope: Firebase Hosting only.
+- Firestore Data/Rules/Indexes, Functions, Storage, Auth and Golden Baseline were not changed by this release.
 
-## Current production capabilities
+## Latest production change — Financial Position
 
-### Operational Home — deployed 2026-08-18
+The Financial Position report is now a richer presentation and traceability layer over the existing EGP accounting source. It does not introduce a new accounting calculation path.
 
-The Home screen is now a lightweight mobile-first operating surface with:
+Current behavior:
 
-- Gold-21 and silver current-price editing through the existing `saveMetalPrices` path.
-- Direct Smart Sale and Smart Purchase shortcuts.
-- Current cashbox balance.
-- Gold Inventory E21.
-- Net Owned Gold E21 after merchant liabilities.
-- No legacy report/dashboard calculations on the Home critical path.
+- Monetary EGP values remain sourced from `buildFinancialStatementsEgp`.
+- Current-year month buttons are available from January through the latest-data month; each month is cumulative as of its cutoff.
+- The latest month uses the latest actual entry date.
+- Gold inventory collapsed rows show Book Value plus E21 weight.
+- Silver inventory collapsed rows show Book Value plus silver weight.
+- Accessories remain monetary-only when collapsed.
+- Merchant gold, silver and cash receivables/payables are separated for review while preserving authoritative aggregates.
+- Assets, liabilities and equity show secondary gold/silver monitoring dimensions; equity metal labels are net monitoring positions, not accounting equity grams.
+- Smart zero hiding keeps a metal row visible when EGP is zero but a genuine non-zero metal balance exists.
+- Detail rows can drill into the existing account/ledger path where available.
+- CSV export is latest-cutoff only and refuses to export when the cost timeline is unavailable.
 
-Detailed release record: [`docs/OPERATIONAL_HOME_RELEASE_2026-08-18.md`](OPERATIONAL_HOME_RELEASE_2026-08-18.md).
+## Acceptance and accounting parity
 
-### Smart Daily Management Dashboard — deployed 2026-08-18
+- Financial Position acceptance/parity tests passed before merge.
+- Post-merge focused validation passed.
+- Pre-deploy focused validation passed.
+- `npm run typecheck`: passed.
+- `npm run check:balance-contract`: passed.
+- Production build: passed.
+- The monthly read model was verified to preserve `buildFinancialStatementsEgp` monetary outputs at the same cutoff.
+- No monetary difference was found in the parity gate.
+- The known `financialPositionCentralBalances.test.ts` expectation mismatch (`-1.43` expected vs `+1.43` actual) reproduces on the pre-change baseline and remains PRE-EXISTING / OUT OF SCOPE. Do not alter protected accounting behavior merely to clear it.
 
-The Daily Journal includes Cash Closing, current-day operations, and a smart management dashboard using canonical transaction/cash data with gold as the primary management dimension.
+## Production verification
 
-Detailed release record: [`docs/SMART_DAILY_MANAGEMENT_DASHBOARD_RELEASE_2026-08-18.md`](SMART_DAILY_MANAGEMENT_DASHBOARD_RELEASE_2026-08-18.md).
-
-### Smart Gold Pricing Configuration — deployed 2026-08-18
-
-Smart Sale, Smart Purchase, Settings, and Story Builder share the approved pricing configuration while remaining outside the centralized accounting write contract.
-
-Detailed release record: [`docs/SMART_GOLD_PRICING_CONFIG_RELEASE_2026-08-18.md`](SMART_GOLD_PRICING_CONFIG_RELEASE_2026-08-18.md).
-
-### Smart Gold Assistants — deployed 2026-08-17
-
-Smart Sale and Smart Purchase calculate and prefill the existing Entry flow; the existing review/save path remains authoritative.
-
-Detailed release record: [`docs/SMART_GOLD_ASSISTANTS_RELEASE_2026-08-17.md`](SMART_GOLD_ASSISTANTS_RELEASE_2026-08-17.md).
+- Production root: HTTP 200.
+- Production main asset: HTTP 200.
+- Local and production JS asset SHA-256 matched exactly.
+- Authenticated read-only production smoke passed for the Financial Position report.
+- The latest month opened by default, month buttons stopped at the latest-data month, inventory/merchant sections rendered correctly, totals and net metal labels rendered, detail opening did not change totals, latest-only CSV was available, and no release-attributable console errors were observed.
 
 ## Current implementation landmarks
 
-- `src/components/views/EntryForm.tsx` — authoritative manual/pre-filled entry and save flow.
-- `src/components/views/GoldPricingAssistant.tsx` — Smart Sale/Purchase presentation.
-- `src/lib/goldPricingAssistant.ts` — pricing/configuration/session/handoff helpers.
-- `src/lib/inventoryTrackingPolicy.ts` — central runtime coin/bar quantity compatibility policy.
-- `src/lib/accountRegistry.ts` — canonical account tracking resolution.
-- `src/components/views/SettingsView.tsx` — pricing configuration UI and explicit Save.
-- `src/components/views/StoryBuilderView.tsx` — pricingConfig consumer with read-only legacy fallback.
-- `src/lib/dailyJournalSmartDashboard.ts` — Smart Daily Management Dashboard calculations.
-- `src/lib/homeSelector.ts` — lightweight Operational Home selection using canonical balances.
-- `src/hooks/useDataSync.ts` / `src/store.ts` — synchronized app state.
-- `src/lib/inventoryCostEngine.ts` and cost timeline — authoritative inventory cost/COGS path.
+- `src/components/views/reports/EgpBalanceSheetView.tsx` — Financial Position presentation.
+- `src/lib/monthlyFinancialPosition.ts` — monthly cutoff read model and latest-only CSV rows.
+- `src/lib/financialPositionPresentation.ts` — presentation-only smart-zero visibility helper.
+- `src/lib/financialStatementsEgp.ts` — authoritative EGP statement read model used by the Financial Position presentation.
+- `src/lib/__tests__/monthlyFinancialPosition.acceptance.test.ts` — Financial Position acceptance/parity regression coverage.
+- `src/lib/inventoryCostEngine.ts` and the runtime cost timeline — authoritative inventory cost/COGS path; unchanged by the Financial Position release.
 
-## Validation status
+## Export review
 
-Latest Operational Home acceptance:
+The owner reviewed the pre-update `balance_sheet.csv` against the post-update `financial_position_2026-08-01.csv` before closure.
 
-- `npm run typecheck`: passed.
-- Focused Home/pricing/navigation tests: 11/11 passed.
-- `npm run check:balance-contract`: passed.
-- `npm run build`: passed.
-- `git diff --check`: passed.
-- Production root: HTTP 200.
-- Production JavaScript asset: HTTP 200 and contains the new Home labels/actions.
-- No interactive browser smoke was available in that execution environment.
+The 32 inventory rows matched one-for-one between the two exports, including Book Value and metal weight. Aggregates were preserved:
 
-The immediately preceding Smart Daily release had browser/application smoke with Firebase initialization, React mount, active session, and no runtime errors/warnings.
+- Gold inventory: EGP 13,506,267.67 and E21 2,226.420 g.
+- Silver inventory: EGP 674,310.45 and 5,391.750 g.
+- Accessories inventory: EGP 6,118.95.
+
+The new export adds full Financial Position detail while preserving those inventory figures. Its summary for the reviewed cutoff is balanced with `assets - liabilities - equity = 0`.
 
 ## Protected accounting/data invariants
 
-The latest releases did not change:
+This release did not change:
 
 - Posting Matrix.
 - WAC.
 - Inventory Cost / COGS semantics.
-- Balance Engine.
+- Balance Engine semantics.
 - Entry schema/save contract.
+- Merchant settlement accounting semantics.
 - Historical transaction data.
+- Approved Historical Overlay records.
 - Firestore Data / Rules / Indexes.
 - Functions / Storage / Authentication.
+- Golden Baseline.
 
 ## Known open issues / technical debt
 
-- Five documented pre-existing Golden/accounting test failures remain from the established baseline. Do not regenerate the Golden Baseline merely to clear them; classify and resolve them separately.
-- Broader legacy/performance cleanup remains incomplete even though the Home critical path was made lightweight.
-- Historical-data migration/reconciliation completion is not proven by the current repository documentation; `docs/HISTORICAL_DATA_ENTRY_READINESS.md` records readiness for controlled entry, not full completion.
+- The documented pre-existing Golden/accounting failures remain separate work; do not regenerate Golden Baseline merely to clear them.
+- Completion of the full historical 2116-row migration/reconciliation is still not proven by current documentation.
+- Broader legacy/performance cleanup remains separate follow-up work.
+- Historical Planning/Grill trackers are not proof of current Production state.
 
-## Recent production lineage
+## Source roles and closure
 
-- `ef01889414c924ff28921fb4c89c094746a4e98c` — Smart Gold Assistants compatibility/final code baseline.
-- `f3883d41a6ccdc495aede89bed246c25ebd14911` — Smart Gold Assistants release documentation.
-- `9a24826f5a1204f81a58ac3dc271e17c3f501da2` — Smart Gold Pricing Configuration code release.
-- `66440708d840b428cddb0d6586833c9786e52abe` — Smart Gold Pricing documentation/decisions baseline.
-- `c885542d425b2dcb00e2391036c2b0352827f70b` — Smart Daily Management Dashboard code release.
-- `b511a8a357453aa56876973d7a947080504bac39` — Smart Daily release documentation.
-- `5086600f740b86277f635fa2f4113470ee4b7669` — Operational Home feature release currently deployed.
-- `30c2590bd861261cbcb451959718b612c4589413` — Operational Home release documentation.
-- `a401f2256f19987b57683f8c5d2a295510f3f6f2` — cross-system knowledge hard-sync receipt before this documentation cleanup.
+- GitHub is the execution truth for code, tests and technical state.
+- Notion stores workflow, approved decisions and change history.
+- Google Drive stores reviewer-facing, operational, accounting and architecture references.
+- `Makka — Current Reviewer Context` must stay short and point to detailed references.
+- A task is not Closed until ChatGPT directly verifies GitHub + Notion + Google Drive are updated and consistent.
 
-## Source-of-truth order
-
-Use `CONSTITUTION.md`, `docs/DECISIONS.md`, active ADRs, this file, executable tests/contracts, then current implementation code. Verify technical paths against the current branch before editing.
-
-Notion and Google Drive are synchronized knowledge/decision surfaces and must reflect completed work, but they do not override the repository's protected authority order.
-
-Project-uploaded or attached copies of project documents are snapshots only. If an uploaded copy differs from the live GitHub, Notion, or Google Drive source, verify and use the live source before analysis, review, or implementation.
+Project-uploaded or attached copies are snapshots only. When they differ from live project sources, verify against the live sources before acting.
