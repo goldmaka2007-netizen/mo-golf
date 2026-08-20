@@ -5,6 +5,7 @@ import { PRODUCTION_INVENTORY_ACCOUNT_IDS_IN_SEED_ORDER } from '../../test-fixtu
 import { buildOpeningCostConfig } from '../openingCostConfig';
 import { rebuildRuntimeInventoryCostTimeline } from '../costRecalculation';
 import { buildFinancialStatementsEgp } from '../financialStatementsEgp';
+import { isFinancialPositionRowVisible } from '../financialPositionPresentation';
 import {
   buildMonthlyFinancialPosition,
   financialPositionCsvRows,
@@ -55,6 +56,18 @@ const availableResult = (): MonthlyFinancialPositionResult => ({
 });
 
 describe('monthly financial position acceptance', () => {
+  it('keeps a zero-EGP gold row visible when E21 weight is genuine', () => {
+    expect(isFinancialPositionRowVisible(0, 1.25)).toBe(true);
+  });
+
+  it('keeps a zero-EGP silver row visible when silver weight is genuine', () => {
+    expect(isFinancialPositionRowVisible(0, 3.5)).toBe(true);
+  });
+
+  it('hides a row only when both EGP and metal dimensions are zero', () => {
+    expect(isFinancialPositionRowVisible(0, 0)).toBe(false);
+  });
+
   it('restricts approved historical overlays to both cutoff and operation presence', () => {
     expect(historicalOverlaysForCutoff([overlayEntry('2026-03-03')], [overlayAccount], '2026-03-03')).toEqual([]);
     expect(historicalOverlaysForCutoff([overlayEntry('2026-03-04')], [overlayAccount], '2026-03-04')).toMatchObject([{ overlayId: 'hiro-20260304-scrap-arabic-e21-002' }]);

@@ -6,6 +6,7 @@ import { buildMonthlyFinancialPosition, financialPositionCsvRows, visibleFinanci
 import type { FinancialPositionDetailRow, InventoryCategorySummary, InventoryStatementRow, MerchantLiabilityStatementRow } from '../../../lib/financialStatementsEgp';
 import { exportToCsv } from '../../../utils/exportUtils';
 import { formatEgpAmount, formatWeight } from '../../../lib/formatting';
+import { isFinancialPositionRowVisible } from '../../../lib/financialPositionPresentation';
 
 const money = (value: number) => formatEgpAmount(value);
 const sameMoney = (left: number, right: number) => Math.abs(left - right) < 0.005;
@@ -18,18 +19,19 @@ const Detail = ({ label, value, rows, onOpenLedger }: { label: string; value: nu
 
 const Inventory = ({ label, summary, rows, onOpenLedger }: { label: string; summary: InventoryCategorySummary; rows: InventoryStatementRow[]; onOpenLedger?: (id: string) => void }) => {
   const [open, setOpen] = useState(false);
-  if (!summary.bookValue) return null;
+  const meaningfulWeight = summary.kind === 'accessory' ? 0 : summary.weight ?? 0;
+  if (!isFinancialPositionRowVisible(summary.bookValue, meaningfulWeight)) return null;
   const weight = summary.kind === 'accessory' || !summary.weight ? null : `${formatWeight(summary.weight, 3)} جرام${summary.kind === 'gold' ? ' عيار 21' : ''}`;
   return <div className="rounded-xl border border-[#1a1e2a]"><button type="button" aria-expanded={open} onClick={() => setOpen(!open)} className="w-full min-h-11 p-3 text-right"><div className="flex justify-between font-bold"><span>{label}</span><span className="font-mono">{money(summary.bookValue)}</span></div>{weight && <span className={`mt-1 block text-xs ${summary.kind === 'gold' ? 'text-[#c9a84c]' : 'text-slate-300'}`}>{weight}</span>}</button>{open && <div className="space-y-1 border-t border-[#1a1e2a] p-2">{rows.map(row => <button key={row.accountId} onClick={() => onOpenLedger?.(row.accountId)} className="block min-h-11 w-full rounded-lg bg-[#080a0f] p-2 text-right"><div className="flex justify-between"><span>{row.label}</span><span className="font-mono">{money(row.bookValue)}</span></div>{row.kind !== 'accessory' && row.weight !== null && <span className="text-xs text-[#c9a84c]">{formatWeight(row.weight, 3)} جرام</span>}</button>)}</div>}</div>;
 };
 
 const Merchant = ({ label, value, rows, cash = false, onOpenLedger }: { label: string; value: number; rows: MerchantLiabilityStatementRow[]; cash?: boolean; onOpenLedger?: (id: string) => void }) => {
   const [open, setOpen] = useState(false);
-  if (!value) return null;
   const rowValue = (row: MerchantLiabilityStatementRow) => cash ? (row.cashPayable || row.cashReceivable) : row.bookValue;
   const detailTotal = rows.reduce((sum, row) => sum + rowValue(row), 0);
   const goldWeight = cash ? 0 : rows.reduce((sum, row) => sum + row.equivalent21Weight, 0);
   const silverWeight = cash ? 0 : rows.reduce((sum, row) => sum + row.silverWeight, 0);
+  if (!isFinancialPositionRowVisible(value, goldWeight + silverWeight)) return null;
   return <div className="rounded-xl border border-[#1a1e2a]"><button type="button" aria-expanded={open} onClick={() => setOpen(!open)} className="w-full min-h-11 p-3 text-right"><div className="flex justify-between font-bold"><span>{label}</span><span className="font-mono">{money(value)}</span></div>{goldWeight > 0 && <span className="text-xs text-[#c9a84c]">{formatWeight(goldWeight, 3)} جرام عيار 21</span>}{silverWeight > 0 && <span className="text-xs text-slate-300">{formatWeight(silverWeight, 3)} جرام فضة</span>}</button>{open && <div className="space-y-1 border-t border-[#1a1e2a] p-2">{rows.map(row => <button key={`${row.id}:${cash ? 'cash' : 'metal'}`} onClick={() => onOpenLedger?.(row.accountId)} className="block min-h-11 w-full rounded-lg bg-[#080a0f] p-2 text-right"><div className="flex justify-between"><span>{row.label}</span><span className="font-mono">{money(rowValue(row))}</span></div>{!cash && row.metal === 'gold' && <span className="text-xs text-[#c9a84c]">{formatWeight(row.equivalent21Weight, 3)} جرام عيار 21</span>}{!cash && row.metal === 'silver' && <span className="text-xs text-slate-300">{formatWeight(row.silverWeight, 3)} جرام فضة</span>}</button>)}{!sameMoney(value, detailTotal) && <p className="p-2 text-xs text-red-300">تعذر تطابق تفاصيل التجار مع الإجمالي المركزي.</p>}</div>}</div>;
 };
 
@@ -48,11 +50,11 @@ export const BalanceSheetView = React.memo(({ entries, onOpenLedger }: { entries
   if (!report.available) return <div dir="rtl" className="rounded-2xl border border-red-500/30 bg-red-500/10 p-4 text-red-100">Book Value غير متاحة حتى يكتمل Cost Timeline صالح: {report.diagnostic.message}</div>;
   const d = report.balanceSheet;
   const m = report.metalSummary;
-  const merchantGoldReceivables = d.assets.merchantReceivableDetails.filter(row => row.metal === 'gold' && row.bookValue > 0);
-  const merchantSilverReceivables = d.assets.merchantReceivableDetails.filter(row => row.metal === 'silver' && row.bookValue > 0);
+  const merchantGoldReceivables = d.assets.merchantReceivableDetails.filter(row => row.metal === 'gold' && isFinancialPositionRowVisible(row.bookValue, row.equivalent21Weight));
+  const merchantSilverReceivables = d.assets.merchantReceivableDetails.filter(row => row.metal === 'silver' && isFinancialPositionRowVisible(row.bookValue, row.silverWeight));
   const merchantCashReceivables = d.assets.merchantReceivableDetails.filter(row => row.cashReceivable > 0);
-  const merchantGoldPayables = d.liabilities.merchantDetails.filter(row => row.metal === 'gold' && row.bookValue > 0);
-  const merchantSilverPayables = d.liabilities.merchantDetails.filter(row => row.metal === 'silver' && row.bookValue > 0);
+  const merchantGoldPayables = d.liabilities.merchantDetails.filter(row => row.metal === 'gold' && isFinancialPositionRowVisible(row.bookValue, row.equivalent21Weight));
+  const merchantSilverPayables = d.liabilities.merchantDetails.filter(row => row.metal === 'silver' && isFinancialPositionRowVisible(row.bookValue, row.silverWeight));
   const merchantCashPayables = d.liabilities.merchantDetails.filter(row => row.cashPayable > 0);
   const exportReport = () => {
     const latest = months.at(-1);
