@@ -80,6 +80,8 @@ export interface EgpBalanceSheet {
     silverInventory: number;
     accessoriesInventory: number;
     receivables: number;
+    ordinaryReceivables: number;
+    merchantCashReceivables: number;
     merchantMetalReceivables: number;
     merchantGoldReceivables: number;
     merchantSilverReceivables: number;
@@ -501,7 +503,7 @@ export const buildFinancialStatementsEgp = (entries: Entry[], rawAccounts: Accou
   receivables = roundMoney(receivables + merchantMetalReceivables + merchantCashReceivables);
   const assets = {
     cash: roundMoney(cash), goldInventory, silverInventory, accessoriesInventory,
-    receivables: roundMoney(receivables), merchantMetalReceivables,
+    receivables: roundMoney(receivables), ordinaryReceivables: roundMoney(receivables - merchantMetalReceivables - merchantCashReceivables), merchantCashReceivables, merchantMetalReceivables,
     merchantGoldReceivables, merchantSilverReceivables,
     merchantReceivableDetails: receivableRows, cashDetails, ordinaryReceivableDetails, total: 0,
   };
