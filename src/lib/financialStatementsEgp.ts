@@ -72,6 +72,7 @@ export interface ReconciliationWarning {
   goldBalance: number;
   bookValueBalance: number;
 }
+export interface FinancialPositionDetailRow extends FinancialStatementLine { accountId?: string; }
 export interface EgpBalanceSheet {
   assets: {
     cash: number;
@@ -83,6 +84,8 @@ export interface EgpBalanceSheet {
     merchantGoldReceivables: number;
     merchantSilverReceivables: number;
     merchantReceivableDetails: MerchantLiabilityStatementRow[];
+    cashDetails: FinancialPositionDetailRow[];
+    ordinaryReceivableDetails: FinancialPositionDetailRow[];
     total: number;
   };
   liabilities: {
@@ -93,8 +96,9 @@ export interface EgpBalanceSheet {
     other: number;
     total: number;
     merchantDetails: MerchantLiabilityStatementRow[];
+    otherDetails: FinancialPositionDetailRow[];
   };
-  equity: { capital: number; retainedEarnings: number; currentProfit: number; total: number };
+  equity: { capital: number; retainedEarnings: number; currentProfit: number; total: number; capitalDetails: FinancialPositionDetailRow[]; retainedEarningsDetails: FinancialPositionDetailRow[]; currentProfitDetails: FinancialPositionDetailRow[] };
   inventory: InventoryStatementRow[];
   inventoryCategories: Record<InventoryCostKind, InventoryCategorySummary>;
   balances: { assetsLessLiabilitiesAndEquity: number };
@@ -396,6 +400,7 @@ export const buildFinancialStatementsEgp = (entries: Entry[], rawAccounts: Accou
 
 
   let cash = 0; let receivables = 0; let rawCapital = 0; let rawRetainedEarnings = 0; let otherLiabilities = 0;
+  const cashDetails: FinancialPositionDetailRow[] = []; const ordinaryReceivableDetails: FinancialPositionDetailRow[] = []; const otherDetails: FinancialPositionDetailRow[] = []; const capitalDetails: FinancialPositionDetailRow[] = []; const retainedEarningsDetails: FinancialPositionDetailRow[] = [];
   const isMerchantMetalAccount = (account?: Account): boolean => !!account && account.type === 'merchant'
     && (account.metal === 'gold' || account.metal === 'silver'
       || account.canonicalSubType === 'merchant_gold' || account.canonicalSubType === 'merchant_silver');
@@ -406,16 +411,18 @@ export const buildFinancialStatementsEgp = (entries: Entry[], rawAccounts: Accou
     // projection, independently for metal carrying value and cash.
     if (isMerchantMetalAccount(account)) return;
     if (leg.group === 'assets') {
-      if (account?.type === 'cash') cash += balance; else receivables += balance;
+      const row = { id: entityId, label: leg.accountName, accountId: account?.id, amount: roundMoney(balance) };
+      if (account?.type === 'cash') { cash += balance; cashDetails.push(row); } else { receivables += balance; ordinaryReceivableDetails.push(row); }
       return;
     }
     if (leg.group === 'liabilities') {
-      otherLiabilities += -balance;
+      otherLiabilities += -balance; otherDetails.push({ id: entityId, label: leg.accountName, accountId: account?.id, amount: roundMoney(-balance) });
       return;
     }
     if (leg.group === 'equity') {
       const value = -balance;
-      if (account?.canonicalSubType === 'retained_earnings') rawRetainedEarnings += value; else rawCapital += value;
+      const row = { id: entityId, label: leg.accountName, accountId: account?.id, amount: roundMoney(value) };
+      if (account?.canonicalSubType === 'retained_earnings') { rawRetainedEarnings += value; retainedEarningsDetails.push(row); } else { rawCapital += value; capitalDetails.push(row); }
     }
   });
 
@@ -446,6 +453,8 @@ export const buildFinancialStatementsEgp = (entries: Entry[], rawAccounts: Accou
   const currentIncome = buildIncomeFromProjection(projectedLegs, accounts, timeline, currentStart, currentEnd);
   const priorIncome = currentStart ? buildIncomeFromProjection(projectedLegs, accounts, timeline, undefined, previousDate(currentStart)) : { netProfit: 0 };
   const capital = roundMoney(rawCapital); const retainedEarnings = roundMoney(rawRetainedEarnings + priorIncome.netProfit); const currentProfit = currentIncome.netProfit;
+  if (priorIncome.netProfit !== 0) retainedEarningsDetails.push({ id: 'derived:prior-profit', label: 'أرباح الفترات السابقة', amount: priorIncome.netProfit });
+  const currentProfitDetails = [...currentIncome.revenue.map(row => ({ ...row, amount: row.amount })), ...currentIncome.cogsLines.map(row => ({ id: row.id, label: row.label, accountId: row.accountId, amount: -row.amount })), ...currentIncome.operatingExpenses.map(row => ({ ...row, amount: -row.amount }))];
   const payableRows: MerchantLiabilityStatementRow[] = [];
   const receivableRows: MerchantLiabilityStatementRow[] = [];
   const seenMerchantIds = new Set<string>();
@@ -494,7 +503,7 @@ export const buildFinancialStatementsEgp = (entries: Entry[], rawAccounts: Accou
     cash: roundMoney(cash), goldInventory, silverInventory, accessoriesInventory,
     receivables: roundMoney(receivables), merchantMetalReceivables,
     merchantGoldReceivables, merchantSilverReceivables,
-    merchantReceivableDetails: receivableRows, total: 0,
+    merchantReceivableDetails: receivableRows, cashDetails, ordinaryReceivableDetails, total: 0,
   };
   assets.total = roundMoney(assets.cash + goldInventory + silverInventory + accessoriesInventory + assets.receivables);
   const details = payableRows;
@@ -502,8 +511,8 @@ export const buildFinancialStatementsEgp = (entries: Entry[], rawAccounts: Accou
   const merchantSilver = roundMoney(details.filter(row => row.metal === 'silver').reduce((sum, row) => sum + row.bookValue, 0));
   const merchantCash = roundMoney(details.reduce((sum, row) => sum + row.cashPayable, 0));
   const merchant = roundMoney(merchantGold + merchantSilver + merchantCash);
-  const liabilities = { merchant, merchantGold, merchantSilver, merchantCash, other: roundMoney(otherLiabilities), total: roundMoney(merchant + otherLiabilities), merchantDetails: details };
-  const equity = { capital, retainedEarnings, currentProfit, total: roundMoney(capital + retainedEarnings + currentProfit) };
+  const liabilities = { merchant, merchantGold, merchantSilver, merchantCash, other: roundMoney(otherLiabilities), total: roundMoney(merchant + otherLiabilities), merchantDetails: details, otherDetails };
+  const equity = { capital, retainedEarnings, currentProfit, total: roundMoney(capital + retainedEarnings + currentProfit), capitalDetails, retainedEarningsDetails, currentProfitDetails };
   return {
     incomeStatement: currentIncome,
     balanceSheet: { assets, liabilities, equity, inventory, inventoryCategories, reconciliationWarnings, balances: { assetsLessLiabilitiesAndEquity: roundMoney(assets.total - liabilities.total - equity.total) } },
