@@ -125,18 +125,21 @@ const drawContactIcon = (
   } else {
     ctx.fillStyle = '#d8b24f';
     ctx.beginPath();
-    ctx.moveTo(-size * 0.32, size * 0.62);
-    ctx.lineTo(-size * 0.32, -size * 0.28);
-    ctx.bezierCurveTo(-size * 0.32, -size * 0.58, -size * 0.12, -size * 0.72, size * 0.2, -size * 0.72);
-    ctx.lineTo(size * 0.38, -size * 0.72);
-    ctx.lineTo(size * 0.38, -size * 0.38);
-    ctx.lineTo(size * 0.2, -size * 0.38);
-    ctx.bezierCurveTo(size * 0.08, -size * 0.38, size * 0.02, -size * 0.3, size * 0.02, -size * 0.18);
-    ctx.lineTo(size * 0.02, -size * 0.04);
-    ctx.lineTo(size * 0.34, -size * 0.04);
-    ctx.lineTo(size * 0.29, size * 0.3);
-    ctx.lineTo(size * 0.02, size * 0.3);
-    ctx.lineTo(size * 0.02, size * 0.62);
+    ctx.moveTo(-size * 0.27, size * 0.68);
+    ctx.lineTo(-size * 0.27, -size * 0.16);
+    ctx.lineTo(-size * 0.43, -size * 0.16);
+    ctx.lineTo(-size * 0.43, -size * 0.46);
+    ctx.lineTo(-size * 0.27, -size * 0.46);
+    ctx.lineTo(-size * 0.27, -size * 0.59);
+    ctx.bezierCurveTo(-size * 0.27, -size * 0.8, -size * 0.1, -size * 0.9, size * 0.16, -size * 0.84);
+    ctx.lineTo(size * 0.36, -size * 0.78);
+    ctx.lineTo(size * 0.32, -size * 0.45);
+    ctx.bezierCurveTo(size * 0.18, -size * 0.49, size * 0.08, -size * 0.48, size * 0.03, -size * 0.4);
+    ctx.lineTo(size * 0.03, -size * 0.27);
+    ctx.lineTo(size * 0.32, -size * 0.27);
+    ctx.lineTo(size * 0.28, size * 0.06);
+    ctx.lineTo(size * 0.03, size * 0.06);
+    ctx.lineTo(size * 0.03, size * 0.68);
     ctx.closePath();
     ctx.fill();
   }
