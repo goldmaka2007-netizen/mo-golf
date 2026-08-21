@@ -73,6 +73,71 @@ const wrapCenteredText = (
   return lines.length;
 };
 
+type ContactIcon = 'location' | 'whatsapp' | 'facebook';
+
+const drawContactIcon = (
+  ctx: CanvasRenderingContext2D,
+  type: ContactIcon,
+  centerX: number,
+  centerY: number,
+  size: number,
+) => {
+  ctx.save();
+  ctx.translate(centerX, centerY);
+  ctx.strokeStyle = '#d8b24f';
+  ctx.fillStyle = 'rgba(201, 168, 76, 0.12)';
+  ctx.lineWidth = 3;
+  ctx.lineCap = 'round';
+  ctx.lineJoin = 'round';
+
+  if (type === 'location') {
+    ctx.beginPath();
+    ctx.moveTo(0, size * 0.95);
+    ctx.bezierCurveTo(-size * 0.18, size * 0.55, -size * 0.62, size * 0.12, -size * 0.62, -size * 0.2);
+    ctx.arc(0, -size * 0.2, size * 0.62, Math.PI, 0);
+    ctx.bezierCurveTo(size * 0.62, size * 0.12, size * 0.18, size * 0.55, 0, size * 0.95);
+    ctx.closePath();
+    ctx.fill();
+    ctx.stroke();
+    ctx.beginPath();
+    ctx.arc(0, -size * 0.2, size * 0.19, 0, Math.PI * 2);
+    ctx.fillStyle = '#d8b24f';
+    ctx.fill();
+  } else if (type === 'whatsapp') {
+    ctx.beginPath();
+    ctx.arc(0, -size * 0.08, size * 0.58, 0, Math.PI * 2);
+    ctx.moveTo(-size * 0.3, size * 0.38);
+    ctx.lineTo(-size * 0.58, size * 0.62);
+    ctx.lineTo(-size * 0.06, size * 0.48);
+    ctx.fill();
+    ctx.stroke();
+    ctx.beginPath();
+    ctx.moveTo(-size * 0.25, -size * 0.25);
+    ctx.bezierCurveTo(-size * 0.12, -size * 0.42, -size * 0.02, -size * 0.34, size * 0.08, -size * 0.2);
+    ctx.lineTo(size * 0.25, size * 0.05);
+    ctx.bezierCurveTo(size * 0.34, size * 0.2, size * 0.18, size * 0.31, size * 0.04, size * 0.24);
+    ctx.bezierCurveTo(-size * 0.2, size * 0.12, -size * 0.32, -size * 0.08, -size * 0.25, -size * 0.25);
+    ctx.stroke();
+  } else {
+    ctx.fillStyle = '#d8b24f';
+    ctx.beginPath();
+    ctx.moveTo(-size * 0.32, size * 0.62);
+    ctx.lineTo(-size * 0.32, -size * 0.62);
+    ctx.lineTo(size * 0.34, -size * 0.62);
+    ctx.lineTo(size * 0.34, -size * 0.3);
+    ctx.lineTo(0.02 * size, -size * 0.3);
+    ctx.lineTo(0.02 * size, -size * 0.04);
+    ctx.lineTo(size * 0.29, -size * 0.04);
+    ctx.lineTo(size * 0.29, size * 0.28);
+    ctx.lineTo(0.02 * size, size * 0.28);
+    ctx.lineTo(0.02 * size, size * 0.62);
+    ctx.closePath();
+    ctx.fill();
+  }
+
+  ctx.restore();
+};
+
 const generateStoryCanvas = (
   canvas: HTMLCanvasElement,
   ctx: CanvasRenderingContext2D,
@@ -240,17 +305,13 @@ const generateStoryCanvas = (
 
   roundedPanel(ctx, contentX, 1670, contentWidth, 200, 26, 'rgba(7, 9, 13, 0.94)', 'rgba(201, 168, 76, 0.55)');
 
-  const contactRows = [
-    { label: CONTACT_ADDRESS, icon: 'location' },
-    { label: `واتساب: \u2068${CONTACT_WHATSAPP}\u2069`, icon: 'whatsapp' },
-    { label: `فيسبوك: ${FACEBOOK_PAGE_NAME}  \u2068${CONTACT_FACEBOOK_USERNAME}\u2069`, icon: 'facebook' },
-  ] as const;
   const iconX = contentX + contentWidth - 46;
   const textRightX = iconX - 48;
   const rowYs = [1718, 1770, 1822];
+  const contactRows: ContactIcon[] = ['location', 'whatsapp', 'facebook'];
 
   ctx.direction = 'rtl';
-  contactRows.forEach((row, index) => {
+  contactRows.forEach((icon, index) => {
     const y = rowYs[index];
     ctx.strokeStyle = 'rgba(201, 168, 76, 0.16)';
     ctx.lineWidth = 1;
@@ -261,22 +322,32 @@ const generateStoryCanvas = (
       ctx.stroke();
     }
 
-    ctx.strokeStyle = '#d8b24f';
-    ctx.fillStyle = 'rgba(201, 168, 76, 0.12)';
-    ctx.lineWidth = 3;
-    ctx.beginPath();
-    ctx.arc(iconX, y, 25, 0, Math.PI * 2);
-    ctx.fill();
-    ctx.stroke();
-    ctx.fillStyle = '#d8b24f';
-    ctx.font = 'bold 22px Arial, sans-serif';
-    ctx.textAlign = 'center';
-    ctx.fillText(row.icon === 'facebook' ? 'f' : row.icon === 'whatsapp' ? 'W' : '•', iconX, y + 8);
-
-    ctx.textAlign = 'right';
+    drawContactIcon(ctx, icon, iconX, y, 25);
     ctx.fillStyle = '#ddd8cc';
     ctx.font = `${index === 0 ? '500 23px' : '500 22px'} "Tajawal", sans-serif`;
-    ctx.fillText(row.label, textRightX, y + 8, textRightX - (contentX + 24));
+    ctx.direction = 'rtl';
+    ctx.textAlign = 'right';
+    if (icon === 'location') {
+      ctx.fillText(CONTACT_ADDRESS, textRightX, y + 8, textRightX - (contentX + 24));
+    } else if (icon === 'whatsapp') {
+      const label = 'واتساب:';
+      ctx.fillText(label, textRightX, y + 8);
+      const numberRightX = textRightX - ctx.measureText(label).width - 16;
+      ctx.direction = 'ltr';
+      ctx.textAlign = 'right';
+      ctx.fillText(CONTACT_WHATSAPP, numberRightX, y + 8);
+    } else {
+      const label = 'فيسبوك:';
+      ctx.fillText(label, textRightX, y + 8);
+      const nameRightX = textRightX - ctx.measureText(label).width - 14;
+      ctx.direction = 'rtl';
+      ctx.textAlign = 'right';
+      ctx.fillText(FACEBOOK_PAGE_NAME, nameRightX, y + 8);
+      const usernameRightX = nameRightX - ctx.measureText(FACEBOOK_PAGE_NAME).width - 14;
+      ctx.direction = 'ltr';
+      ctx.textAlign = 'right';
+      ctx.fillText(CONTACT_FACEBOOK_USERNAME, usernameRightX, y + 8);
+    }
   });
   ctx.direction = 'ltr';
 };

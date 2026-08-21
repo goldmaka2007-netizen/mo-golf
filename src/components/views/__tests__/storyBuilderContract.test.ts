@@ -35,6 +35,12 @@ describe('StoryBuilderView contract', () => {
     expect(storySource).toContain("const CONTACT_ADDRESS = 'مساكن شركة المعمورة، عمارة رقم 4، محل رقم 17، المعمورة البلد'");
     expect(storySource).toContain("const CONTACT_WHATSAPP = '+20 15 50326921'");
     expect(storySource).toContain("const CONTACT_FACEBOOK_USERNAME = '@makkagoldalex'");
+    expect(storySource).toContain('const drawContactIcon = (');
+    expect(storySource).toContain("type ContactIcon = 'location' | 'whatsapp' | 'facebook'");
+    expect(storySource).toContain('ctx.bezierCurveTo');
+    expect(storySource).toContain("ctx.direction = 'ltr'");
+    expect(storySource).toContain("ctx.fillText(CONTACT_WHATSAPP, numberRightX, y + 8)");
+    expect(storySource).toContain("ctx.fillText(CONTACT_FACEBOOK_USERNAME, usernameRightX, y + 8)");
     expect(storySource).not.toContain('FACEBOOK_QR_SRC');
     expect(storySource).not.toContain('loadImage');
     expect(storySource).not.toContain('drawImage');
