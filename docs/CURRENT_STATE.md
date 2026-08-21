@@ -7,11 +7,17 @@ Last reviewed: 2026-08-20
 - Repository: `goldmaka2007-netizen/mo-golf`
 - Production: https://makka-central-accounting.web.app
 - Firebase project: `makka-central-accounting`
-- Latest deployed application commit: `b304f1205fe92fea49f1de209b9a180233761a73`
+- Latest deployed application commit: `b3573c777a61e83f2f6fbc375faa2110d3a00ecf`
 - Latest production asset: `/assets/index-DBvzrIuJ.js`
 - Asset SHA-256: `3888888fa7458c49af2e83cd46fe2dce3214e16e0462e61607464d91b571f5a9`
 - Deployment scope: Firebase Hosting only.
 - Firestore Data/Rules/Indexes, Functions, Storage, Auth and Golden Baseline were not changed by this release.
+
+## Latest production change — Story Builder contact footer
+
+- Story Builder keeps the existing 1080×1920 price-story layout and replaces the Facebook QR footer with three RTL contact rows: location, WhatsApp `+20 15 50326921`, and Facebook `مكة للمصوغات والمجوهرات @makkagoldalex`.
+- The QR asset and generation dependency were removed; the disclaimer copy remains unchanged and its heading was removed as requested.
+- Production smoke passed for React/Firebase startup, Story Builder preview, 1080×1920 output, share/save controls, and release-attributable console errors.
 
 ## Latest production change — Financial Position
 
