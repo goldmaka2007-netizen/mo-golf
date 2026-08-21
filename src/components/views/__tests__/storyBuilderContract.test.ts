@@ -37,6 +37,7 @@ describe('StoryBuilderView contract', () => {
     expect(storySource).toContain("const CONTACT_FACEBOOK_USERNAME = '@makkagoldalex'");
     expect(storySource).toContain('const drawContactIcon = (');
     expect(storySource).toContain("type ContactIcon = 'location' | 'whatsapp' | 'facebook'");
+    expect(storySource).toContain('drawContactIcon(ctx, icon, iconX, y, 30)');
     expect(storySource).toContain('ctx.bezierCurveTo');
     expect(storySource).toContain("ctx.direction = 'ltr'");
     expect(storySource).toContain("ctx.fillText(CONTACT_WHATSAPP, numberRightX, y + 8)");

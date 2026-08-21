@@ -111,26 +111,32 @@ const drawContactIcon = (
     ctx.lineTo(-size * 0.06, size * 0.48);
     ctx.fill();
     ctx.stroke();
+    ctx.fillStyle = '#d8b24f';
     ctx.beginPath();
-    ctx.moveTo(-size * 0.25, -size * 0.25);
-    ctx.bezierCurveTo(-size * 0.12, -size * 0.42, -size * 0.02, -size * 0.34, size * 0.08, -size * 0.2);
-    ctx.lineTo(size * 0.25, size * 0.05);
-    ctx.bezierCurveTo(size * 0.34, size * 0.2, size * 0.18, size * 0.31, size * 0.04, size * 0.24);
-    ctx.bezierCurveTo(-size * 0.2, size * 0.12, -size * 0.32, -size * 0.08, -size * 0.25, -size * 0.25);
-    ctx.stroke();
+    ctx.moveTo(-size * 0.3, -size * 0.28);
+    ctx.bezierCurveTo(-size * 0.42, -size * 0.12, -size * 0.28, size * 0.2, size * 0.02, size * 0.34);
+    ctx.bezierCurveTo(size * 0.2, size * 0.44, size * 0.36, size * 0.34, size * 0.3, size * 0.18);
+    ctx.lineTo(size * 0.12, size * 0.02);
+    ctx.lineTo(-size * 0.02, size * 0.1);
+    ctx.bezierCurveTo(-size * 0.16, size * 0.02, -size * 0.26, -size * 0.1, -size * 0.2, -size * 0.18);
+    ctx.lineTo(-size * 0.08, -size * 0.28);
+    ctx.closePath();
+    ctx.fill();
   } else {
     ctx.fillStyle = '#d8b24f';
     ctx.beginPath();
     ctx.moveTo(-size * 0.32, size * 0.62);
-    ctx.lineTo(-size * 0.32, -size * 0.62);
-    ctx.lineTo(size * 0.34, -size * 0.62);
-    ctx.lineTo(size * 0.34, -size * 0.3);
-    ctx.lineTo(0.02 * size, -size * 0.3);
-    ctx.lineTo(0.02 * size, -size * 0.04);
-    ctx.lineTo(size * 0.29, -size * 0.04);
-    ctx.lineTo(size * 0.29, size * 0.28);
-    ctx.lineTo(0.02 * size, size * 0.28);
-    ctx.lineTo(0.02 * size, size * 0.62);
+    ctx.lineTo(-size * 0.32, -size * 0.28);
+    ctx.bezierCurveTo(-size * 0.32, -size * 0.58, -size * 0.12, -size * 0.72, size * 0.2, -size * 0.72);
+    ctx.lineTo(size * 0.38, -size * 0.72);
+    ctx.lineTo(size * 0.38, -size * 0.38);
+    ctx.lineTo(size * 0.2, -size * 0.38);
+    ctx.bezierCurveTo(size * 0.08, -size * 0.38, size * 0.02, -size * 0.3, size * 0.02, -size * 0.18);
+    ctx.lineTo(size * 0.02, -size * 0.04);
+    ctx.lineTo(size * 0.34, -size * 0.04);
+    ctx.lineTo(size * 0.29, size * 0.3);
+    ctx.lineTo(size * 0.02, size * 0.3);
+    ctx.lineTo(size * 0.02, size * 0.62);
     ctx.closePath();
     ctx.fill();
   }
@@ -322,7 +328,7 @@ const generateStoryCanvas = (
       ctx.stroke();
     }
 
-    drawContactIcon(ctx, icon, iconX, y, 25);
+    drawContactIcon(ctx, icon, iconX, y, 30);
     ctx.fillStyle = '#ddd8cc';
     ctx.font = `${index === 0 ? '500 23px' : '500 22px'} "Tajawal", sans-serif`;
     ctx.direction = 'rtl';
