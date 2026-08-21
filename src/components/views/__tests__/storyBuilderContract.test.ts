@@ -25,14 +25,20 @@ describe('StoryBuilderView contract', () => {
     expect(storySource).toContain("return `makka-prices-${localDate}.png`");
   });
 
-  it('keeps the approved Arabic copy and Facebook QR call-to-action intact', () => {
+  it('keeps the approved Arabic copy and renders the current contact footer without QR code', () => {
     expect(storySource).toContain(ORIGINAL_DISCLAIMER);
     expect(storySource).toContain("ctx.fillText('مكة للذهب والمجوهرات'");
     expect(storySource).toContain("title: 'أسعار مكة للذهب والمجوهرات'");
     expect(storySource).toContain('الصورة بتتجهز تلقائيًا من الأسعار وإعدادات المصنعية الحالية.');
     expect(storySource).toContain('تعذر تجهيز صورة الستوري. جرّب إعادة فتح الصفحة.');
-    expect(storySource).toContain("const FACEBOOK_QR_SRC = '/facebook-page-qr.png'");
     expect(storySource).toContain("const FACEBOOK_PAGE_NAME = 'مكة للمصوغات والمجوهرات'");
+    expect(storySource).toContain("const CONTACT_ADDRESS = 'مساكن شركة المعمورة، عمارة رقم 4، محل رقم 17، المعمورة البلد'");
+    expect(storySource).toContain("const CONTACT_WHATSAPP = '+20 15 50326921'");
+    expect(storySource).toContain("const CONTACT_FACEBOOK_USERNAME = '@makkagoldalex'");
+    expect(storySource).not.toContain('FACEBOOK_QR_SRC');
+    expect(storySource).not.toContain('loadImage');
+    expect(storySource).not.toContain('drawImage');
+    expect(storySource).not.toContain('نلتزم بالشفافية والثقة');
     expect(storySource).not.toContain('@mohamedyasser2400');
   });
 

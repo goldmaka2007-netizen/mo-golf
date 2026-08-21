@@ -7,7 +7,9 @@ const BULLION_LIST = APPROVED_BULLION_UNIT_WEIGHTS.map(weight => ({ weight, labe
 const COIN_LIST = APPROVED_COIN_UNIT_WEIGHTS.map(weight => ({ weight, label: `جنيه ذهب ${weight} جم` }));
 const CUSTOMER_MSG_DEFAULT = 'نتعهد بأن هذه الاسعار الحقيقية للسوق المصري و ليس لنا علاقة باي اسعار اخري ولا يوجد خصم من سعر الشراء للسبائك و المشغولات تقديرية حسب سياسة الخصم الخاصة بكل مصنع';
 const FACEBOOK_PAGE_NAME = 'مكة للمصوغات والمجوهرات';
-const FACEBOOK_QR_SRC = '/facebook-page-qr.png';
+const CONTACT_ADDRESS = 'مساكن شركة المعمورة، عمارة رقم 4، محل رقم 17، المعمورة البلد';
+const CONTACT_WHATSAPP = '+20 15 50326921';
+const CONTACT_FACEBOOK_USERNAME = '@makkagoldalex';
 
 interface StoryData {
   p24Sell: number;
@@ -44,13 +46,6 @@ const roundedPanel = (
   ctx.stroke();
 };
 
-const loadImage = (src: string) => new Promise<HTMLImageElement>((resolve, reject) => {
-  const image = new Image();
-  image.onload = () => resolve(image);
-  image.onerror = () => reject(new Error(`Unable to load story asset: ${src}`));
-  image.src = src;
-});
-
 const wrapCenteredText = (
   ctx: CanvasRenderingContext2D,
   text: string,
@@ -82,7 +77,6 @@ const generateStoryCanvas = (
   canvas: HTMLCanvasElement,
   ctx: CanvasRenderingContext2D,
   data: StoryData,
-  facebookQr: HTMLImageElement,
 ) => {
   canvas.dir = 'ltr';
   const centerX = canvas.width / 2;
@@ -236,7 +230,6 @@ const generateStoryCanvas = (
   roundedPanel(ctx, contentX, 1448, contentWidth, 202, 26, 'rgba(201, 168, 76, 0.035)', 'rgba(201, 168, 76, 0.42)');
   ctx.fillStyle = '#d8b24f';
   ctx.font = 'bold 31px "Tajawal", sans-serif';
-  ctx.fillText('نلتزم بالشفافية والثقة', centerX, 1490);
   ctx.fillStyle = '#ddd8cc';
   ctx.font = '500 23px "Tajawal", sans-serif';
   const disclaimerLines = wrapCenteredText(ctx, data.customerMessage, centerX, 1528, 820, 33);
@@ -247,47 +240,55 @@ const generateStoryCanvas = (
 
   roundedPanel(ctx, contentX, 1670, contentWidth, 200, 26, 'rgba(7, 9, 13, 0.94)', 'rgba(201, 168, 76, 0.55)');
 
-  ctx.beginPath();
-  ctx.arc(contentX + 78, 1770, 48, 0, Math.PI * 2);
-  const fbGlow = ctx.createLinearGradient(contentX + 30, 1722, contentX + 126, 1818);
-  fbGlow.addColorStop(0, '#f0cc6b');
-  fbGlow.addColorStop(1, '#a77b24');
-  ctx.fillStyle = fbGlow;
-  ctx.fill();
-  ctx.fillStyle = '#0b0d12';
-  ctx.font = 'bold 66px Arial, sans-serif';
-  ctx.fillText('f', contentX + 78, 1794);
+  const contactRows = [
+    { label: CONTACT_ADDRESS, icon: 'location' },
+    { label: `واتساب: \u2068${CONTACT_WHATSAPP}\u2069`, icon: 'whatsapp' },
+    { label: `فيسبوك: ${FACEBOOK_PAGE_NAME}  \u2068${CONTACT_FACEBOOK_USERNAME}\u2069`, icon: 'facebook' },
+  ] as const;
+  const iconX = contentX + contentWidth - 46;
+  const textRightX = iconX - 48;
+  const rowYs = [1718, 1770, 1822];
 
-  ctx.textAlign = 'right';
-  ctx.fillStyle = '#d8b24f';
-  ctx.font = 'bold 29px "Tajawal", sans-serif';
-  ctx.fillText('تابع صفحتنا على فيسبوك', 700, 1728);
-  ctx.fillStyle = '#ddd8cc';
-  ctx.font = '500 21px "Tajawal", sans-serif';
-  ctx.fillText('اعمل لايك وتابعنا ليصلك كل جديد', 700, 1773);
-  ctx.fillStyle = '#d8b24f';
-  ctx.font = 'bold 24px "Tajawal", sans-serif';
-  ctx.fillText(FACEBOOK_PAGE_NAME, 700, 1822);
+  ctx.direction = 'rtl';
+  contactRows.forEach((row, index) => {
+    const y = rowYs[index];
+    ctx.strokeStyle = 'rgba(201, 168, 76, 0.16)';
+    ctx.lineWidth = 1;
+    if (index > 0) {
+      ctx.beginPath();
+      ctx.moveTo(contentX + 28, y - 26);
+      ctx.lineTo(contentX + contentWidth - 28, y - 26);
+      ctx.stroke();
+    }
 
-  const qrSize = 190;
-  const qrX = 790;
-  const qrY = 1675;
-  ctx.fillStyle = '#ffffff';
-  ctx.beginPath();
-  ctx.roundRect(qrX - 8, qrY - 8, qrSize + 16, qrSize + 16, 14);
-  ctx.fill();
-  ctx.drawImage(facebookQr, qrX, qrY, qrSize, qrSize);
+    ctx.strokeStyle = '#d8b24f';
+    ctx.fillStyle = 'rgba(201, 168, 76, 0.12)';
+    ctx.lineWidth = 3;
+    ctx.beginPath();
+    ctx.arc(iconX, y, 25, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.stroke();
+    ctx.fillStyle = '#d8b24f';
+    ctx.font = 'bold 22px Arial, sans-serif';
+    ctx.textAlign = 'center';
+    ctx.fillText(row.icon === 'facebook' ? 'f' : row.icon === 'whatsapp' ? 'W' : '•', iconX, y + 8);
+
+    ctx.textAlign = 'right';
+    ctx.fillStyle = '#ddd8cc';
+    ctx.font = `${index === 0 ? '500 23px' : '500 22px'} "Tajawal", sans-serif`;
+    ctx.fillText(row.label, textRightX, y + 8, textRightX - (contentX + 24));
+  });
+  ctx.direction = 'ltr';
 };
 
 const renderStoryBlob = async (data: StoryData) => {
   if ('fonts' in document) await document.fonts.ready;
-  const facebookQr = await loadImage(FACEBOOK_QR_SRC);
   const canvas = document.createElement('canvas');
   canvas.width = 1080;
   canvas.height = 1920;
   const ctx = canvas.getContext('2d');
   if (!ctx) throw new Error('Canvas is unavailable');
-  generateStoryCanvas(canvas, ctx, data, facebookQr);
+  generateStoryCanvas(canvas, ctx, data);
   const blob = await new Promise<Blob>((resolve, reject) => {
     canvas.toBlob(result => result ? resolve(result) : reject(new Error('PNG generation failed')), 'image/png', 1);
   });
