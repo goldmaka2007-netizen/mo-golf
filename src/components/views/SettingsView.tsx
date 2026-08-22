@@ -31,6 +31,7 @@ import { areOperationWritesLocked } from '../../lib/costRecalculation';
 import { buildOpeningCostConfig } from '../../lib/openingCostConfig';
 import { buildWacAuditCsv, wacAuditFilename } from '../../lib/wacAuditExcel';
 import { normalizeSmartMarginSettings, SmartMarginSettings } from '../../lib/dailyJournalSmartDashboard';
+import { normalizeStoryGoldBuySpreadEgp, parseStoryGoldBuySpreadInput, saveStoryGoldBuySpreadEgp } from '../../lib/storyPricing';
 import { downloadCsv } from '../../utils/csv';
 import { parseSettingsEntryCsv } from '../../utils/csvImport';
 import {
@@ -57,6 +58,8 @@ export const SettingsView = React.memo(() => {
     setGoldSaleTaxStampPerGramEgp,
     pricingConfig,
     setPricingConfig,
+    storyGoldBuySpreadEgp,
+    setStoryGoldBuySpreadEgp,
     smartMarginSettings,
     setSmartMarginSettings,
     costCalculationRun,
@@ -78,6 +81,10 @@ export const SettingsView = React.memo(() => {
   const [salePricingError, setSalePricingError] = useState('');
   const [salePricingSuccess, setSalePricingSuccess] = useState('');
   const [isSavingSalePricing, setIsSavingSalePricing] = useState(false);
+  const [storySpreadForm, setStorySpreadForm] = useState(() => String(normalizeStoryGoldBuySpreadEgp(storyGoldBuySpreadEgp)));
+  const [storySpreadError, setStorySpreadError] = useState('');
+  const [storySpreadSuccess, setStorySpreadSuccess] = useState('');
+  const [isSavingStorySpread, setIsSavingStorySpread] = useState(false);
   const [pricingConfigForm, setPricingConfigForm] = useState<GoldPricingConfig>(() => normalizeGoldPricingConfig(pricingConfig));
   const [smartMarginForm, setSmartMarginForm] = useState<SmartMarginSettings>(() => normalizeSmartMarginSettings(smartMarginSettings));
   const [importText, setImportText] = useState('');
@@ -93,6 +100,7 @@ export const SettingsView = React.memo(() => {
   }, [goldSaleTaxStampPerGramEgp]);
   useEffect(() => setPricingConfigForm(normalizeGoldPricingConfig(pricingConfig)), [pricingConfig]);
   useEffect(() => setSmartMarginForm(normalizeSmartMarginSettings(smartMarginSettings)), [smartMarginSettings]);
+  useEffect(() => setStorySpreadForm(String(normalizeStoryGoldBuySpreadEgp(storyGoldBuySpreadEgp))), [storyGoldBuySpreadEgp]);
 
   const sortedOpeningCostConfig = useMemo(
     () => [...openingCostConfig].sort((a, b) => Number(a.year) - Number(b.year)),
@@ -288,6 +296,29 @@ export const SettingsView = React.memo(() => {
     setSmartMarginSettings(next);
     try { await setDoc(doc(db, 'settings', user.uid), { smartMarginSettings: next }, { merge: true }); setSalePricingSuccess('تم حفظ حواجز قرار شراء الذهب.'); }
     catch { setSmartMarginSettings(previous); setSalePricingError('تعذر حفظ حواجز قرار شراء الذهب.'); }
+  };
+  const saveStorySpread = async () => {
+    setStorySpreadError('');
+    setStorySpreadSuccess('');
+    const next = parseStoryGoldBuySpreadInput(storySpreadForm);
+    if (next === null) {
+      setStorySpreadError('أدخل فرقاً صحيحاً غير سالب، ويمكن أن يكون صفرًا.');
+      return;
+    }
+    if (!user?.uid) {
+      setStorySpreadError('لا يوجد مستخدم نشط لحفظ الإعدادات.');
+      return;
+    }
+    setIsSavingStorySpread(true);
+    try {
+      await saveStoryGoldBuySpreadEgp(user.uid, next);
+      setStoryGoldBuySpreadEgp(next);
+      setStorySpreadSuccess('تم حفظ فرق شراء الستوري.');
+    } catch {
+      setStorySpreadError('تعذر حفظ فرق شراء الستوري.');
+    } finally {
+      setIsSavingStorySpread(false);
+    }
   };
   const setJewelryDefault = (key: string, mode: 'perGram' | 'perPiece', value: string) => setPricingConfigForm(previous => ({
     ...previous, saleWorkmanshipDefaults: { ...previous.saleWorkmanshipDefaults, [key]: { mode, value: Math.max(0, Number(normalizeNumerals(value)) || 0) } },
@@ -683,6 +714,25 @@ export const SettingsView = React.memo(() => {
               </form>
               {salePricingError && <div className="mt-3 rounded-2xl border border-red-500/30 bg-red-500/10 p-3 text-xs font-bold text-red-200">{salePricingError}</div>}
               {salePricingSuccess && <div className="mt-3 rounded-2xl border border-green-500/30 bg-green-500/10 p-3 text-xs font-bold text-green-300">{salePricingSuccess}</div>}
+            </div>
+
+            <div className="rounded-3xl border border-[#c9a84c]/35 bg-[#0e1018] p-6 shadow-[0_18px_45px_rgba(0,0,0,0.16)]">
+              <div className="space-y-1">
+                <h3 className="text-sm font-bold text-[#f0cc6b]">فرق شراء الستوري</h3>
+                <p className="text-[11px] leading-6 text-[#8a8172]">يُخصم من سعر بيع عيار 21 داخل الستوري فقط، ولا يغيّر سعر الشراء الرسمي في التطبيق.</p>
+              </div>
+              <div className="mt-5 flex flex-col gap-3 sm:flex-row sm:items-end">
+                <label className="flex-1 space-y-1">
+                  <span className="text-[10px] font-bold text-[#c9a84c]">الفرق بالجنيه لكل جرام (EGP)</span>
+                  <input value={storySpreadForm} onChange={event => setStorySpreadForm(normalizeNumerals(event.target.value))} inputMode="decimal" aria-label="فرق شراء الستوري" className="w-full rounded-xl border border-[#1a1e2a] bg-[#080a0f] p-3 text-sm text-[#ddd8cc] outline-none focus:border-[#c9a84c55]" />
+                </label>
+                <button type="button" onClick={saveStorySpread} disabled={isSavingStorySpread} className="flex min-h-12 items-center justify-center gap-2 rounded-xl bg-[#c9a84c] px-5 text-xs font-bold text-[#080a0f] disabled:opacity-60">
+                  {isSavingStorySpread ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
+                  حفظ فرق شراء الستوري
+                </button>
+              </div>
+              {storySpreadError && <div className="mt-3 rounded-2xl border border-red-500/30 bg-red-500/10 p-3 text-xs font-bold text-red-200">{storySpreadError}</div>}
+              {storySpreadSuccess && <div className="mt-3 rounded-2xl border border-green-500/30 bg-green-500/10 p-3 text-xs font-bold text-green-300">{storySpreadSuccess}</div>}
             </div>
 
             <div className="rounded-3xl border border-[#c9a84c]/35 bg-[#0e1018] p-6" dir="rtl">

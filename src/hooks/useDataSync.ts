@@ -9,6 +9,7 @@ import { handleFirestoreError, OperationType } from '../firebase';
 import { isAdminEmail } from '../lib/adminAccess';
 import { normalizeGoldPricingConfig, normalizeGoldSaleTaxStampPerGramEgp } from '../lib/goldPricingAssistant';
 import { normalizeSmartMarginSettings } from '../lib/dailyJournalSmartDashboard';
+import { normalizeStoryGoldBuySpreadEgp } from '../lib/storyPricing';
 
 export const useDataSync = (user: any, isAuthReady: boolean) => {
   const { 
@@ -21,6 +22,7 @@ export const useDataSync = (user: any, isAuthReady: boolean) => {
     setGoldPrice, 
     setGoldBuyPrice,
     setGoldSpread,
+    setStoryGoldBuySpreadEgp,
     setSilverPrice, 
     setSilverBuyPrice,
     setSilverSpread,
@@ -184,6 +186,7 @@ export const useDataSync = (user: any, isAuthReady: boolean) => {
         if (data.goldPrice) setGoldPrice(data.goldPrice);
         if (data.goldBuyPrice) setGoldBuyPrice(data.goldBuyPrice);
         if (data.goldSpread) setGoldSpread(data.goldSpread);
+        setStoryGoldBuySpreadEgp(normalizeStoryGoldBuySpreadEgp(data.storyGoldBuySpreadEgp));
         if (data.silverPrice) setSilverPrice(data.silverPrice);
         if (data.silverBuyPrice) setSilverBuyPrice(data.silverBuyPrice);
         if (data.silverSpread) setSilverSpread(data.silverSpread);
@@ -197,6 +200,7 @@ export const useDataSync = (user: any, isAuthReady: boolean) => {
         setGoldSaleTaxStampPerGramEgp(normalizeGoldSaleTaxStampPerGramEgp(undefined));
         setPricingConfig(normalizeGoldPricingConfig(undefined));
         setSmartMarginSettings(normalizeSmartMarginSettings(undefined));
+        setStoryGoldBuySpreadEgp(normalizeStoryGoldBuySpreadEgp(undefined));
       }
     }, (error) => {
       console.warn("Settings snapshot error:", error);

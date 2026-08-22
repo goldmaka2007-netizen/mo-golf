@@ -47,6 +47,9 @@ interface AppState {
   goldSpread: number;
   setGoldSpread: (spread: number) => void;
 
+  storyGoldBuySpreadEgp: number;
+  setStoryGoldBuySpreadEgp: (spread: number) => void;
+
   silverPrice: number;
   setSilverPrice: (price: number) => void;
 
@@ -191,6 +194,9 @@ export const useAppStore = create<AppState>()(
 
   goldSpread: 20,
   setGoldSpread: (goldSpread) => set({ goldSpread }),
+
+  storyGoldBuySpreadEgp: 20,
+  setStoryGoldBuySpreadEgp: (storyGoldBuySpreadEgp) => set({ storyGoldBuySpreadEgp }),
 
   silverPrice: 50,
   setSilverPrice: (silverPrice) => set({ silverPrice }),

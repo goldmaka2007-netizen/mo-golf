@@ -33,6 +33,10 @@ describe('StoryBuilderView contract', () => {
     expect(storySource).toContain("'كاملة'");
     expect(storySource).toContain("if (variant === 'full')");
     expect(storySource).toContain("const silverY = variant === 'full' ? 1326 : 738");
+    expect(storySource).toContain('const COMPACT_STORY_HEIGHT = 1560');
+    expect(storySource).toContain('canvas.height = variant === \'compact\' ? COMPACT_STORY_HEIGHT : FULL_STORY_HEIGHT');
+    expect(storySource).toContain('aspectRatio: variant === \'compact\'');
+    expect(storySource).toContain('object-contain');
   });
 
   it('keeps the full bullion path and adds the exact compact CTA only to compact', () => {
@@ -41,6 +45,14 @@ describe('StoryBuilderView contract', () => {
     expect(storySource).toContain('wrapCenteredText(ctx, COMPACT_CTA');
     expect(storySource).toContain("const allItems = [");
     expect(storySource).toContain("const charges = item.type === 'bullion' ? data.bullionCharges : data.coinCharges;");
+  });
+
+  it('uses the isolated Story spread for both variants without the official buy price', () => {
+    expect(storySource).toContain('calculateStoryGoldBuyPrices');
+    expect(storySource).toContain('store.storyGoldBuySpreadEgp');
+    expect(storySource).not.toContain('store.goldBuyPrice');
+    expect(storySource).toContain('canvas.width = STORY_WIDTH');
+    expect(storySource).toContain('canvas.height = variant === \'compact\' ? COMPACT_STORY_HEIGHT : FULL_STORY_HEIGHT');
   });
 
   it('keeps the approved Arabic copy and renders the current contact footer without QR code', () => {

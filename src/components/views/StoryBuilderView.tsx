@@ -2,6 +2,11 @@ import React, { useEffect, useMemo, useState } from 'react';
 import { Download, Image as ImageIcon, Share2 } from 'lucide-react';
 import { useAppStore } from '../../store';
 import { APPROVED_BULLION_UNIT_WEIGHTS, APPROVED_COIN_UNIT_WEIGHTS, workmanshipForUnitWeight } from '../../lib/goldPricingAssistant';
+import { calculateStoryGoldBuyPrices } from '../../lib/storyPricing';
+
+const STORY_WIDTH = 1080;
+const FULL_STORY_HEIGHT = 1920;
+const COMPACT_STORY_HEIGHT = 1560;
 
 const BULLION_LIST = APPROVED_BULLION_UNIT_WEIGHTS.map(weight => ({ weight, label: `${weight} جم` }));
 const COIN_LIST = APPROVED_COIN_UNIT_WEIGHTS.map(weight => ({ weight, label: `جنيه ذهب ${weight} جم` }));
@@ -381,8 +386,8 @@ const generateStoryCanvas = (
 const renderStoryBlob = async (data: StoryData, variant: StoryVariant) => {
   if ('fonts' in document) await document.fonts.ready;
   const canvas = document.createElement('canvas');
-  canvas.width = 1080;
-  canvas.height = 1920;
+  canvas.width = STORY_WIDTH;
+  canvas.height = variant === 'compact' ? COMPACT_STORY_HEIGHT : FULL_STORY_HEIGHT;
   const ctx = canvas.getContext('2d');
   if (!ctx) throw new Error('Canvas is unavailable');
   generateStoryCanvas(canvas, ctx, data, variant);
@@ -413,9 +418,7 @@ export const StoryBuilderView = () => {
   const p21Sell = store.goldPrice || 3500;
   const p24Sell = Math.round((p21Sell / 21) * 24);
   const p18Sell = Math.round((p21Sell / 21) * 18);
-  const p21Buy = store.goldBuyPrice || (p21Sell - 20);
-  const p24Buy = Math.round((p21Buy / 21) * 24);
-  const p18Buy = Math.round((p21Buy / 21) * 18);
+  const { p21Buy, p24Buy, p18Buy } = calculateStoryGoldBuyPrices(p21Sell, store.storyGoldBuySpreadEgp);
   const silverSwissSell = store.silverPrice || 50;
   const silverSwissBuy = store.silverBuyPrice || 48;
 
@@ -564,9 +567,12 @@ export const StoryBuilderView = () => {
         </div>
 
         <div className="mx-auto w-full max-w-[430px] overflow-hidden rounded-[28px] border border-[#c9a84c22] bg-[#07090d] p-2 shadow-[0_24px_60px_rgba(0,0,0,0.45)]">
-          <div className="aspect-[9/16] overflow-hidden rounded-[22px] bg-[#05070a]">
+          <div
+            className="overflow-hidden rounded-[22px] bg-[#05070a]"
+            style={{ aspectRatio: variant === 'compact' ? `${STORY_WIDTH} / ${COMPACT_STORY_HEIGHT}` : `${STORY_WIDTH} / ${FULL_STORY_HEIGHT}` }}
+          >
             {previewUrl ? (
-              <img src={previewUrl} alt="معاينة ستوري أسعار مكة" className="h-full w-full object-cover" />
+              <img src={previewUrl} alt="معاينة ستوري أسعار مكة" className="h-full w-full object-contain" />
             ) : (
               <div className="flex h-full w-full flex-col items-center justify-center gap-3 text-[#8a8578]">
                 <div className="h-8 w-8 animate-spin rounded-full border-2 border-[#c9a84c] border-t-transparent" />
