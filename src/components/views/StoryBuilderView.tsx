@@ -10,6 +10,9 @@ const FACEBOOK_PAGE_NAME = 'مكة للمصوغات والمجوهرات';
 const CONTACT_ADDRESS = 'مساكن شركة المعمورة، عمارة رقم 4، محل رقم 17، المعمورة البلد';
 const CONTACT_WHATSAPP = '+20 15 50326921';
 const CONTACT_FACEBOOK_USERNAME = '@makkagoldalex';
+const COMPACT_CTA = 'لأحدث أسعار السبائك والجنيهات وقت الطلب، ابعتلنا رسالة على واتساب أو فيسبوك';
+
+export type StoryVariant = 'compact' | 'full';
 
 interface StoryData {
   p24Sell: number;
@@ -151,6 +154,7 @@ const generateStoryCanvas = (
   canvas: HTMLCanvasElement,
   ctx: CanvasRenderingContext2D,
   data: StoryData,
+  variant: StoryVariant,
 ) => {
   canvas.dir = 'ltr';
   const centerX = canvas.width / 2;
@@ -248,75 +252,88 @@ const generateStoryCanvas = (
     ctx.fillText(karat.label, contentX + (colWidth * 2.5), y - 1);
   });
 
-  roundedPanel(ctx, contentX, 738, contentWidth, 570, 28);
-  ctx.fillStyle = '#d8b24f';
-  ctx.font = 'bold 38px "Tajawal", sans-serif';
-  ctx.fillText('السبائك والجنيهات', centerX, 790);
-
-  const allItems = [
-    ...BULLION_LIST.map(item => ({ label: `سبيكة ${item.label}`, weight: item.weight, type: 'bullion' as const })),
-    ...COIN_LIST.map(item => ({ label: item.label, weight: item.weight, type: 'coin' as const })),
-  ];
-  const halfWidth = contentWidth / 2;
-  const listTop = 818;
-  const rowHeight = 76;
-
-  ctx.strokeStyle = 'rgba(201, 168, 76, 0.18)';
-  ctx.lineWidth = 1.25;
-  ctx.beginPath();
-  ctx.moveTo(centerX, listTop); ctx.lineTo(centerX, listTop + (rowHeight * 6));
-  for (let row = 0; row <= 6; row += 1) {
-    ctx.moveTo(contentX, listTop + (rowHeight * row));
-    ctx.lineTo(contentX + contentWidth, listTop + (rowHeight * row));
-  }
-  ctx.stroke();
-
-  allItems.forEach((item, index) => {
-    const row = Math.floor(index / 2);
-    const isRight = index % 2 === 0;
-    const left = isRight ? centerX : contentX;
-    const right = left + halfWidth;
-    const charges = item.type === 'bullion' ? data.bullionCharges : data.coinCharges;
-    const basePrice = item.type === 'bullion' ? data.p24Sell : data.p21Sell;
-    const charge = charges[item.weight] || 0;
-    const finalPrice = formatPrice(item.weight * (basePrice + charge));
-    const y = listTop + 49 + (row * rowHeight);
-
-    ctx.textAlign = 'right';
-    ctx.fillStyle = '#ddd8cc';
-    ctx.font = '600 25px "Tajawal", sans-serif';
-    ctx.fillText(item.label, right - 24, y);
-    ctx.textAlign = 'left';
+  if (variant === 'full') {
+    roundedPanel(ctx, contentX, 738, contentWidth, 570, 28);
     ctx.fillStyle = '#d8b24f';
-    ctx.font = 'bold 31px "JetBrains Mono", monospace';
-    ctx.fillText(finalPrice.toLocaleString(), left + 24, y + 1);
-  });
+    ctx.font = 'bold 38px "Tajawal", sans-serif';
+    ctx.fillText('السبائك والجنيهات', centerX, 790);
+
+    const allItems = [
+      ...BULLION_LIST.map(item => ({ label: `سبيكة ${item.label}`, weight: item.weight, type: 'bullion' as const })),
+      ...COIN_LIST.map(item => ({ label: item.label, weight: item.weight, type: 'coin' as const })),
+    ];
+    const halfWidth = contentWidth / 2;
+    const listTop = 818;
+    const rowHeight = 76;
+
+    ctx.strokeStyle = 'rgba(201, 168, 76, 0.18)';
+    ctx.lineWidth = 1.25;
+    ctx.beginPath();
+    ctx.moveTo(centerX, listTop); ctx.lineTo(centerX, listTop + (rowHeight * 6));
+    for (let row = 0; row <= 6; row += 1) {
+      ctx.moveTo(contentX, listTop + (rowHeight * row));
+      ctx.lineTo(contentX + contentWidth, listTop + (rowHeight * row));
+    }
+    ctx.stroke();
+
+    allItems.forEach((item, index) => {
+      const row = Math.floor(index / 2);
+      const isRight = index % 2 === 0;
+      const left = isRight ? centerX : contentX;
+      const right = left + halfWidth;
+      const charges = item.type === 'bullion' ? data.bullionCharges : data.coinCharges;
+      const basePrice = item.type === 'bullion' ? data.p24Sell : data.p21Sell;
+      const charge = charges[item.weight] || 0;
+      const finalPrice = formatPrice(item.weight * (basePrice + charge));
+      const y = listTop + 49 + (row * rowHeight);
+
+      ctx.textAlign = 'right';
+      ctx.fillStyle = '#ddd8cc';
+      ctx.font = '600 25px "Tajawal", sans-serif';
+      ctx.fillText(item.label, right - 24, y);
+      ctx.textAlign = 'left';
+      ctx.fillStyle = '#d8b24f';
+      ctx.font = 'bold 31px "JetBrains Mono", monospace';
+      ctx.fillText(finalPrice.toLocaleString(), left + 24, y + 1);
+    });
+  }
 
   ctx.textAlign = 'center';
-  roundedPanel(ctx, contentX, 1326, contentWidth, 100, 24, 'rgba(9, 12, 16, 0.92)', 'rgba(106, 138, 158, 0.45)');
+  const silverY = variant === 'full' ? 1326 : 738;
+  roundedPanel(ctx, contentX, silverY, contentWidth, 100, 24, 'rgba(9, 12, 16, 0.92)', 'rgba(106, 138, 158, 0.45)');
   ctx.fillStyle = '#8ea8b8';
   ctx.font = 'bold 29px "Tajawal", sans-serif';
-  ctx.fillText('الفضة — شراء / بيع', centerX + 210, 1367);
+  ctx.fillText('الفضة — شراء / بيع', centerX + 210, silverY + 41);
   ctx.fillStyle = '#f0eee9';
   ctx.font = 'bold 38px "JetBrains Mono", monospace';
-  ctx.fillText(`${data.silverSwissBuy.toLocaleString()} / ${data.silverSwissSell.toLocaleString()}`, centerX - 170, 1371);
+  ctx.fillText(`${data.silverSwissBuy.toLocaleString()} / ${data.silverSwissSell.toLocaleString()}`, centerX - 170, silverY + 45);
 
-  roundedPanel(ctx, contentX, 1448, contentWidth, 202, 26, 'rgba(201, 168, 76, 0.035)', 'rgba(201, 168, 76, 0.42)');
+  if (variant === 'compact') {
+    roundedPanel(ctx, contentX, 862, contentWidth, 148, 26, 'rgba(201, 168, 76, 0.08)', 'rgba(201, 168, 76, 0.48)');
+    ctx.fillStyle = '#d8b24f';
+    ctx.font = 'bold 27px "Tajawal", sans-serif';
+    wrapCenteredText(ctx, COMPACT_CTA, centerX, 920, 820, 38);
+  }
+
+  const disclaimerY = variant === 'full' ? 1448 : 1040;
+  roundedPanel(ctx, contentX, disclaimerY, contentWidth, 202, 26, 'rgba(201, 168, 76, 0.035)', 'rgba(201, 168, 76, 0.42)');
   ctx.fillStyle = '#d8b24f';
   ctx.font = 'bold 31px "Tajawal", sans-serif';
   ctx.fillStyle = '#ddd8cc';
   ctx.font = '500 23px "Tajawal", sans-serif';
-  const disclaimerLines = wrapCenteredText(ctx, data.customerMessage, centerX, 1528, 820, 33);
-  const noteY = Math.min(1636, 1528 + (disclaimerLines * 33) + 12);
+  const disclaimerTextY = disclaimerY + 80;
+  const disclaimerLines = wrapCenteredText(ctx, data.customerMessage, centerX, disclaimerTextY, 820, 33);
+  const noteY = Math.min(disclaimerY + 188, disclaimerTextY + (disclaimerLines * 33) + 12);
   ctx.fillStyle = '#b99847';
   ctx.font = 'bold 21px "Tajawal", sans-serif';
   ctx.fillText('الأسعار استرشادية وتتحدد بدقة عند التنفيذ الفعلي', centerX, noteY);
 
-  roundedPanel(ctx, contentX, 1670, contentWidth, 200, 26, 'rgba(7, 9, 13, 0.94)', 'rgba(201, 168, 76, 0.55)');
+  const footerY = variant === 'full' ? 1670 : 1264;
+  roundedPanel(ctx, contentX, footerY, contentWidth, 200, 26, 'rgba(7, 9, 13, 0.94)', 'rgba(201, 168, 76, 0.55)');
 
   const iconX = contentX + contentWidth - 46;
   const textRightX = iconX - 48;
-  const rowYs = [1718, 1770, 1822];
+  const rowYs = [footerY + 48, footerY + 100, footerY + 152];
   const contactRows: ContactIcon[] = ['location', 'whatsapp', 'facebook'];
 
   ctx.direction = 'rtl';
@@ -361,28 +378,28 @@ const generateStoryCanvas = (
   ctx.direction = 'ltr';
 };
 
-const renderStoryBlob = async (data: StoryData) => {
+const renderStoryBlob = async (data: StoryData, variant: StoryVariant) => {
   if ('fonts' in document) await document.fonts.ready;
   const canvas = document.createElement('canvas');
   canvas.width = 1080;
   canvas.height = 1920;
   const ctx = canvas.getContext('2d');
   if (!ctx) throw new Error('Canvas is unavailable');
-  generateStoryCanvas(canvas, ctx, data);
+  generateStoryCanvas(canvas, ctx, data, variant);
   const blob = await new Promise<Blob>((resolve, reject) => {
     canvas.toBlob(result => result ? resolve(result) : reject(new Error('PNG generation failed')), 'image/png', 1);
   });
   return blob;
 };
 
-const storyFilename = () => {
+const storyFilename = (variant: StoryVariant) => {
   const now = new Date();
   const localDate = [
     now.getFullYear(),
     String(now.getMonth() + 1).padStart(2, '0'),
     String(now.getDate()).padStart(2, '0'),
   ].join('-');
-  return `makka-prices-${localDate}.png`;
+  return variant === 'compact' ? `makka-prices-compact-${localDate}.png` : `makka-prices-${localDate}.png`;
 };
 
 export const StoryBuilderView = () => {
@@ -391,6 +408,7 @@ export const StoryBuilderView = () => {
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
   const [isProcessing, setIsProcessing] = useState(true);
   const [error, setError] = useState('');
+  const [variant, setVariant] = useState<StoryVariant>('compact');
 
   const p21Sell = store.goldPrice || 3500;
   const p24Sell = Math.round((p21Sell / 21) * 24);
@@ -405,6 +423,7 @@ export const StoryBuilderView = () => {
     BULLION_LIST.map(item => [
       item.weight,
       workmanshipForUnitWeight(store.pricingConfig.bullionWorkmanshipByWeight[String(item.weight)], item.weight)?.perGram
+        // Legacy fallback values are readOnly display data; pricingConfig remains authoritative.
         ?? store.bullionCharges?.[item.weight]
         ?? 0,
     ]),
@@ -414,6 +433,7 @@ export const StoryBuilderView = () => {
     COIN_LIST.map(item => [
       item.weight,
       workmanshipForUnitWeight(store.pricingConfig.coinWorkmanshipByWeight[String(item.weight)], item.weight)?.perGram
+        // Legacy fallback values are readOnly display data; pricingConfig remains authoritative.
         ?? store.coinCharges?.[item.weight]
         ?? 0,
     ]),
@@ -450,7 +470,7 @@ export const StoryBuilderView = () => {
     setError('');
     setStoryBlob(null);
 
-    renderStoryBlob(storyData)
+    renderStoryBlob(storyData, variant)
       .then(blob => {
         if (!cancelled) setStoryBlob(blob);
       })
@@ -463,7 +483,7 @@ export const StoryBuilderView = () => {
       });
 
     return () => { cancelled = true; };
-  }, [storyData]);
+  }, [storyData, variant]);
 
   useEffect(() => {
     if (!storyBlob) {
@@ -480,7 +500,7 @@ export const StoryBuilderView = () => {
     const url = URL.createObjectURL(storyBlob);
     const anchor = document.createElement('a');
     anchor.href = url;
-    anchor.download = storyFilename();
+    anchor.download = storyFilename(variant);
     document.body.appendChild(anchor);
     anchor.click();
     anchor.remove();
@@ -489,7 +509,7 @@ export const StoryBuilderView = () => {
 
   const handleShare = async () => {
     if (!storyBlob || isProcessing) return;
-    const file = new File([storyBlob], storyFilename(), { type: 'image/png' });
+    const file = new File([storyBlob], storyFilename(variant), { type: 'image/png' });
     let canNativeShare = typeof navigator.share === 'function';
     if (canNativeShare && typeof navigator.canShare === 'function') {
       try {
@@ -527,6 +547,20 @@ export const StoryBuilderView = () => {
           <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl border border-[#c9a84c22] bg-[#c9a84c0d]">
             <ImageIcon className="h-5 w-5 text-[#c9a84c]" />
           </div>
+        </div>
+
+        <div className="mx-auto mb-5 flex w-full max-w-[430px] rounded-2xl border border-[#c9a84c33] bg-[#07090d] p-1" role="group" aria-label="نوع الستوري">
+          {(['compact', 'full'] as const).map(option => (
+            <button
+              key={option}
+              type="button"
+              onClick={() => setVariant(option)}
+              aria-pressed={variant === option}
+              className={`min-h-11 flex-1 rounded-xl px-3 text-sm font-bold transition ${variant === option ? 'bg-[#c9a84c] text-[#080a0f]' : 'text-[#aaa394] hover:bg-white/5'}`}
+            >
+              {option === 'compact' ? 'بدون سبائك وجنيهات' : 'كاملة'}
+            </button>
+          ))}
         </div>
 
         <div className="mx-auto w-full max-w-[430px] overflow-hidden rounded-[28px] border border-[#c9a84c22] bg-[#07090d] p-2 shadow-[0_24px_60px_rgba(0,0,0,0.45)]">

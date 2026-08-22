@@ -22,7 +22,25 @@ describe('StoryBuilderView contract', () => {
     expect(storySource).toContain('navigator.canShare');
     expect(storySource).toContain('navigator.share');
     expect(storySource).toContain('saveStoryImage();');
-    expect(storySource).toContain("return `makka-prices-${localDate}.png`");
+    expect(storySource).toContain("`makka-prices-compact-${localDate}.png`");
+    expect(storySource).toContain("`makka-prices-${localDate}.png`");
+  });
+
+  it('supports compact and full variants with compact selected by default', () => {
+    expect(storySource).toContain("export type StoryVariant = 'compact' | 'full'");
+    expect(storySource).toContain("useState<StoryVariant>('compact')");
+    expect(storySource).toContain("'بدون سبائك وجنيهات'");
+    expect(storySource).toContain("'كاملة'");
+    expect(storySource).toContain("if (variant === 'full')");
+    expect(storySource).toContain("const silverY = variant === 'full' ? 1326 : 738");
+  });
+
+  it('keeps the full bullion path and adds the exact compact CTA only to compact', () => {
+    expect(storySource).toContain("const COMPACT_CTA = 'لأحدث أسعار السبائك والجنيهات وقت الطلب، ابعتلنا رسالة على واتساب أو فيسبوك'");
+    expect(storySource).toContain("if (variant === 'compact')");
+    expect(storySource).toContain('wrapCenteredText(ctx, COMPACT_CTA');
+    expect(storySource).toContain("const allItems = [");
+    expect(storySource).toContain("const charges = item.type === 'bullion' ? data.bullionCharges : data.coinCharges;");
   });
 
   it('keeps the approved Arabic copy and renders the current contact footer without QR code', () => {
