@@ -1,17 +1,43 @@
 # Current Project State
 
-Last reviewed: 2026-08-20
+Last reviewed: 2026-08-22
 
 ## Production baseline
 
 - Repository: `goldmaka2007-netizen/mo-golf`
 - Production: https://makka-central-accounting.web.app
 - Firebase project: `makka-central-accounting`
-- Latest deployed application commit: `cabe6a3`
-- Latest production asset: `/assets/index-DBvzrIuJ.js`
-- Asset SHA-256: `3888888fa7458c49af2e83cd46fe2dce3214e16e0462e61607464d91b571f5a9`
+- Latest deployed application commit: `871cb25c095db451e520f651faabf5d2306ea75b`
+- Latest production asset: `/assets/index-DIwdEjnc.js`
 - Deployment scope: Firebase Hosting only.
 - Firestore Data/Rules/Indexes, Functions, Storage, Auth and Golden Baseline were not changed by this release.
+
+## Latest production change — Story Builder Compact Variant
+
+- The deployed Story Builder now supports two variants in the same preview: Compact `بدون سبائك وجنيهات` (DEFAULT) and Full `كاملة` (still available for private sharing).
+- Compact removes the bullion/coin price table and reflows the remaining Story layout upward while preserving the 1080×1920 format, disclaimer, and contact footer.
+- Compact CTA: `لأحدث أسعار السبائك والجنيهات وقت الطلب، ابعتلنا رسالة على واتساب أو فيسبوك`.
+- Share and Save operate on the currently selected variant; Compact uses a distinct filename while the existing Full filename remains unchanged.
+- Full Story preserves the prior bullion/coin rendering path and current pricing presentation.
+- `pricingConfig` remains the shared Story pricing source with only the existing legacy read-only fallbacks.
+
+### Validation and deployment evidence
+
+- Story contract: 6/6 passed.
+- Typecheck: passed.
+- Balance Contract Guard: passed.
+- Production build: passed.
+- `git diff --check`: passed.
+- The full `npm` suite remains non-green on six PRE-EXISTING accounting/Golden failures: five historically documented failures plus the known pre-existing Financial Position expectation mismatch. `ENOSPC` also occurred during some suites.
+- Golden Baseline was not changed.
+- Firebase project: `makka-central-accounting`.
+- Hosting-only deployment was completed; no redeploy is part of this documentation sync.
+- Production URL: https://makka-central-accounting.web.app
+- Existing release verification reported root and asset HTTP 200, working selector/preview, no console errors, and a deployed asset containing the Compact CTA.
+
+### Protected accounting/data invariants
+
+This release did not change Firestore data/rules/indexes, Posting Matrix, WAC, COGS, Balance Engine, Entry save contract, Golden Baseline, historical data, or `pricingConfig` business logic.
 
 ## Latest production change — Story Builder contact footer
 
