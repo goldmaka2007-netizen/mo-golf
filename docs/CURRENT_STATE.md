@@ -1,16 +1,42 @@
 # Current Project State
 
-Last reviewed: 2026-08-22
+Last reviewed: 2026-08-23
 
 ## Production baseline
 
 - Repository: `goldmaka2007-netizen/mo-golf`
 - Production: https://makka-central-accounting.web.app
 - Firebase project: `makka-central-accounting`
-- Latest deployed application commit: `871cb25c095db451e520f651faabf5d2306ea75b`
-- Latest production asset: `/assets/index-DIwdEjnc.js`
+- Latest deployed application commit: `1be587d3aa22196e9d1d544459693e5a69ddfd5b`
+- Latest production asset: `/assets/index-DAyu4V22.js`
 - Deployment scope: Firebase Hosting only.
 - Firestore Data/Rules/Indexes, Functions, Storage, Auth and Golden Baseline were not changed by this release.
+
+## Latest production change — Story Compact Crop and Story-only Buy Spread
+
+- Compact Story now renders directly at `1080×1560`, with the bottom frame/corners and a comfortable margin below the contact footer; Full remains exactly `1080×1920`.
+- Compact and Full previews use their actual variant aspect ratios with `object-contain`, so the generated image is not cropped.
+- Story Builder now has the independent settings field `settings/{uid}.storyGoldBuySpreadEgp`, defaulting to `20` EGP/gram when absent or invalid.
+- The Story-only spread accepts finite non-negative values including `0`, applies to both Compact and Full, and is saved only after explicit Settings Save with merge semantics. No migration or backfill occurred.
+- Story 21K buy is `max(0, Story 21K sell - storyGoldBuySpreadEgp)`; 24K and 18K buys derive from that 21K buy by the existing karat ratios.
+- The Story-only setting does not change global `goldSpread`, global `goldBuyPrice`, official metal-price saving, operations, accounting, inventory, WAC, COGS, or reports.
+
+### Validation and deployment evidence
+
+- Story and Story-pricing/settings focused tests: 17/17 passed.
+- Typecheck: passed.
+- Balance Contract Guard: passed.
+- Production build: passed.
+- `git diff --check`: passed.
+- Example verified: sell 21K `6600` with Story spread `30` produces Story buy 21K `6570`; 24K/18K derive from that value.
+- Firebase project: `makka-central-accounting`.
+- Hosting-only deployment released application commit `1be587d3aa22196e9d1d544459693e5a69ddfd5b` at https://makka-central-accounting.web.app.
+- Live root and asset returned HTTP 200; the deployed asset contains the Compact CTA, Compact/Full labels, `storyGoldBuySpreadEgp`, Settings label, 1560/1920 heights, and `object-contain`.
+- Browser visual smoke was not completed because the browser runtime could not start after an OS disk-space error; no production setting was changed.
+
+### Protected accounting/data invariants
+
+This release did not change Firestore rules/indexes/functions or production data, Posting Matrix, WAC, COGS, Balance Engine, Entry save contract/schema, Golden Baseline, historical data, `pricingConfig` business logic, global gold spread semantics, or global gold buy price semantics.
 
 ## Latest production change — Story Builder Compact Variant
 
