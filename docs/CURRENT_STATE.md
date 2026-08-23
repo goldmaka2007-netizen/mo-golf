@@ -10,6 +10,7 @@ Last reviewed: 2026-08-23
 - Latest deployed application commit: `1be587d3aa22196e9d1d544459693e5a69ddfd5b`
 - Latest production asset: `/assets/index-DAyu4V22.js`
 - Deployment scope: Firebase Hosting only.
+- Final release status: COMPLETED / PRODUCTION OWNER ACCEPTED / CROSS-SYSTEM VERIFIED.
 - Firestore Data/Rules/Indexes, Functions, Storage, Auth and Golden Baseline were not changed by this release.
 
 ## Latest production change — Story Compact Crop and Story-only Buy Spread
@@ -32,7 +33,10 @@ Last reviewed: 2026-08-23
 - Firebase project: `makka-central-accounting`.
 - Hosting-only deployment released application commit `1be587d3aa22196e9d1d544459693e5a69ddfd5b` at https://makka-central-accounting.web.app.
 - Live root and asset returned HTTP 200; the deployed asset contains the Compact CTA, Compact/Full labels, `storyGoldBuySpreadEgp`, Settings label, 1560/1920 heights, and `object-contain`.
-- Browser visual smoke was not completed because the browser runtime could not start after an OS disk-space error; no production setting was changed.
+- Automated browser visual smoke was unavailable because the execution browser runtime hit an OS disk-space error. This gap was closed by direct owner Production acceptance on the real iPhone PWA on 2026-08-23.
+- Owner screenshots confirmed the Settings field visibly saved as `40` EGP/g and the live Compact Story showed 21K sell `6600` / buy `6560`, proving the Story-only spread was applied. The 24K buy `7497` and 18K buy `5623` matched derivation from the 21K buy by karat ratio.
+- The live Compact preview was visually accepted with the lower empty area removed, the full footer and bottom frame/corners visible, and no clipping/cropping observed.
+- Owner acceptance receipt: `docs/STORY_COMPACT_OWNER_ACCEPTANCE_2026-08-23.md`.
 
 ### Protected accounting/data invariants
 
