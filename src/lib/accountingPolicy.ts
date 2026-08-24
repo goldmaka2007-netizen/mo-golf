@@ -1,8 +1,9 @@
 import type { Account, Entry } from '../types';
-import { resolveOperationKind } from './engine';
+import { resolveMerchantMetalOperationSemantic, resolveOperationKind } from './engine';
+import { AL_SAFI_TRANSFER_HUB_ACCOUNT_ID } from './merchantGoldLiability';
 
 export interface AccountingPolicyIssue {
-  code: 'finished_gold_direct_purchase' | 'trader_invoice_price_missing' | 'invalid_account_dimension';
+  code: 'finished_gold_direct_purchase' | 'trader_invoice_price_missing' | 'merchant_transfer_invoice_price_missing' | 'invalid_account_dimension';
   message: string;
 }
 
@@ -42,6 +43,16 @@ export const validateAccountingPolicy = (entry: Partial<Entry>, accounts: Accoun
 
   if (traderReceipt && (!(Number(entry.marketPrice) > 0) || !Number.isFinite(Number(entry.marketPrice)))) {
     issues.push({ code: 'trader_invoice_price_missing', message: 'فاتورة التاجر تحتاج سعر الذهب المثبت في الفاتورة.' });
+  }
+
+  const merchantSemantic = resolveMerchantMetalOperationSemantic(entry as Entry, debit, credit);
+  const alSafiMerchantTransfer = merchantSemantic.kind === 'merchant_transfer'
+    && merchantSemantic.metal === 'gold'
+    && (debit.id === AL_SAFI_TRANSFER_HUB_ACCOUNT_ID || credit.id === AL_SAFI_TRANSFER_HUB_ACCOUNT_ID);
+  const hasImmutableTransactionPrice = [entry.invoiceOfficialPricePerGramEgp, entry.marketPrice]
+    .some(value => Number.isFinite(Number(value)) && Number(value) > 0);
+  if (alSafiMerchantTransfer && !hasImmutableTransactionPrice) {
+    issues.push({ code: 'merchant_transfer_invoice_price_missing', message: 'Al-Safi transfer requires the immutable invoice price for the same operation.' });
   }
 
   const dimensions: Array<'cash' | 'gold' | 'silver' | 'quantity'> = [];

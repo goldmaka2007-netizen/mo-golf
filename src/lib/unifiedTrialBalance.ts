@@ -1,11 +1,12 @@
 import type { Account, CanonicalAccountDefinition, Entry } from '../types';
-import { BALANCE_ENGINE_VERSION } from './engine';
+import { BALANCE_ENGINE_VERSION, getEntryArabicWeight } from './engine';
 import { arabicAccountLabel } from './accountLabels';
 import { buildLegacyLedgerLegs, type LegacyLedgerDimension, type LegacyLedgerLeg } from './legacyLedger';
 import type { InventoryCostTimeline } from './inventoryCostTypes';
 import { deriveUnitPrice } from './financialStatementsEgp';
 import { buildMerchantMetalPositionTimeline } from './merchantGoldLiability';
 import { applyRuntimeAccountOverride } from './runtimeAccountOverrides';
+import { isSupportedGoldKarat } from './goldEquivalent';
 
 export interface UnifiedTrialDimension {
   debit: number;
@@ -50,6 +51,39 @@ const amounts = (legs: LegacyLedgerLeg[], normal: 'debit' | 'credit'): UnifiedTr
   balance: signedBalance(legs, normal),
 });
 
+const isGoldInventoryAccount = (account: LegacyLedgerLeg['account']['sourceAccount']): boolean => !!account
+  && account.is_inventory === true
+  && (account.metal === 'gold' || ['gold_product', 'gold_raw', 'gold_direct'].includes(account.type ?? ''));
+
+const canonicalGoldQuantityByOperation = (legs: LegacyLedgerLeg[]): Map<string, number> => {
+  const byOperation = new Map<string, LegacyLedgerLeg[]>();
+  legs.filter(leg => leg.dimension === 'gold' && leg.origin === 'historical').forEach(leg => {
+    byOperation.set(leg.sourceEntryId, [...(byOperation.get(leg.sourceEntryId) ?? []), leg]);
+  });
+
+  const quantities = new Map<string, number>();
+  byOperation.forEach((operationLegs, operationId) => {
+    const entry = operationLegs[0].entry;
+    let resolverAccount: LegacyLedgerLeg['account']['sourceAccount'];
+    if (!isSupportedGoldKarat(entry.karat)) {
+      const inventoryAccounts = operationLegs
+        .map(leg => leg.account.sourceAccount)
+        .filter(isGoldInventoryAccount);
+      const karats = [...new Set(inventoryAccounts
+        .map(account => account?.karat)
+        .filter(isSupportedGoldKarat))];
+      if (karats.length === 1) resolverAccount = inventoryAccounts.find(account => account?.karat === karats[0]);
+    }
+
+    const fallbackQuantity = operationLegs[0].amount;
+    const quantity = isSupportedGoldKarat(entry.karat) || resolverAccount
+      ? getEntryArabicWeight(entry, isSupportedGoldKarat(entry.karat) ? undefined : resolverAccount)
+      : fallbackQuantity;
+    quantities.set(operationId, quantity);
+  });
+  return quantities;
+};
+
 export const buildUnifiedTrialBalance = (
   entries: Entry[],
   accounts: Account[],
@@ -57,10 +91,16 @@ export const buildUnifiedTrialBalance = (
   endDate: string,
   options: UnifiedTrialBalanceOptions = {},
 ): UnifiedTrialBalanceReport => {
-  const projected = buildLegacyLedgerLegs(entries.filter(entry => entry.date <= endDate), accounts, options.canonicalDefinitions, {
+  const rawProjected = buildLegacyLedgerLegs(entries.filter(entry => entry.date <= endDate), accounts, options.canonicalDefinitions, {
     enableFinancialProjection: true,
     costTimeline: options.timeline,
   });
+  // Reporting-only correction: resolve one E21 quantity per operation and
+  // apply it symmetrically to every historical gold leg of that operation.
+  const canonicalGoldQuantities = canonicalGoldQuantityByOperation(rawProjected);
+  const projected = rawProjected.map(leg => leg.dimension === 'gold' && leg.origin === 'historical'
+    ? { ...leg, amount: canonicalGoldQuantities.get(leg.sourceEntryId) ?? leg.amount }
+    : leg);
   const included = projected.filter(leg => leg.date < startDate || leg.date <= endDate);
   const merchantTimeline = buildMerchantMetalPositionTimeline(
     entries.filter(entry => entry.date <= endDate),

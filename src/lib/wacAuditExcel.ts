@@ -1,6 +1,7 @@
 import type { Account, Entry } from '../types';
 import { buildMerchantMetalPositionTimeline, type MerchantGoldLiabilityState } from './merchantGoldLiability';
 import type { InventoryCostState, InventoryCostTimeline, Phase5OpeningCostConfig } from './inventoryCostTypes';
+import { applyRuntimeAccountOverride } from './runtimeAccountOverrides';
 
 const GRAM_SCALE = 100;
 const EGP_SCALE = 100;
@@ -249,8 +250,9 @@ const addSheet = (output: ExcelRow[], name: string, rows: ExcelRow[], metadata: 
 
 /** Builds only derived workbook bytes; no Firestore write and no accounting mutation. */
 export const buildWacAuditCsv = (input: WacAuditWorkbookInput): WacAuditCsv => {
-  const accountsById = new Map(input.accounts.flatMap(account => account.id ? [[account.id, account] as const] : []));
-  const merchantTimeline = buildMerchantMetalPositionTimeline(input.entries, input.accounts, input.inventoryTimeline);
+  const normalizedAccounts = input.accounts.map(applyRuntimeAccountOverride);
+  const accountsById = new Map(normalizedAccounts.flatMap(account => account.id ? [[account.id, account] as const] : []));
+  const merchantTimeline = buildMerchantMetalPositionTimeline(input.entries, normalizedAccounts, input.inventoryTimeline);
   const rows: ExcelRow[] = [];
   const exportedAt = input.exportedAt ?? new Date();
   addSheet(rows, 'ملخص WAC', summaryRows(input, merchantTimeline, accountsById), [

@@ -7,6 +7,7 @@ const accounts: Account[] = [
   { id: 'finished', name: '????', mainType: '????', subType: '????? ???', balanceNature: '???? ???', type: 'gold_product', metal: 'gold', is_inventory: true, userId: 'u' },
   { id: 'scrap', name: '??? ????', mainType: '????', subType: '????? ???', balanceNature: '???? ???', type: 'gold_raw', metal: 'gold', is_inventory: true, userId: 'u' },
   { id: 'merchant', name: '????', mainType: '????', subType: '???? ???', balanceNature: '???? ???', type: 'merchant', metal: 'gold', is_inventory: false, userId: 'u' },
+  { id: '3zGclNk6qdAuNxM6y5iP', name: 'Al-Safi', mainType: '????', subType: '???? ???', balanceNature: '???? ???', type: 'merchant', metal: 'gold', is_inventory: false, userId: 'u' },
 ];
 
 const entry = (values: Partial<Entry>): Partial<Entry> => ({
@@ -58,6 +59,19 @@ describe('invoice accounting policy', () => {
       weight: '0.43', arabicWeight: '0.37', karat: 18, marketPrice: undefined,
     }), accounts);
     expect(issues.map(issue => issue.code)).not.toContain('trader_invoice_price_missing');
+  });
+
+  it('requires an immutable price for a gold merchant transfer through Al-Safi', () => {
+    const missing = validateAccountingPolicy(entry({
+      operationKind: 'transfer', debit: '????', debitAccountId: 'merchant', credit: 'Al-Safi', creditAccountId: '3zGclNk6qdAuNxM6y5iP',
+      weight: '2', arabicWeight: '2', karat: 21, marketPrice: 0,
+    }), accounts);
+    const priced = validateAccountingPolicy(entry({
+      operationKind: 'transfer', debit: '????', debitAccountId: 'merchant', credit: 'Al-Safi', creditAccountId: '3zGclNk6qdAuNxM6y5iP',
+      weight: '2', arabicWeight: '2', karat: 21, invoiceOfficialPricePerGramEgp: 5000,
+    }), accounts);
+    expect(missing.map(issue => issue.code)).toContain('merchant_transfer_invoice_price_missing');
+    expect(priced.map(issue => issue.code)).not.toContain('merchant_transfer_invoice_price_missing');
   });
 
   it('does not project a generic metal piece count as accessories quantity', () => {
