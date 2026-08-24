@@ -1,171 +1,121 @@
 # Current Project State
 
-Last reviewed: 2026-08-23
+Last reviewed: 2026-08-24
 
 ## Production baseline
 
 - Repository: `goldmaka2007-netizen/mo-golf`
 - Production: https://makka-central-accounting.web.app
 - Firebase project: `makka-central-accounting`
-- Latest deployed application commit: `1be587d3aa22196e9d1d544459693e5a69ddfd5b`
-- Latest production asset: `/assets/index-DAyu4V22.js`
+- Latest deployed application commit: `f66cc5678df8b54a00809705a9ff54b2b030f061`
+- Application release: E21 / WAC / Al-Safi consistency and validation fix.
 - Deployment scope: Firebase Hosting only.
-- Final release status: COMPLETED / PRODUCTION OWNER ACCEPTED / CROSS-SYSTEM VERIFIED.
-- Firestore Data/Rules/Indexes, Functions, Storage, Auth and Golden Baseline were not changed by this release.
+- Release status: COMPLETED / PRODUCTION DEPLOYED / OWNER MANUAL ACCEPTED.
+- Cross-system closure requires GitHub + Notion + Google Drive verification.
 
-## Latest production change — Story Compact Crop and Story-only Buy Spread
+## Latest production change — E21 / WAC / Al-Safi consistency
 
-- Compact Story now renders directly at `1080×1560`, with the bottom frame/corners and a comfortable margin below the contact footer; Full remains exactly `1080×1920`.
-- Compact and Full previews use their actual variant aspect ratios with `object-contain`, so the generated image is not cropped.
-- Story Builder now has the independent settings field `settings/{uid}.storyGoldBuySpreadEgp`, defaulting to `20` EGP/gram when absent or invalid.
-- The Story-only spread accepts finite non-negative values including `0`, applies to both Compact and Full, and is saved only after explicit Settings Save with merge semantics. No migration or backfill occurred.
-- Story 21K buy is `max(0, Story 21K sell - storyGoldBuySpreadEgp)`; 24K and 18K buys derive from that 21K buy by the existing karat ratios.
-- The Story-only setting does not change global `goldSpread`, global `goldBuyPrice`, official metal-price saving, operations, accounting, inventory, WAC, COGS, or reports.
+### Al-Safi transfer guard
 
-### Validation and deployment evidence
+- Gold merchant-to-merchant transfers involving the approved Al-Safi hub are rejected when the same operation does not contain a valid positive immutable transaction price.
+- The validation reads the same operation's persisted/submitted price fields; it does not fetch current-market or previous-day fallback prices.
+- The three historical missing-price transfers had already been manually corrected by the owner before this code release. This release is preventive and does not rewrite them.
 
-- Story and Story-pricing/settings focused tests: 17/17 passed.
+### Unified Trial Balance E21 reporting
+
+- Historical gold reporting resolves one canonical E21 quantity per operation and applies that same quantity symmetrically to both historical gold legs.
+- Valid entry karat is preferred. If absent, a uniquely proven gold-inventory-account karat may be used. If karat cannot be proven safely, the historical raw quantity is preserved rather than guessed.
+- TX1714-style stale reporting is fixed: `57.90 g @ 21K` with stored raw `57.91` reports canonically as `57.90`.
+- This is a reporting-only correction. Inventory WAC legacy precedence, COGS and book-value projection were not changed.
+
+### WAC Audit merchant normalization
+
+- WAC Audit/Summary now applies the approved runtime account override before building the merchant timeline.
+- The stable-ID runtime classification for `الاء ياسر` is therefore included in WAC Audit without changing Firestore account metadata.
+
+## Validation and owner acceptance
+
+Automated validation for application commit `f66cc5678df8b54a00809705a9ff54b2b030f061`:
+
+- Final focused suite: 6 files / 43 tests passed.
 - Typecheck: passed.
-- Balance Contract Guard: passed.
-- Production build: passed.
 - `git diff --check`: passed.
-- Example verified: sell 21K `6600` with Story spread `30` produces Story buy 21K `6570`; 24K/18K derive from that value.
-- Firebase project: `makka-central-accounting`.
-- Hosting-only deployment released application commit `1be587d3aa22196e9d1d544459693e5a69ddfd5b` at https://makka-central-accounting.web.app.
-- Live root and asset returned HTTP 200; the deployed asset contains the Compact CTA, Compact/Full labels, `storyGoldBuySpreadEgp`, Settings label, 1560/1920 heights, and `object-contain`.
-- Automated browser visual smoke was unavailable because the execution browser runtime hit an OS disk-space error. This gap was closed by direct owner Production acceptance on the real iPhone PWA on 2026-08-23.
-- Owner screenshots confirmed the Settings field visibly saved as `40` EGP/g and the live Compact Story showed 21K sell `6600` / buy `6560`, proving the Story-only spread was applied. The 24K buy `7497` and 18K buy `5623` matched derivation from the 21K buy by karat ratio.
-- The live Compact preview was visually accepted with the lower empty area removed, the full footer and bottom frame/corners visible, and no clipping/cropping observed.
-- Owner acceptance receipt: `docs/STORY_COMPACT_OWNER_ACCEPTANCE_2026-08-23.md`.
+- Build: passed.
+- Balance Engine contract guard: passed.
+- Golden Baseline was not rewritten.
+- Pre-existing accounting/Golden failures remain separate work and must not be hidden by changing protected expectations.
 
-### Protected accounting/data invariants
+Owner manual acceptance on live Firebase Production:
 
-This release did not change Firestore rules/indexes/functions or production data, Posting Matrix, WAC, COGS, Balance Engine, Entry save contract/schema, Golden Baseline, historical data, `pricingConfig` business logic, global gold spread semantics, or global gold buy price semantics.
+- Unified Trial Balance remained balanced.
+- `علاء صالح — ذهب`: `41.05 g E21`, confirming the old +0.01 reporting discrepancy is removed.
+- `الاء ياسر — ذهب`: `24.68 g E21`, approximately `144,131.20 EGP` book balance.
+- Owner-exported WAC Audit includes `الاء ياسر` as a gold merchant with `24.68 g E21`, `144,131.20 EGP` carrying value and `5,840 EGP/g` WAC.
+- WAC Audit: 0 Errors. Remaining 137 diagnostics are legacy same-day ordering warnings.
+- Owner-exported Trial Balance CSV confirms:
+  - `علاء صالح — ذهب`: `41.05 g E21`, `242,195 EGP` book balance.
+  - `محمد السيد — ذهب`: `29.37 g E21`, `171,870.18 EGP` book balance.
+  - `الصافي — ذهب`: `4.96 g E21`, `31,594.84 EGP` book balance.
+  - `سمير ناشد — فضة`: `0.31 g`, `32.55 EGP` book balance.
+  - `الاء ياسر — ذهب`: `24.68 g E21`, `144,131.20 EGP` book balance.
 
-## Latest production change — Story Builder Compact Variant
+The Al-Safi rejection guard was not manually tested by creating a Production accounting entry. That control is accepted through focused automated regression tests because deliberately testing a failed guard on live data could create a false transaction.
 
-- The deployed Story Builder now supports two variants in the same preview: Compact `بدون سبائك وجنيهات` (DEFAULT) and Full `كاملة` (still available for private sharing).
-- Compact removes the bullion/coin price table and reflows the remaining Story layout upward while preserving the 1080×1920 format, disclaimer, and contact footer.
-- Compact CTA: `لأحدث أسعار السبائك والجنيهات وقت الطلب، ابعتلنا رسالة على واتساب أو فيسبوك`.
-- Share and Save operate on the currently selected variant; Compact uses a distinct filename while the existing Full filename remains unchanged.
-- Full Story preserves the prior bullion/coin rendering path and current pricing presentation.
-- `pricingConfig` remains the shared Story pricing source with only the existing legacy read-only fallbacks.
+Detailed GitHub release record:
+- `docs/E21_WAC_ALSAFI_PRODUCTION_RELEASE_2026-08-24.md`
 
-### Validation and deployment evidence
+## Manual / visual acceptance rule
 
-- Story contract: 6/6 passed.
-- Typecheck: passed.
-- Balance Contract Guard: passed.
-- Production build: passed.
-- `git diff --check`: passed.
-- The full `npm` suite remains non-green on six PRE-EXISTING accounting/Golden failures: five historically documented failures plus the known pre-existing Financial Position expectation mismatch. `ENOSPC` also occurred during some suites.
-- Golden Baseline was not changed.
-- Firebase project: `makka-central-accounting`.
-- Hosting-only deployment was completed; no redeploy is part of this documentation sync.
-- Production URL: https://makka-central-accounting.web.app
-- Existing release verification reported root and asset HTTP 200, working selector/preview, no console errors, and a deployed asset containing the Compact CTA.
+For Makka Application releases:
 
-### Protected accounting/data invariants
-
-This release did not change Firestore data/rules/indexes, Posting Matrix, WAC, COGS, Balance Engine, Entry save contract, Golden Baseline, historical data, or `pricingConfig` business logic.
-
-## Latest production change — Story Builder contact footer
-
-- Story Builder keeps the existing 1080×1920 price-story layout and replaces the Facebook QR footer with three RTL contact rows: location, WhatsApp `+20 15 50326921`, and Facebook `مكة للمصوغات والمجوهرات @makkagoldalex`.
-- Contact icons are local gold Canvas vectors, and WhatsApp/Facebook LTR segments are drawn independently to preserve phone and username order.
-- Final icon polish uses 30px local gold Canvas vectors for the location pin, WhatsApp bubble/handset, and Facebook mark; production smoke passed.
-- Facebook mark received a final local Canvas path correction; production smoke passed without changing Location, WhatsApp, or share logic.
-- The QR asset and generation dependency were removed; the disclaimer copy remains unchanged and its heading was removed as requested.
-- Production smoke passed for React/Firebase startup, Story Builder preview, 1080×1920 output, share/save controls, and release-attributable console errors.
-
-## Latest production change — Financial Position
-
-The Financial Position report is now a richer presentation and traceability layer over the existing EGP accounting source. It does not introduce a new accounting calculation path.
-
-Current behavior:
-
-- Monetary EGP values remain sourced from `buildFinancialStatementsEgp`.
-- Current-year month buttons are available from January through the latest-data month; each month is cumulative as of its cutoff.
-- The latest month uses the latest actual entry date.
-- Gold inventory collapsed rows show Book Value plus E21 weight.
-- Silver inventory collapsed rows show Book Value plus silver weight.
-- Accessories remain monetary-only when collapsed.
-- Merchant gold, silver and cash receivables/payables are separated for review while preserving authoritative aggregates.
-- Assets, liabilities and equity show secondary gold/silver monitoring dimensions; equity metal labels are net monitoring positions, not accounting equity grams.
-- Smart zero hiding keeps a metal row visible when EGP is zero but a genuine non-zero metal balance exists.
-- Detail rows can drill into the existing account/ledger path where available.
-- CSV export is latest-cutoff only and refuses to export when the cost timeline is unavailable.
-
-## Acceptance and accounting parity
-
-- Financial Position acceptance/parity tests passed before merge.
-- Post-merge focused validation passed.
-- Pre-deploy focused validation passed.
-- `npm run typecheck`: passed.
-- `npm run check:balance-contract`: passed.
-- Production build: passed.
-- The monthly read model was verified to preserve `buildFinancialStatementsEgp` monetary outputs at the same cutoff.
-- No monetary difference was found in the parity gate.
-- The known `financialPositionCentralBalances.test.ts` expectation mismatch (`-1.43` expected vs `+1.43` actual) reproduces on the pre-change baseline and remains PRE-EXISTING / OUT OF SCOPE. Do not alter protected accounting behavior merely to clear it.
-
-## Production verification
-
-- Production root: HTTP 200.
-- Production main asset: HTTP 200.
-- Local and production JS asset SHA-256 matched exactly.
-- Authenticated read-only production smoke passed for the Financial Position report.
-- The latest month opened by default, month buttons stopped at the latest-data month, inventory/merchant sections rendered correctly, totals and net metal labels rendered, detail opening did not change totals, latest-only CSV was available, and no release-attributable console errors were observed.
-
-## Current implementation landmarks
-
-- `src/components/views/reports/EgpBalanceSheetView.tsx` — Financial Position presentation.
-- `src/lib/monthlyFinancialPosition.ts` — monthly cutoff read model and latest-only CSV rows.
-- `src/lib/financialPositionPresentation.ts` — presentation-only smart-zero visibility helper.
-- `src/lib/financialStatementsEgp.ts` — authoritative EGP statement read model used by the Financial Position presentation.
-- `src/lib/__tests__/monthlyFinancialPosition.acceptance.test.ts` — Financial Position acceptance/parity regression coverage.
-- `src/lib/inventoryCostEngine.ts` and the runtime cost timeline — authoritative inventory cost/COGS path; unchanged by the Financial Position release.
-
-## Export review
-
-The owner reviewed the pre-update `balance_sheet.csv` against the post-update `financial_position_2026-08-01.csv` before closure.
-
-The 32 inventory rows matched one-for-one between the two exports, including Book Value and metal weight. Aggregates were preserved:
-
-- Gold inventory: EGP 13,506,267.67 and E21 2,226.420 g.
-- Silver inventory: EGP 674,310.45 and 5,391.750 g.
-- Accessories inventory: EGP 6,118.95.
-
-The new export adds full Financial Position detail while preserving those inventory figures. Its summary for the reviewed cutoff is balanced with `assets - liabilities - equity = 0`.
+- Codex performs code work, automated tests, build and technical deployment verification.
+- Codex does **not** perform final Visual / UX / operational manual acceptance on behalf of the owner.
+- After deploy, status remains `Manual Acceptance Pending` when manual acceptance applies.
+- The owner performs the live Firebase manual/visual/operational checks personally.
+- ChatGPT may guide the owner step-by-step and review screenshots/exports, but the final manual acceptance decision belongs to the owner.
+- A task is not Closed until owner acceptance when applicable and GitHub + Notion + Google Drive are synchronized and directly verified by ChatGPT.
 
 ## Protected accounting/data invariants
 
-This release did not change:
+Do not change these without a separate explicit owner decision and approval:
 
 - Posting Matrix.
-- WAC.
-- Inventory Cost / COGS semantics.
+- Inventory WAC semantics / legacy precedence.
+- COGS semantics.
 - Balance Engine semantics.
-- Entry schema/save contract.
-- Merchant settlement accounting semantics.
-- Historical transaction data.
-- Approved Historical Overlay records.
-- Firestore Data / Rules / Indexes.
-- Functions / Storage / Authentication.
+- Entry save contract/schema, except an explicitly approved scoped validation change.
+- Historical Firestore records.
+- Historical `arabicWeight` values.
+- Historical `goldEquivalent21Snapshot` values.
 - Golden Baseline.
 
-## Known open issues / technical debt
+This release did not perform a Firestore migration, historical rewrite, snapshot backfill, rules/indexes/functions change, or accounting-data mutation.
 
-- The documented pre-existing Golden/accounting failures remain separate work; do not regenerate Golden Baseline merely to clear them.
-- Completion of the full historical 2116-row migration/reconciliation is still not proven by current documentation.
-- Broader legacy/performance cleanup remains separate follow-up work.
-- Historical Planning/Grill trackers are not proof of current Production state.
+## Recent production sequence
+
+Detailed history belongs in the individual release records rather than being duplicated here. Important recent releases include:
+
+- Story Compact Fit + Story-only Buy Spread — application commit `1be587d3aa22196e9d1d544459693e5a69ddfd5b`.
+- Story Builder Compact Variant — application commit `871cb25c095db451e520f651faabf5d2306ea75b`.
+- Story Builder Contact Footer — application commit `cabe6a3d8cc3d355c17d9af4ef83e6ccfa46cf0a`.
+- Financial Position — application commit `b304f1205fe92fea49f1de209b9a180233761a73`.
+- Reports Bundle Lazy Loading — application commit `bbe0b782ac312cc9466f5c22b3be87a1f913efa2`.
+
+See the corresponding release records in `docs/`, Notion Change Log and Google Drive Release History for details.
+
+## Known open items
+
+- Pre-existing accounting/Golden test failures remain separate follow-up work. Do not regenerate or alter the Golden Baseline merely to clear them.
+- Completion of the full historical 2116-row migration/reconciliation is not proven by current documentation.
+- Historical `arabicWeight` backfill/migration remains **not approved** and must not be performed without a separate Critical migration safety review, dry run, rollback design and explicit owner approval.
+- Legacy Planning/Grill trackers are not evidence of current Production state.
+- Broader performance/dead-code cleanup remains separate work.
 
 ## Source roles and closure
 
-- GitHub is the execution truth for code, tests and technical state.
-- Notion stores workflow, approved decisions and change history.
-- Google Drive stores reviewer-facing, operational, accounting and architecture references.
-- `Makka — Current Reviewer Context` must stay short and point to detailed references.
-- A task is not Closed until ChatGPT directly verifies GitHub + Notion + Google Drive are updated and consistent.
-
-Project-uploaded or attached copies are snapshots only. When they differ from live project sources, verify against the live sources before acting.
+- GitHub: execution truth for code, tests, deployment implementation and technical state.
+- Notion: workflow, approved decisions, task status and change history.
+- Google Drive: reviewer-facing, accounting, operational and architecture references.
+- `Makka — Current Reviewer Context` stays short and points to detailed records.
+- Project-uploaded copies are snapshots only; live GitHub/Notion/Drive sources win when they differ.
+- A task is not Closed until ChatGPT directly verifies GitHub + Notion + Google Drive are updated and consistent. If implementation is finished but any source is behind, use `Implementation Complete / Sync Pending`.
