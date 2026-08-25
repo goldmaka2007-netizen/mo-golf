@@ -3,6 +3,7 @@ import { buildLegacyLedgerLegs } from './legacyLedger';
 import { buildOpeningCostConfig } from './openingCostConfig';
 import { historicalOverlaysForCutoff, buildMonthlyFinancialPosition, type MonthlyFinancialPositionResult } from './monthlyFinancialPosition';
 import { rebuildRuntimeInventoryCostTimeline } from './costRecalculation';
+import { isOpeningEntry } from './openingEntry';
 
 export interface EquityMovementDetail { id: string; label: string; amount: number; accountId?: string; }
 export interface EquityStatementEgp {
@@ -38,9 +39,10 @@ export const buildEquityStatementEgp = (args: {
   const ending = buildMonthlyFinancialPosition(args);
   if ('diagnostic' in ending) return { available: false, diagnostic: ending.diagnostic.message };
   const year = args.cutoffDate.slice(0, 4);
-  const opening = buildMonthlyFinancialPosition({ ...args, cutoffDate: `${Number(year) - 1}-12-31` });
-  if ('diagnostic' in opening) return { available: false, diagnostic: opening.diagnostic.message };
   const yearStart = `${year}-01-01`;
+  const openingEntries = args.entries.filter(entry => entry.date < yearStart || (entry.date === yearStart && isOpeningEntry(entry)));
+  const opening = buildMonthlyFinancialPosition({ ...args, entries: openingEntries, cutoffDate: yearStart });
+  if ('diagnostic' in opening) return { available: false, diagnostic: opening.diagnostic.message };
   const cutoffEntries = args.entries.filter(entry => entry.date <= args.cutoffDate);
   const timeline = rebuildRuntimeInventoryCostTimeline(cutoffEntries, args.accounts, buildOpeningCostConfig(args.openingCostConfig, args.accounts), {
     historicalInventoryOverlayDirectives: historicalOverlaysForCutoff(cutoffEntries, args.accounts, args.cutoffDate),
