@@ -72,7 +72,11 @@ export interface ReconciliationWarning {
   goldBalance: number;
   bookValueBalance: number;
 }
-export interface FinancialPositionDetailRow extends FinancialStatementLine { accountId?: string; }
+export interface FinancialPositionDetailRow extends FinancialStatementLine {
+  accountId?: string;
+  equivalent21Weight?: number;
+  silverWeight?: number;
+}
 export interface EgpBalanceSheet {
   assets: {
     cash: number;
@@ -81,6 +85,7 @@ export interface EgpBalanceSheet {
     accessoriesInventory: number;
     receivables: number;
     ordinaryReceivables: number;
+    fixedAssets: number;
     merchantCashReceivables: number;
     merchantMetalReceivables: number;
     merchantGoldReceivables: number;
@@ -88,6 +93,7 @@ export interface EgpBalanceSheet {
     merchantReceivableDetails: MerchantLiabilityStatementRow[];
     cashDetails: FinancialPositionDetailRow[];
     ordinaryReceivableDetails: FinancialPositionDetailRow[];
+    fixedAssetDetails: FinancialPositionDetailRow[];
     total: number;
   };
   liabilities: {
@@ -369,6 +375,11 @@ const balanceMap = (legs: LegacyLedgerLeg[], dimension?: LegacyLedgerLeg['dimens
   return rows;
 };
 
+const equityDisplayLabel = (account: Account | undefined, label: string): string =>
+  account?.canonicalSubType === 'retained_earnings' && label === 'الارباح و الخساير 2024'
+    ? 'أرباح وخسائر سنوات سابقة'
+    : label;
+
 export const buildFinancialStatementsEgp = (entries: Entry[], rawAccounts: Account[], options: BuildFinancialStatementsEgpOptions = {}): FinancialStatementsEgp => {
   const canonicalDefinitions = options.canonicalDefinitions ?? [];
   const registry = buildAccountRegistry(rawAccounts.map(applyRuntimeAccountOverride), entries, canonicalDefinitions);
@@ -401,8 +412,8 @@ export const buildFinancialStatementsEgp = (entries: Entry[], rawAccounts: Accou
 
 
 
-  let cash = 0; let receivables = 0; let rawCapital = 0; let rawRetainedEarnings = 0; let otherLiabilities = 0;
-  const cashDetails: FinancialPositionDetailRow[] = []; const ordinaryReceivableDetails: FinancialPositionDetailRow[] = []; const otherDetails: FinancialPositionDetailRow[] = []; const capitalDetails: FinancialPositionDetailRow[] = []; const retainedEarningsDetails: FinancialPositionDetailRow[] = [];
+  let cash = 0; let receivables = 0; let fixedAssets = 0; let rawCapital = 0; let rawRetainedEarnings = 0; let otherLiabilities = 0;
+  const cashDetails: FinancialPositionDetailRow[] = []; const ordinaryReceivableDetails: FinancialPositionDetailRow[] = []; const fixedAssetDetails: FinancialPositionDetailRow[] = []; const otherDetails: FinancialPositionDetailRow[] = []; const capitalDetails: FinancialPositionDetailRow[] = []; const retainedEarningsDetails: FinancialPositionDetailRow[] = [];
   const isMerchantMetalAccount = (account?: Account): boolean => !!account && account.type === 'merchant'
     && (account.metal === 'gold' || account.metal === 'silver'
       || account.canonicalSubType === 'merchant_gold' || account.canonicalSubType === 'merchant_silver');
@@ -414,7 +425,9 @@ export const buildFinancialStatementsEgp = (entries: Entry[], rawAccounts: Accou
     if (isMerchantMetalAccount(account)) return;
     if (leg.group === 'assets') {
       const row = { id: entityId, label: leg.accountName, accountId: account?.id, amount: roundMoney(balance) };
-      if (account?.type === 'cash') { cash += balance; cashDetails.push(row); } else { receivables += balance; ordinaryReceivableDetails.push(row); }
+      if (account?.type === 'cash') { cash += balance; cashDetails.push(row); }
+      else if (account?.canonicalSubType === 'fixed_asset') { fixedAssets += balance; fixedAssetDetails.push(row); }
+      else { receivables += balance; ordinaryReceivableDetails.push(row); }
       return;
     }
     if (leg.group === 'liabilities') {
@@ -423,7 +436,14 @@ export const buildFinancialStatementsEgp = (entries: Entry[], rawAccounts: Accou
     }
     if (leg.group === 'equity') {
       const value = -balance;
-      const row = { id: entityId, label: leg.accountName, accountId: account?.id, amount: roundMoney(value) };
+      const row = {
+        id: entityId,
+        label: equityDisplayLabel(account, leg.accountName),
+        accountId: account?.id,
+        amount: roundMoney(value),
+        equivalent21Weight: roundMoney(goldBalances.get(entityId)?.balance ?? 0),
+        silverWeight: roundMoney(silverBalances.get(entityId)?.balance ?? 0),
+      };
       if (account?.canonicalSubType === 'retained_earnings') { rawRetainedEarnings += value; retainedEarningsDetails.push(row); } else { rawCapital += value; capitalDetails.push(row); }
     }
   });
@@ -503,11 +523,11 @@ export const buildFinancialStatementsEgp = (entries: Entry[], rawAccounts: Accou
   receivables = roundMoney(receivables + merchantMetalReceivables + merchantCashReceivables);
   const assets = {
     cash: roundMoney(cash), goldInventory, silverInventory, accessoriesInventory,
-    receivables: roundMoney(receivables), ordinaryReceivables: roundMoney(receivables - merchantMetalReceivables - merchantCashReceivables), merchantCashReceivables, merchantMetalReceivables,
+    receivables: roundMoney(receivables), ordinaryReceivables: roundMoney(receivables - merchantMetalReceivables - merchantCashReceivables), fixedAssets: roundMoney(fixedAssets), merchantCashReceivables, merchantMetalReceivables,
     merchantGoldReceivables, merchantSilverReceivables,
-    merchantReceivableDetails: receivableRows, cashDetails, ordinaryReceivableDetails, total: 0,
+    merchantReceivableDetails: receivableRows, cashDetails, ordinaryReceivableDetails, fixedAssetDetails, total: 0,
   };
-  assets.total = roundMoney(assets.cash + goldInventory + silverInventory + accessoriesInventory + assets.receivables);
+  assets.total = roundMoney(assets.cash + goldInventory + silverInventory + accessoriesInventory + assets.fixedAssets + assets.receivables);
   const details = payableRows;
   const merchantGold = roundMoney(details.filter(row => row.metal === 'gold').reduce((sum, row) => sum + row.bookValue, 0));
   const merchantSilver = roundMoney(details.filter(row => row.metal === 'silver').reduce((sum, row) => sum + row.bookValue, 0));

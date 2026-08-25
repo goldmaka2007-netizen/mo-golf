@@ -24,7 +24,8 @@ import { cn } from '../../lib/utils';
 import { db, auth } from '../../firebase';
 import { doc, setDoc } from 'firebase/firestore';
 import { useAppStore } from '../../store';
-import { computeAccountBalances, goldOwnershipPositionFromBalances, type GoldOwnershipPosition } from '../../lib/engine';
+import { computeAccountBalances, type GoldOwnershipPosition } from '../../lib/engine';
+import { buildMonthlyFinancialPosition } from '../../lib/monthlyFinancialPosition';
 
 interface KPICardProps {
   icon: React.ReactNode;
@@ -290,6 +291,8 @@ export const HomeView = React.memo(({
     silverSpread, setSilverSpread,
     isUpdatingPrice,
     accountsDb,
+    canonicalAccounts,
+    openingCostConfig,
     accountCategories,
     setEditingEntry,
     setReportsTab
@@ -349,7 +352,20 @@ export const HomeView = React.memo(({
   const todayCount = entries.filter(e => e.date === todayISO).length;
 
   const centralBalances = useMemo(() => computeAccountBalances(entries, accountsDb), [entries, accountsDb]);
-  const goldPosition = useMemo(() => goldOwnershipPositionFromBalances(centralBalances), [centralBalances]);
+  const goldPosition = useMemo(() => {
+    const cutoffDate = entries.map(entry => entry.date).filter(Boolean).sort().at(-1);
+    if (!cutoffDate) return null;
+    const report = buildMonthlyFinancialPosition({
+      entries, accounts: accountsDb, canonicalDefinitions: canonicalAccounts, openingCostConfig,
+      cutoffDate, goldPriceEgp: goldPrice, silverPriceEgp: silverPrice,
+    });
+    if (!report.available) return null;
+    return {
+      physicalGoldInventory21: report.ownership.physicalGoldInventory21,
+      netGoldLiabilities21: report.ownership.merchantGoldLiability21 - report.ownership.merchantGoldReceivable21,
+      netShopGoldOwnership21: report.ownership.netGoldOwnership21,
+    } satisfies GoldOwnershipPosition;
+  }, [entries, accountsDb, canonicalAccounts, openingCostConfig, goldPrice, silverPrice]);
   const totals = useMemo(() => {
     let cash = 0;
     let silver = 0;
@@ -403,13 +419,13 @@ export const HomeView = React.memo(({
             value={`${Math.round(totals.cash).toLocaleString()} ج`}
             color="text-[#6a9e6a]"
           />
-          <GoldSummaryCard
+          {goldPosition && <GoldSummaryCard
             position={goldPosition}
             onClick={() => {
               setReportsTab('balance');
               setView('reports');
             }}
-          />
+          />}
           <KPICard
             icon={<Database className="w-5 h-5" />}
             title="المخزون الفعلي — فضة"

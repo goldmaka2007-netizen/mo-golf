@@ -9,6 +9,17 @@ import type { HistoricalInventoryOverlayDirective, InventoryCostDiagnostic } fro
 export const ARABIC_MONTHS = ['يناير', 'فبراير', 'مارس', 'أبريل', 'مايو', 'يونيو', 'يوليو', 'أغسطس', 'سبتمبر', 'أكتوبر', 'نوفمبر', 'ديسمبر'] as const;
 export interface FinancialPositionMonth { month: number; label: string; cutoffDate: string; }
 export interface FinancialPositionMetalSummary { goldAssetWeight: number; silverAssetWeight: number; goldLiabilityWeight: number; silverLiabilityWeight: number; netGoldWeight: number; netSilverWeight: number; }
+/** Authoritative supporting ownership positions from the Financial Position projection. */
+export interface FinancialPositionOwnershipSnapshot {
+  physicalGoldInventory21: number;
+  merchantGoldLiability21: number;
+  merchantGoldReceivable21: number;
+  netGoldOwnership21: number;
+  physicalSilverInventoryGrams: number;
+  merchantSilverLiabilityGrams: number;
+  merchantSilverReceivableGrams: number;
+  netSilverOwnershipGrams: number;
+}
 
 export const visibleFinancialPositionMonths = (entries: readonly Entry[], year: number): FinancialPositionMonth[] => {
   const latest = entries.filter(entry => entry.date?.slice(0, 4) === String(year)).map(entry => entry.date).sort().at(-1);
@@ -29,7 +40,7 @@ export const historicalOverlaysForCutoff = (entries: readonly Entry[], accounts:
     overlay.effectiveDate <= cutoffDate && operationIds.has(overlay.sourceDeficitOperationId));
 };
 
-export type MonthlyFinancialPositionResult = (FinancialStatementsEgp & { available: true; metalSummary: FinancialPositionMetalSummary }) | { available: false; diagnostic: InventoryCostDiagnostic };
+export type MonthlyFinancialPositionResult = (FinancialStatementsEgp & { available: true; metalSummary: FinancialPositionMetalSummary; ownership: FinancialPositionOwnershipSnapshot }) | { available: false; diagnostic: InventoryCostDiagnostic };
 
 export interface FinancialPositionCsvRow extends Record<string, string | number | null> {
   section: string;
@@ -84,5 +95,15 @@ export const buildMonthlyFinancialPosition = (args: {
   const silverAssetWeight = (statements.balanceSheet.inventoryCategories.silver.weight ?? 0) + statements.balanceSheet.assets.merchantReceivableDetails.filter(row => row.metal === 'silver' && row.bookValue > 0).reduce((sum, row) => sum + row.silverWeight, 0);
   const goldLiabilityWeight = statements.balanceSheet.liabilities.merchantDetails.filter(row => row.metal === 'gold' && row.bookValue > 0).reduce((sum, row) => sum + row.equivalent21Weight, 0);
   const silverLiabilityWeight = statements.balanceSheet.liabilities.merchantDetails.filter(row => row.metal === 'silver' && row.bookValue > 0).reduce((sum, row) => sum + row.silverWeight, 0);
-  return { available: true, ...statements, metalSummary: { goldAssetWeight, silverAssetWeight, goldLiabilityWeight, silverLiabilityWeight, netGoldWeight: goldAssetWeight - goldLiabilityWeight, netSilverWeight: silverAssetWeight - silverLiabilityWeight } };
+  const ownership = {
+    physicalGoldInventory21: statements.balanceSheet.inventoryCategories.gold.weight ?? 0,
+    merchantGoldLiability21: goldLiabilityWeight,
+    merchantGoldReceivable21: statements.balanceSheet.assets.merchantReceivableDetails.filter(row => row.metal === 'gold' && row.bookValue > 0).reduce((sum, row) => sum + row.equivalent21Weight, 0),
+    netGoldOwnership21: goldAssetWeight - goldLiabilityWeight,
+    physicalSilverInventoryGrams: statements.balanceSheet.inventoryCategories.silver.weight ?? 0,
+    merchantSilverLiabilityGrams: silverLiabilityWeight,
+    merchantSilverReceivableGrams: statements.balanceSheet.assets.merchantReceivableDetails.filter(row => row.metal === 'silver' && row.bookValue > 0).reduce((sum, row) => sum + row.silverWeight, 0),
+    netSilverOwnershipGrams: silverAssetWeight - silverLiabilityWeight,
+  };
+  return { available: true, ...statements, metalSummary: { goldAssetWeight, silverAssetWeight, goldLiabilityWeight, silverLiabilityWeight, netGoldWeight: ownership.netGoldOwnership21, netSilverWeight: ownership.netSilverOwnershipGrams }, ownership };
 };
