@@ -426,7 +426,8 @@ export const buildFinancialStatementsEgp = (entries: Entry[], rawAccounts: Accou
     if (leg.group === 'assets') {
       const row = { id: entityId, label: leg.accountName, accountId: account?.id, amount: roundMoney(balance) };
       if (account?.type === 'cash') { cash += balance; cashDetails.push(row); }
-      else if (account?.canonicalSubType === 'fixed_asset') { fixedAssets += balance; fixedAssetDetails.push(row); }
+      else if (account?.canonicalSubType === 'fixed_asset'
+        || (account?.id && registry.bySourceAccountId.get(account.id)?.entityType === 'fixed_asset')) { fixedAssets += balance; fixedAssetDetails.push(row); }
       else { receivables += balance; ordinaryReceivableDetails.push(row); }
       return;
     }
