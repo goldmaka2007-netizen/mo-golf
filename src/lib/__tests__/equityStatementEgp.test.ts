@@ -15,7 +15,7 @@ describe('EGP Statement of Changes in Equity', () => {
   it('includes a same-year opening once, excludes it from movements and profit, and reconciles ending equity', () => {
     const result = buildEquityStatementEgp({ entries: [
       entry({ id: 'opening', operationKind: 'opening', date: '2026-01-01', debit: 'Cash', debitAccountId: 'cash', credit: 'Capital', creditAccountId: 'capital', cash: '1000' }),
-      entry({ id: 'addition', date: '2026-01-05', debit: 'Cash', debitAccountId: 'cash', credit: 'Capital', creditAccountId: 'capital', cash: '200' }),
+      entry({ id: 'addition', date: '2026-01-01', debit: 'Cash', debitAccountId: 'cash', credit: 'Capital', creditAccountId: 'capital', cash: '200' }),
       entry({ id: 'drawing', date: '2026-01-06', debit: 'Drawings', debitAccountId: 'drawings', credit: 'Cash', creditAccountId: 'cash', cash: '50' }),
       entry({ id: 'direct-prior', date: '2026-01-07', debit: 'Cash', debitAccountId: 'cash', credit: 'Prior years', creditAccountId: 'prior', cash: '25' }),
       entry({ id: 'revenue', date: '2026-01-08', debit: 'Cash', debitAccountId: 'cash', credit: 'Revenue', creditAccountId: 'revenue', cash: '100' }),
@@ -24,6 +24,7 @@ describe('EGP Statement of Changes in Equity', () => {
     if (!result.available) return;
     expect(result.report.openingEquity).toBe(1000);
     expect(result.report.openingDetails).toEqual([expect.objectContaining({ amount: 1000 })]);
+    expect(result.report.openingDetails.some(row => row.amount === 200)).toBe(false);
     expect(result.report.capitalAdditions).toEqual([expect.objectContaining({ amount: 200 })]);
     expect(result.report.capitalAdditions.some(row => row.amount === 1000)).toBe(false);
     expect(result.report.drawings).toEqual([expect.objectContaining({ amount: -50 })]);

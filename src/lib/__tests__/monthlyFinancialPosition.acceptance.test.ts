@@ -32,10 +32,10 @@ const availableResult = (): MonthlyFinancialPositionResult => ({
   ownership: { physicalGoldInventory21: 10, merchantGoldLiability21: 3, merchantGoldReceivable21: 2, netGoldOwnership21: 9, physicalSilverInventoryGrams: 5, merchantSilverLiabilityGrams: 2, merchantSilverReceivableGrams: 3, netSilverOwnershipGrams: 6 },
   balanceSheet: {
     assets: {
-      cash: 100, goldInventory: 1000, silverInventory: 800, accessoriesInventory: 50, receivables: 485, fixedAssets: 0,
+      cash: 100, goldInventory: 1000, silverInventory: 800, accessoriesInventory: 50, receivables: 485, fixedAssets: 200,
       ordinaryReceivables: 20, merchantCashReceivables: 25, merchantMetalReceivables: 440,
       merchantGoldReceivables: 300, merchantSilverReceivables: 140,
-      cashDetails: [{ id: 'cash', label: 'cash', amount: 100 }], ordinaryReceivableDetails: [{ id: 'ordinary', label: 'ordinary', amount: 20 }], fixedAssetDetails: [],
+      cashDetails: [{ id: 'cash', label: 'cash', amount: 100 }], ordinaryReceivableDetails: [{ id: 'ordinary', label: 'ordinary', amount: 20 }], fixedAssetDetails: [{ id: 'fixed', label: 'fixed asset', accountId: 'fixed', amount: 200 }],
       merchantReceivableDetails: [
         { id: 'gold-r', accountId: 'gold-r', label: 'gold receiver', metal: 'gold', equivalent21Weight: 2, silverWeight: 0, bookValue: 300, cashPayable: 0, cashReceivable: 0, averageEgpPerGram: null, positionSide: 'receivable' },
         { id: 'silver-r', accountId: 'silver-r', label: 'silver receiver', metal: 'silver', equivalent21Weight: 0, silverWeight: 4, bookValue: 140, cashPayable: 0, cashReceivable: 0, averageEgpPerGram: null, positionSide: 'receivable' },
@@ -88,6 +88,10 @@ describe('monthly financial position acceptance', () => {
     expect(rows.filter(row => row.section === 'liability:merchant-silver-payable')).toEqual([expect.objectContaining({ bookValue: 175, silverWeight: 2 })]);
     expect(rows.filter(row => row.section === 'liability:merchant-cash-payable')).toEqual([expect.objectContaining({ bookValue: null, cash: 40, goldEquivalent21Weight: null })]);
     expect(rows.find(row => row.section === 'summary' && row.account === 'balance difference')).toMatchObject({ bookValue: 0 });
+    expect(rows.filter(row => row.section === 'asset:fixed-asset')).toEqual([expect.objectContaining({ account: 'fixed asset', bookValue: 200 })]);
+    expect(rows.some(row => row.section === 'asset:ordinary-receivable' && row.account === 'fixed asset')).toBe(false);
+    expect(rows).toContainEqual(expect.objectContaining({ section: 'asset:ordinary-receivable', account: 'ordinary', bookValue: 20 }));
+    expect(rows).toContainEqual(expect.objectContaining({ section: 'summary', account: 'total assets', bookValue: result.available ? result.balanceSheet.assets.total : 0 }));
     expect(rows.find(row => row.section === 'asset:inventory:accessory')).toEqual(expect.objectContaining({ account: 'accessory name', bookValue: 50, goldEquivalent21Weight: null, silverWeight: null }));
   });
 

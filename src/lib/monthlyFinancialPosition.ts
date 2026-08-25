@@ -65,6 +65,7 @@ export const financialPositionCsvRows = (result: MonthlyFinancialPositionResult)
     row('summary', 'balance difference', { ...blank, bookValue: sheet.balances.assetsLessLiabilitiesAndEquity }),
     ...sheet.assets.cashDetails.map(item => row('asset:cash', item.label, { ...blank, cash: item.amount })),
     ...sheet.inventory.map(item => row(`asset:inventory:${item.kind}`, item.label, { ...blank, bookValue: item.bookValue, goldEquivalent21Weight: item.kind === 'gold' ? item.weight : null, silverWeight: item.kind === 'silver' ? item.weight : null })),
+    ...sheet.assets.fixedAssetDetails.map(item => row('asset:fixed-asset', item.label, { ...blank, bookValue: item.amount })),
     ...sheet.assets.ordinaryReceivableDetails.map(item => row('asset:ordinary-receivable', item.label, { ...blank, bookValue: item.amount })),
     ...sheet.assets.merchantReceivableDetails.filter(item => item.metal === 'gold' && item.bookValue > 0).map(item => row('asset:merchant-gold-receivable', item.label, { ...blank, bookValue: item.bookValue, goldEquivalent21Weight: item.equivalent21Weight })),
     ...sheet.assets.merchantReceivableDetails.filter(item => item.metal === 'silver' && item.bookValue > 0).map(item => row('asset:merchant-silver-receivable', item.label, { ...blank, bookValue: item.bookValue, silverWeight: item.silverWeight })),
