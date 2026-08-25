@@ -29,12 +29,13 @@ const availableResult = (): MonthlyFinancialPositionResult => ({
   merchantLiabilityDiagnostics: [],
   incomeStatement: {} as any,
   metalSummary: { goldAssetWeight: 12, silverAssetWeight: 8, goldLiabilityWeight: 3, silverLiabilityWeight: 2, netGoldWeight: 9, netSilverWeight: 6 },
+  ownership: { physicalGoldInventory21: 10, merchantGoldLiability21: 3, merchantGoldReceivable21: 2, netGoldOwnership21: 9, physicalSilverInventoryGrams: 5, merchantSilverLiabilityGrams: 2, merchantSilverReceivableGrams: 3, netSilverOwnershipGrams: 6 },
   balanceSheet: {
     assets: {
-      cash: 100, goldInventory: 1000, silverInventory: 800, accessoriesInventory: 50, receivables: 485,
+      cash: 100, goldInventory: 1000, silverInventory: 800, accessoriesInventory: 50, receivables: 485, fixedAssets: 0,
       ordinaryReceivables: 20, merchantCashReceivables: 25, merchantMetalReceivables: 440,
       merchantGoldReceivables: 300, merchantSilverReceivables: 140,
-      cashDetails: [{ id: 'cash', label: 'cash', amount: 100 }], ordinaryReceivableDetails: [{ id: 'ordinary', label: 'ordinary', amount: 20 }],
+      cashDetails: [{ id: 'cash', label: 'cash', amount: 100 }], ordinaryReceivableDetails: [{ id: 'ordinary', label: 'ordinary', amount: 20 }], fixedAssetDetails: [],
       merchantReceivableDetails: [
         { id: 'gold-r', accountId: 'gold-r', label: 'gold receiver', metal: 'gold', equivalent21Weight: 2, silverWeight: 0, bookValue: 300, cashPayable: 0, cashReceivable: 0, averageEgpPerGram: null, positionSide: 'receivable' },
         { id: 'silver-r', accountId: 'silver-r', label: 'silver receiver', metal: 'silver', equivalent21Weight: 0, silverWeight: 4, bookValue: 140, cashPayable: 0, cashReceivable: 0, averageEgpPerGram: null, positionSide: 'receivable' },
@@ -124,5 +125,10 @@ describe('monthly financial position acceptance', () => {
     expect(monthly.balanceSheet.liabilities).toMatchObject({ merchantGold: original.balanceSheet.liabilities.merchantGold, merchantSilver: original.balanceSheet.liabilities.merchantSilver, merchantCash: original.balanceSheet.liabilities.merchantCash, other: original.balanceSheet.liabilities.other, total: original.balanceSheet.liabilities.total });
     expect(monthly.balanceSheet.equity).toMatchObject({ capital: original.balanceSheet.equity.capital, retainedEarnings: original.balanceSheet.equity.retainedEarnings, currentProfit: original.balanceSheet.equity.currentProfit, total: original.balanceSheet.equity.total });
     expect(monthly.balanceSheet.balances.assetsLessLiabilitiesAndEquity).toBe(original.balanceSheet.balances.assetsLessLiabilitiesAndEquity);
+    expect(monthly.ownership).toMatchObject({
+      physicalGoldInventory21: monthly.balanceSheet.inventoryCategories.gold.weight,
+      merchantGoldLiability21: monthly.metalSummary.goldLiabilityWeight,
+      netGoldOwnership21: monthly.metalSummary.netGoldWeight,
+    });
   });
 });

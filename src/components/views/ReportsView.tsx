@@ -76,7 +76,7 @@ export const ReportsView = React.memo(() => {
     {selected === 'ledger' && <GeneralLedgerView entries={entries} initialAccountId={ledgerAccountId} />}
     {selected === 'trial' && <TrialBalanceView entries={balanceEntries} />}
     {selected === 'income' && <IncomeStatementView entries={filteredEntries} onOpenLedger={openLedger} />}
-    {selected === 'equity' && <EquityStatementView entries={filteredEntries} />}
+    {selected === 'equity' && <EquityStatementView entries={entries} />}
     {selected === 'balance' && <BalanceSheetView entries={balanceEntries} onOpenLedger={openLedger} />}
     {selected === 'inventory' && <InventoryCheckView />}
     {(selected === 'inventory-profitability' || selected === 'lifecycle' || selected === 'profit-analysis' || selected === 'advanced-analytics') && <InventoryProfitabilityReportView />}

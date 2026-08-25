@@ -1,149 +1,28 @@
 import React, { useMemo, useState } from 'react';
-import { motion, AnimatePresence } from 'framer-motion';
-import { 
-  Wallet, 
-  Scale, 
-  Coins,
-  ArrowUpRight,
-  ArrowDownLeft,
-  TrendingUp,
-  Package
-} from 'lucide-react';
-import { Entry } from '../../../types';
+import { ChevronDown, Landmark } from 'lucide-react';
+import type { Entry } from '../../../types';
 import { useAppStore } from '../../../store';
-import { cn } from '../../../lib/utils';
-import { buildIncomeStatementReport } from '../../../lib/incomeStatementReport';
-import { buildEquityStatementReport } from '../../../lib/equityStatementReport';
+import { buildEquityStatementEgp, type EquityMovementDetail } from '../../../lib/equityStatementEgp';
+import { visibleFinancialPositionMonths } from '../../../lib/monthlyFinancialPosition';
+import { formatEgpAmount, formatWeight } from '../../../lib/formatting';
 import { computeAccountBalances } from '../../../lib/engine';
 
+const money = (value: number) => formatEgpAmount(value);
+const Drilldown = ({ label, amount, rows, tone = '' }: { label: string; amount: number; rows: EquityMovementDetail[]; tone?: string }) => {
+  const [open, setOpen] = useState(false);
+  return <div className="rounded-xl border border-[#1a1e2a] bg-[#0e1018]"><button type="button" onClick={() => setOpen(!open)} aria-expanded={open} className="flex min-h-12 w-full items-center justify-between gap-3 p-3 text-right"><span className="font-bold">{label}</span><span className={`font-mono font-bold ${tone}`}>{money(amount)} <ChevronDown className={`mr-2 inline h-4 w-4 ${open ? 'rotate-180' : ''}`} /></span></button>{open && <div className="space-y-1 border-t border-[#1a1e2a] p-2">{rows.length ? rows.map(row => <div key={row.id} className="flex justify-between rounded-lg bg-[#080a0f] p-2 text-sm"><span>{row.label}</span><span className="font-mono">{money(row.amount)}</span></div>) : <div className="p-2 text-sm text-[#8a8172]">لا توجد حركة خلال الفترة.</div>}</div>}</div>;
+};
+
 export const EquityStatementView = React.memo(({ entries }: { entries: Entry[] }) => {
-  const { accountsDb } = useAppStore();
-  const [activeTab, setActiveTab] = useState<'cash' | 'gold' | 'silver' | 'accs'>('cash');
-
-  const financials = useMemo(() => {
-    const computed = computeAccountBalances(entries, accountsDb);
-    const incomeStatement = buildIncomeStatementReport(computed);
-    return buildEquityStatementReport(computed, incomeStatement);
-  }, [entries, accountsDb]);
-
-  const renderStatement = () => {
-    const data = (financials as any)[activeTab];
-    let unit = 'ج.م';
-    let accent = 'text-[#c9a84c]';
-
-    if (activeTab === 'cash') { unit = 'ج.م'; accent = 'text-[#6a9e6a]'; }
-    if (activeTab === 'gold') { unit = 'جم عربي'; accent = 'text-[#c9a84c]'; }
-    if (activeTab === 'silver') { unit = 'جرام'; accent = 'text-[#6a8a9e]'; }
-    if (activeTab === 'accs') { unit = 'قطعة'; accent = 'text-[#9e8a6a]'; }
-
-    return (
-      <motion.div 
-        key={activeTab}
-        initial={{ opacity: 0, y: 10 }}
-        animate={{ opacity: 1, y: 0 }}
-        exit={{ opacity: 0, y: -10 }}
-        transition={{ duration: 0.2 }}
-        className="bg-[#0e1018] border border-[#1a1e2a] rounded-2xl p-6 space-y-8"
-      >
-        {/* Additions Section */}
-        <div className="space-y-4">
-          <div className={cn("flex items-center gap-2 border-b border-[#1a1e2a] pb-2", accent)}>
-            <ArrowUpRight className="w-6 h-6" />
-            <h4 className="text-lg font-bold">إضافات إلى حقوق الملكية (رأس المال، وغيرها)</h4>
-          </div>
-          <div className="space-y-2">
-            <div className="flex justify-between text-base font-bold text-[#ddd8cc]">
-              <span>إجمالي الإضافات المباشرة</span>
-              <span>{data.additions.total.toLocaleString(undefined, { minimumFractionDigits: activeTab === 'cash' ? 0 : 2, maximumFractionDigits: 2 })} {unit}</span>
-            </div>
-            <div className="pr-4 space-y-1">
-              {(Object.entries(data.additions.accounts) as [string, number][]).map(([acc, val]) => (
-                <div key={acc} className="flex justify-between text-sm text-[#5a5548]">
-                  <span>{acc}</span>
-                  <span className="font-mono">{val.toLocaleString(undefined, { minimumFractionDigits: activeTab === 'cash' ? 0 : 2, maximumFractionDigits: 2 })} {unit}</span>
-                </div>
-              ))}
-            </div>
-          </div>
-        </div>
-
-        {/* Deductions Section */}
-        <div className="space-y-4">
-          <div className="flex items-center gap-2 text-[#9e6a6a] border-b border-[#1a1e2a] pb-2">
-            <ArrowDownLeft className="w-6 h-6" />
-            <h4 className="text-lg font-bold">تخفيضات من حقوق الملكية (مسحوبات، وغيرها)</h4>
-          </div>
-          <div className="space-y-2">
-            <div className="flex justify-between text-base font-bold text-[#ddd8cc]">
-              <span>إجمالي التخفيضات المباشرة</span>
-              <span>{data.deductions.total.toLocaleString(undefined, { minimumFractionDigits: activeTab === 'cash' ? 0 : 2, maximumFractionDigits: 2 })} {unit}</span>
-            </div>
-            <div className="pr-4 space-y-1">
-              {(Object.entries(data.deductions.accounts) as [string, number][]).map(([acc, val]) => (
-                <div key={acc} className="flex justify-between text-sm text-[#5a5548]">
-                  <span>{acc}</span>
-                  <span className="font-mono">{val.toLocaleString(undefined, { minimumFractionDigits: activeTab === 'cash' ? 0 : 2, maximumFractionDigits: 2 })} {unit}</span>
-                </div>
-              ))}
-            </div>
-          </div>
-        </div>
-
-        {/* Net Profit Section */}
-        <div className="space-y-4 pt-4 border-t-2 border-[#1a1e2a]">
-          <div className={cn("flex items-center gap-2", accent)}>
-            <TrendingUp className="w-6 h-6" />
-            <h4 className="text-lg font-bold">صافي نتائج أعمال الفترة (Net Profit/Loss)</h4>
-          </div>
-
-          <div className="bg-[#080a0f] p-4 rounded-xl border border-[#1a1e2a] flex justify-between items-center mt-2 group hover:border-[#6a9e6a55] transition-colors">
-            <div className="flex flex-col">
-              <span className="text-base text-[#ddd8cc] font-bold">صافي الربح أو الخسارة</span>
-              <span className="text-sm text-[#5a5548]">المحسوب من الإيرادات والمصروفات والعمليات التجارية</span>
-            </div>
-            <span className={cn("text-3xl font-bold font-mono", data.netProfit >= 0 ? "text-[#6a9e6a]" : "text-[#9e6a6a]")}>
-              {data.netProfit >= 0 ? '+' : ''}{data.netProfit.toLocaleString(undefined, { minimumFractionDigits: activeTab === 'cash' ? 0 : 2, maximumFractionDigits: 2 })} {unit}
-            </span>
-          </div>
-          <div className="text-sm text-[#5a5548] italic text-center">
-            * تفاصيل الإيرادات والمصروفات متاحة في قائمة الدخل
-          </div>
-        </div>
-
-        {/* Total Equity at End */}
-        <div className={cn("bg-gradient-to-br p-5 rounded-2xl flex justify-between items-center shadow-xl", activeTab === 'cash' ? 'from-[#1a1e2a] to-[#080a0f] border border-[#c9a84c33]' : (activeTab === 'gold' ? 'from-[#1a1e2a] to-[#080a0f] border border-[#c9a84c33]' : 'from-[#1a1e2a] to-[#080a0f] border border-[#6a8a9e33]'))}>
-          <div className="flex flex-col">
-            <span className={cn("text-base font-bold opacity-80 uppercase tracking-wider", accent)}>إجمالي حقوق الملكية (نهاية الفترة)</span>
-            <span className="text-sm text-[#5a5548]">رأس المال + صافي الأرباح التشغيلية</span>
-          </div>
-          <span className={cn("text-4xl md:text-5xl font-bold font-mono", data.totalChange >= 0 ? accent : "text-[#9e6a6a]")}>
-            {data.totalChange.toLocaleString(undefined, { minimumFractionDigits: activeTab === 'cash' ? 0 : 2, maximumFractionDigits: 2 })} {unit}
-          </span>
-        </div>
-      </motion.div>
-    );
-  };
-
-  return (
-    <div className="space-y-6 pb-20">
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-2 bg-[#0e1018] border border-[#1a1e2a] p-2 rounded-2xl shadow-lg">
-        <button onClick={() => setActiveTab('gold')} className={cn("py-4 rounded-xl text-sm font-bold transition-all flex items-center justify-center gap-2", activeTab === 'gold' ? "bg-[#c9a84c] text-[#080a0f] shadow-lg" : "text-[#5a5548] hover:bg-[#1a1e2a]")}>
-          <Scale className="w-5 h-5" /> ملكية الذهب
-        </button>
-        <button onClick={() => setActiveTab('silver')} className={cn("py-4 rounded-xl text-sm font-bold transition-all flex items-center justify-center gap-2", activeTab === 'silver' ? "bg-[#6a8a9e] text-[#080a0f] shadow-lg" : "text-[#5a5548] hover:bg-[#1a1e2a]")}>
-          <Coins className="w-5 h-5" /> ملكية الفضة
-        </button>
-        <button onClick={() => setActiveTab('accs')} className={cn("py-4 rounded-xl text-sm font-bold transition-all flex items-center justify-center gap-2", activeTab === 'accs' ? "bg-[#9e8a6a] text-[#080a0f] shadow-lg" : "text-[#5a5548] hover:bg-[#1a1e2a]")}>
-          <Package className="w-5 h-5" /> ملكية الملحقات
-        </button>
-        <button onClick={() => setActiveTab('cash')} className={cn("py-4 rounded-xl text-sm font-bold transition-all flex items-center justify-center gap-2", activeTab === 'cash' ? "bg-[#6a9e6a] text-[#080a0f] shadow-lg" : "text-[#5a5548] hover:bg-[#1a1e2a]")}>
-          <Wallet className="w-5 h-5" /> ملكية النقدية
-        </button>
-      </div>
-
-      <AnimatePresence mode="wait">
-        {renderStatement()}
-      </AnimatePresence>
-    </div>
-  );
+  const { accountsDb, canonicalAccounts, openingCostConfig, goldPrice, silverPrice } = useAppStore();
+  const centralBalanceContract = useMemo(() => computeAccountBalances(entries, accountsDb), [entries, accountsDb]);
+  const year = new Date().getFullYear();
+  const months = useMemo(() => visibleFinancialPositionMonths(entries, year), [entries, year]);
+  const [selectedMonth, setSelectedMonth] = useState<number | null>(null);
+  const selected = months.find(month => month.month === selectedMonth) ?? months.at(-1);
+  const result = useMemo(() => selected && buildEquityStatementEgp({ entries, accounts: accountsDb, canonicalDefinitions: canonicalAccounts, openingCostConfig, cutoffDate: selected.cutoffDate, goldPriceEgp: goldPrice, silverPriceEgp: silverPrice }), [selected, entries, accountsDb, canonicalAccounts, openingCostConfig, goldPrice, silverPrice]);
+  if (!selected) return <div className="rounded-2xl bg-[#0e1018] p-4" dir="rtl">لا توجد بيانات للسنة الحالية.</div>;
+  if (!result?.available) return <div className="rounded-2xl border border-red-500/30 bg-red-500/10 p-4 text-red-100" dir="rtl">{result?.diagnostic ?? 'تعذر بناء القائمة.'}</div>;
+  const r = result.report;
+  return <section dir="rtl" data-balance-engine={centralBalanceContract.balanceEngineVersion} className="space-y-4 pb-20"><header className="rounded-2xl border border-[#1a1e2a] bg-[#0e1018] p-4"><h3 className="flex items-center gap-2 text-lg font-black"><Landmark className="h-5 w-5 text-[#c9a84c]" />قائمة التغيرات في حقوق الملكية — جنيه مصري</h3><p className="mt-2 text-xs text-[#8a8172]">من {year}-01-01 حتى {selected.cutoffDate}</p><div className="mt-3 flex gap-2 overflow-x-auto">{months.map(month => <button key={month.month} onClick={() => setSelectedMonth(month.month)} className={`min-h-11 shrink-0 rounded-xl px-4 ${month.month === selected.month ? 'bg-[#c9a84c] text-[#080a0f]' : 'bg-[#080a0f]'}`}>{month.label}</button>)}</div></header><div className="rounded-2xl border border-green-400/30 bg-[#0e1018] p-4"><div className="font-black">إجمالي حقوق الملكية المتراكمة</div><div className="mt-2 font-mono text-2xl font-black">{money(r.endingEquity)}</div><div className="mt-3 border-t border-[#1a1e2a] pt-3 text-xs"><div className="text-[#c9a84c]">صافي ملكية الذهب (مؤشر داعم): {formatWeight(r.ownership.netGoldOwnership21, 3)} جرام عيار 21</div><div className="mt-1 text-slate-300">صافي ملكية الفضة (مؤشر داعم): {formatWeight(r.ownership.netSilverOwnershipGrams, 3)} جرام</div></div></div><div className="space-y-2"><Drilldown label="Opening Equity" amount={r.openingEquity} rows={r.openingDetails} /><Drilldown label="Capital Contributions / Additions" amount={r.capitalAdditions.reduce((sum, row) => sum + row.amount, 0)} rows={r.capitalAdditions} tone="text-[#6a9e6a]" /><Drilldown label="Drawings" amount={r.drawings.reduce((sum, row) => sum + row.amount, 0)} rows={r.drawings} tone="text-[#9e6a6a]" /><Drilldown label="Direct-to-Equity Movements" amount={r.directMovements.reduce((sum, row) => sum + row.amount, 0)} rows={r.directMovements} /><Drilldown label="Net Profit / Loss for Current YTD Period" amount={r.currentYtdProfit} rows={r.currentProfitDetails} /><Drilldown label="Ending Equity" amount={r.endingEquity} rows={r.endingDetails} /></div></section>;
 });
