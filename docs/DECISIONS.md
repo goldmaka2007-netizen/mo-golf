@@ -90,3 +90,18 @@ Approved pricing semantics:
 - Negative effective sale workmanship is displayed as a warning only and does not change or block the existing Entry review/save contract.
 
 Detailed release record: `docs/SMART_GOLD_PRICING_CONFIG_RELEASE_2026-08-18.md`.
+
+## D-020 — Financial Position and Equity roll-forward reporting
+
+Official Financial Position and Statement of Changes in Equity remain EGP statements and must reconcile to the same centralized accounting projection. Gold E21 and silver grams are supporting ownership metrics only.
+
+Approved reporting semantics:
+
+- Financial Position supporting net metal ownership is derived from the same-date asset and liability positions; unlike dimensions are never netted into EGP.
+- Fixed assets are classified from authoritative account metadata or the canonical registry by stable source account ID. Arabic account-name matching is not an accounting classification source.
+- The Equity Statement is YTD from January 1 through the selected cutoff. True opening entries belong to opening equity; normal January 1 transactions remain period movements.
+- Capital additions, withdrawals and other direct-to-equity movements use authoritative account classification, not display names.
+- Approved historical inventory overlays dated after year start and on/before the cutoff are presented as direct-to-equity book-value movements. They do not enter current-period P&L and are not balancing plugs. Overlays on/before year start remain opening-basis effects only.
+- Ending equity must equal the same-date Financial Position equity. A material reconciliation difference is fail-closed rather than silently adjusted.
+
+Detailed release record: `docs/FINANCIAL_POSITION_EQUITY_PRODUCTION_RELEASE_2026-08-25.md`.
