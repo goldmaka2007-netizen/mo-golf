@@ -10,8 +10,8 @@ Last reviewed: 2026-08-25
 - Latest deployed application commit: `1a97d66da6d4475f704e025cfcb1ef940e0cf48e`
 - Latest release: Financial Position + Statement of Changes in Equity production correction and acceptance.
 - Deployment scope: Firebase Hosting only.
-- Release status: COMPLETED / PRODUCTION DEPLOYED / OWNER MANUAL ACCEPTED.
-- Cross-system closure requires GitHub + Notion + Google Drive verification.
+- Release status: COMPLETED / PRODUCTION DEPLOYED / OWNER MANUAL ACCEPTED / CROSS-SYSTEM VERIFIED.
+- ChatGPT directly verified GitHub + Notion + Google Drive against the same final Production state before closure.
 
 ## Latest production change — Financial Position & Equity
 
