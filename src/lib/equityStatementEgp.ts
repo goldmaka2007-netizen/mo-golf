@@ -48,12 +48,21 @@ export const buildEquityStatementEgp = (args: {
     historicalInventoryOverlayDirectives: historicalOverlaysForCutoff(cutoffEntries, args.accounts, args.cutoffDate),
   });
   if (!timeline.valid) return { available: false, diagnostic: timeline.diagnostics[0]?.message ?? 'تعذر بناء Cost Timeline صالح.' };
-  const movements = buildLegacyLedgerLegs(cutoffEntries, args.accounts, args.canonicalDefinitions, { enableFinancialProjection: true, costTimeline: timeline })
+  const projectedLegs = buildLegacyLedgerLegs(cutoffEntries, args.accounts, args.canonicalDefinitions, { enableFinancialProjection: true, costTimeline: timeline });
+  const movements = projectedLegs
     .filter(leg => leg.dimension === 'cash' && leg.group === 'equity' && !leg.isOpening && leg.date >= yearStart && leg.date <= args.cutoffDate)
     .map(leg => ({ id: leg.entityId, label: leg.accountName, accountId: leg.accountId, amount: leg.side === 'credit' ? leg.amount : -leg.amount, subType: leg.account.sourceAccount?.canonicalSubType }));
+  const overlayDirectMovements = projectedLegs
+    .filter(leg => leg.group === 'equity' && leg.dimension === 'book_value'
+      && leg.entityId === 'system:equity:inventory-opening' && leg.origin === 'generated' && leg.isOpening
+      && leg.date > yearStart && leg.date <= args.cutoffDate)
+    .map(leg => ({ id: leg.entityId, label: leg.accountName, accountId: leg.accountId, amount: leg.side === 'credit' ? leg.amount : -leg.amount }));
   const capitalAdditions = aggregate(movements.filter(row => row.subType === 'capital'));
   const drawings = aggregate(movements.filter(row => row.subType === 'withdrawals'));
-  const directMovements = aggregate(movements.filter(row => row.subType !== 'capital' && row.subType !== 'withdrawals').map(({ id, label, accountId, amount }) => ({ id, label, accountId, amount })));
+  const directMovements = aggregate([
+    ...movements.filter(row => row.subType !== 'capital' && row.subType !== 'withdrawals').map(({ id, label, accountId, amount }) => ({ id, label, accountId, amount })),
+    ...overlayDirectMovements,
+  ]);
   const openingDetails = [...opening.balanceSheet.equity.capitalDetails, ...opening.balanceSheet.equity.retainedEarningsDetails].map(row => ({ id: row.id, label: row.label, accountId: row.accountId, amount: row.amount }));
   const endingDetails = [...ending.balanceSheet.equity.capitalDetails, ...ending.balanceSheet.equity.retainedEarningsDetails].map(row => ({ id: row.id, label: row.label, accountId: row.accountId, amount: row.amount }));
   const currentProfitDetails = ending.balanceSheet.equity.currentProfitDetails.map(row => ({ id: row.id, label: row.label, accountId: row.accountId, amount: row.amount }));
