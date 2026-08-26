@@ -10,7 +10,8 @@ Last reviewed: 2026-08-27
 - Latest deployed application commit: `a9e23b0c51adc0d0ff960dde8d333d2cc94ca194`
 - Latest release: Home gold summary alignment with Financial Position + mobile readability correction.
 - Deployment scope: Firebase Hosting only.
-- Release status: IMPLEMENTATION COMPLETE / PRODUCTION DEPLOYED / OWNER MANUAL ACCEPTED / SYNC PENDING.
+- Release status: COMPLETED / PRODUCTION DEPLOYED / OWNER MANUAL ACCEPTED / CROSS-SYSTEM VERIFIED.
+- ChatGPT directly verified GitHub + Notion + Google Drive against the same final Production state before closure.
 
 ## Latest production change — Home Gold Summary Alignment
 
@@ -124,4 +125,4 @@ Detailed history belongs in individual release records. Important recent release
 - Google Drive: accounting, operational, architecture and reviewer-facing references.
 - `Makka — Current Reviewer Context` must stay short and point to detailed records.
 - Uploaded copies are snapshots only; live GitHub/Notion/Drive sources win when they differ.
-- If implementation is complete but any source is behind, use `Implementation Complete / Sync Pending` rather than Closed.
+- This release is hard-closed only because the accepted Production state and the affected GitHub + Notion + Google Drive references were directly re-read and found consistent.
