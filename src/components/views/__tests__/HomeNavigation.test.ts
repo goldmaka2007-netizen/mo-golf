@@ -38,4 +38,13 @@ describe('Operational Home quick actions', () => {
     expect(source).toContain("const openStory = () => setView('story')");
     expect(source).toContain('onClick={openStory}');
   });
+
+  it('keeps the gold summary as three two-decimal single-line values', () => {
+    expect(source).toContain("money(value as number, 2)");
+    expect(source).toContain('grid-cols-3');
+    expect(source).toContain('whitespace-nowrap font-mono');
+    expect(source).toContain('الأصول');
+    expect(source).toContain('الخصوم');
+    expect(source).toContain('حقوق الملكية');
+  });
 });
