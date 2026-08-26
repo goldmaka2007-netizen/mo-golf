@@ -1,51 +1,74 @@
 # Current Project State
 
-Last reviewed: 2026-08-25
+Last reviewed: 2026-08-27
 
 ## Production baseline
 
 - Repository: `goldmaka2007-netizen/mo-golf`
 - Production: https://makka-central-accounting.web.app
 - Firebase project: `makka-central-accounting`
-- Latest deployed application commit: `1a97d66da6d4475f704e025cfcb1ef940e0cf48e`
-- Latest release: Financial Position + Statement of Changes in Equity production correction and acceptance.
+- Latest deployed application commit: `a9e23b0c51adc0d0ff960dde8d333d2cc94ca194`
+- Latest release: Home gold summary alignment with Financial Position + mobile readability correction.
 - Deployment scope: Firebase Hosting only.
-- Release status: COMPLETED / PRODUCTION DEPLOYED / OWNER MANUAL ACCEPTED / CROSS-SYSTEM VERIFIED.
-- ChatGPT directly verified GitHub + Notion + Google Drive against the same final Production state before closure.
+- Release status: IMPLEMENTATION COMPLETE / PRODUCTION DEPLOYED / OWNER MANUAL ACCEPTED / SYNC PENDING.
 
-## Latest production change — Financial Position & Equity
+## Latest production change — Home Gold Summary Alignment
 
-Financial Position and Statement of Changes in Equity remain official EGP reports from the centralized accounting projection. Gold E21 and silver grams are supporting ownership metrics only.
+The Operational Home gold card no longer maintains an independent gold-ownership calculation.
 
 Current approved behavior:
 
-- Financial Position shows supporting net gold/silver ownership under accumulated equity.
-- Fixed assets are separated from ordinary receivables using explicit canonical metadata or canonical registry classification by stable source account ID; no Arabic-name classification.
-- Financial Position CSV exports fixed assets separately.
-- Merchant signed positions and no-netting rules remain unchanged.
-- Equity Statement is YTD from January 1 to the selected cutoff, separating opening equity, capital additions, drawings, other direct-to-equity movements, current YTD profit and ending equity.
-- True opening entries are opening-only; ordinary January 1 transactions remain period movements.
-- Approved post-year-start historical inventory overlays are direct-to-equity book-value movements only; they do not enter P&L and are not balancing plugs.
-- Equity Statement fails closed if ending equity does not reconcile with the same-date Financial Position.
+- Home gold summary consumes the same Financial Position ownership projection used for the official supporting E21 quantities.
+- Home displays only Gold Assets, Gold Liabilities, and Gold Equity/Net Ownership as E21 weights.
+- Gold Assets - Gold Liabilities = Gold Equity.
+- Home rounds the three displayed values to two decimal places for mobile readability; the underlying projection remains unchanged.
+- Treasury remains a lightweight operational cash read.
+- If the Financial Position gold projection cannot be built, Home shows `—` plus a diagnostic rather than inventing a value.
 
-Owner live Production acceptance on 2026-08-25:
+Owner live Production acceptance on 2026-08-27:
 
-- Total Assets: `14,286,709 EGP`
-- Total Liabilities: `629,354 EGP`
-- Total Equity: `13,657,355 EGP`
-- EGP equation reconciled exactly.
-- Gold assets `2,197.410 g E21` less liabilities `100.060 g E21` = net ownership `2,097.350 g E21`.
-- Silver assets `5,361.410 g` less liabilities `0.310 g` = net ownership `5,361.100 g`.
-- Fixed assets `13,750 EGP`; ordinary receivables `6,100 EGP`.
-- Equity Statement opened successfully after removal of the previous `5,408.88 EGP` fail-closed difference and matched the same-date Financial Position supporting metal ownership.
+- Gold Assets: `2,209.75 g E21`.
+- Gold Liabilities: `100.06 g E21`.
+- Gold Equity / Net Ownership: `2,109.69 g E21`.
+- The values were visible on iPhone without clipping or overlap.
+- These displayed values match the reviewed 2026-08-26 Financial Position quantities after display rounding from `2209.750 / 100.060 / 2109.690`.
+
+Implementation commits:
+
+- `04b39a40c3c845a07bb3085d8be16170efa604d5` — align Home gold card with Financial Position.
+- `a9e23b0c51adc0d0ff960dde8d333d2cc94ca194` — improve Home gold card readability.
+
+Final Production asset: `/assets/index-D4l93UvJ.js`.
 
 Detailed record:
-- `docs/FINANCIAL_POSITION_EQUITY_PRODUCTION_RELEASE_2026-08-25.md`
+- `docs/HOME_GOLD_SUMMARY_ALIGNMENT_PRODUCTION_RELEASE_2026-08-27.md`
 - Decision: `docs/DECISIONS.md` D-020.
 
 ## Validation and safety
 
-Final release evidence includes focused regressions, Typecheck, Balance Engine contract guard and production build passing. The final deployment was Firebase Hosting only.
+Gold-source alignment validation:
+
+- Focused Home / Financial Position / UI tests: `11/11 PASS`.
+- Typecheck: PASS.
+- Balance Engine contract guard: PASS.
+- Production build: PASS.
+- `git diff --check`: PASS.
+- The known `financialPositionCentralBalances.test.ts` sign failure remained pre-existing and unchanged.
+
+Readability follow-up validation:
+
+- Focused Home/UI: `3/3 PASS`.
+- Typecheck: PASS.
+- Balance Engine contract guard: PASS.
+- Production build: PASS.
+- `git diff --check`: PASS.
+
+Deployment evidence:
+
+- Firebase Hosting only.
+- Production root: HTTP 200.
+- Final Production asset: HTTP 200.
+- Local / Production asset SHA-256 matched.
 
 This release did **not** change:
 
@@ -79,11 +102,11 @@ Do not change these without a separate explicit owner decision and approval:
 
 Detailed history belongs in individual release records. Important recent releases include:
 
+- Financial Position + Equity correction — application commit `1a97d66da6d4475f704e025cfcb1ef940e0cf48e`.
 - E21 / WAC / Al-Safi consistency — application commit `f66cc5678df8b54a00809705a9ff54b2b030f061`.
 - Story Compact Fit + Story-only Buy Spread — application commit `1be587d3aa22196e9d1d544459693e5a69ddfd5b`.
-- Story Builder Contact Footer — application commit `cabe6a3d8cc3d355c17d9af4ef83e6ccfa46cf0a`.
 - Financial Position baseline release — application commit `b304f1205fe92fea49f1de209b9a180233761a73`.
-- Reports Bundle Lazy Loading — application commit `bbe0b782ac312cc9466f5c22b3be87a1f913efa2`.
+- Operational Home original release — application commit `5086600f740b86277f635fa2f4113470ee4b7669`; its original independent Home gold calculation was superseded by the 2026-08-27 Home Gold Summary Alignment release.
 
 ## Known open items
 
@@ -92,6 +115,7 @@ Detailed history belongs in individual release records. Important recent release
 - Historical `arabicWeight` migration/backfill remains **not approved** and requires a separate Critical migration safety review, dry run, rollback design and explicit owner approval.
 - Legacy Planning/Grill trackers are not evidence of current Production state.
 - Broader performance/dead-code cleanup remains separate work.
+- JavaScript chunk-size warnings above 500KB remain a separate performance item and did not block this release.
 
 ## Source roles and closure
 
