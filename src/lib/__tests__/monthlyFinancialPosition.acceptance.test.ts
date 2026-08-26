@@ -12,6 +12,7 @@ import {
   historicalOverlaysForCutoff,
   type MonthlyFinancialPositionResult,
 } from '../monthlyFinancialPosition';
+import { buildHomeOperationalSnapshot } from '../homeSelector';
 
 const overlayAccount: Account = {
   id: 'seed-account-d1216eb4076ccdf40e20', name: 'historical gold', mainType: 'assets', subType: 'inventory_gold',
@@ -134,5 +135,42 @@ describe('monthly financial position acceptance', () => {
       merchantGoldLiability21: monthly.metalSummary.goldLiabilityWeight,
       netGoldOwnership21: monthly.metalSummary.netGoldWeight,
     });
+
+    const home = buildHomeOperationalSnapshot({
+      entries, accounts, canonicalDefinitions: [], openingCostConfig: config,
+    });
+    expect(home.goldOwnership).toEqual({
+      goldAssetWeight: monthly.metalSummary.goldAssetWeight,
+      goldLiabilityWeight: monthly.metalSummary.goldLiabilityWeight,
+      netGoldWeight: monthly.metalSummary.netGoldWeight,
+    });
+    expect(home.goldOwnership!.goldAssetWeight - home.goldOwnership!.goldLiabilityWeight)
+      .toBe(home.goldOwnership!.netGoldWeight);
+  });
+
+  it('applies an approved historical overlay identically to Home and Financial Position', () => {
+    const accounts = [overlayAccount, { id: 'capital', name: 'capital', mainType: 'equity', subType: 'capital', balanceNature: 'cash', type: 'other', userId: 'test' } as Account, { id: 'shortage', name: 'shortage', mainType: 'expenses', subType: 'other', balanceNature: 'cash', type: 'other', userId: 'test' } as Account];
+    const entries = [
+      overlayEntry('2026-01-01'),
+      overlayEntry('2026-03-04'),
+    ].map((entry, index) => ({
+      ...entry,
+      tx: index === 0 ? 'opening' : 'shortage',
+      ...(index === 0 ? { id: 'opening', operationKind: 'opening' as const } : {
+        operationKind: 'adjustment' as const,
+        debit: 'shortage', debitAccountId: 'shortage',
+        credit: overlayAccount.name, creditAccountId: overlayAccount.id,
+      }),
+    }));
+    const args = { entries, accounts, canonicalDefinitions: [], openingCostConfig: [{ year: 2026, gold21PriceEgp: 5000, silverPriceEgp: 50, accessoryOpeningCosts: {} }], cutoffDate: '2026-03-04' };
+    const financialPosition = buildMonthlyFinancialPosition(args);
+    const home = buildHomeOperationalSnapshot(args);
+    expect(financialPosition, !financialPosition.available ? JSON.stringify(financialPosition) : '').toMatchObject({ available: true });
+    expect(home.goldOwnership).toEqual(financialPosition.available ? {
+      goldAssetWeight: financialPosition.metalSummary.goldAssetWeight,
+      goldLiabilityWeight: financialPosition.metalSummary.goldLiabilityWeight,
+      netGoldWeight: financialPosition.metalSummary.netGoldWeight,
+    } : null);
+    expect(home.goldOwnership?.goldAssetWeight).toBe(financialPosition.available ? financialPosition.metalSummary.goldAssetWeight : undefined);
   });
 });

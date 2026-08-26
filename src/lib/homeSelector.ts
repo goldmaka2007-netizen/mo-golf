@@ -1,32 +1,42 @@
-import type { Account, Entry } from '../types';
+import type { Account, AnnualOpeningCostConfig, CanonicalAccountDefinition, Entry } from '../types';
 import { computeAccountBalances } from './engine';
+import { buildFinancialPositionGoldSummary, type FinancialPositionGoldSummary } from './monthlyFinancialPosition';
 
 export interface HomeOperationalSnapshot {
   treasuryCash: number;
-  goldInventory21: number;
-  merchantGoldLiabilities21: number;
-  netOwnedGold21: number;
+  goldOwnership: FinancialPositionGoldSummary | null;
+  goldOwnershipDiagnostic?: string;
 }
 
-/** Lightweight operational read model; it intentionally does not build reports or projections. */
-export const buildHomeOperationalSnapshot = (entries: Entry[], accounts: Account[]): HomeOperationalSnapshot => {
+/** Lightweight operational read model; gold ownership comes from the Financial Position projection. */
+export const buildHomeOperationalSnapshot = (args: {
+  entries: Entry[];
+  accounts: Account[];
+  canonicalDefinitions: CanonicalAccountDefinition[];
+  openingCostConfig: AnnualOpeningCostConfig[];
+  goldPriceEgp?: number | null;
+  silverPriceEgp?: number | null;
+}): HomeOperationalSnapshot => {
+  const { entries, accounts } = args;
   const balances = computeAccountBalances(entries, accounts).balances.values();
   let treasuryCash = 0;
-  let goldInventory21 = 0;
-  let merchantGoldLiabilities21 = 0;
 
   for (const balance of balances) {
     if (balance.mainType === 'assets' && balance.subType === 'cash') treasuryCash += balance.cashBalance;
-    if (balance.subType === 'inventory_gold') goldInventory21 += balance.goldE21Balance;
-    if (balance.mainType === 'liabilities' && balance.metal === 'gold') {
-      merchantGoldLiabilities21 += balance.goldE21Balance;
-    }
   }
+
+  const cutoffDate = entries.map(entry => entry.date).filter(Boolean).sort().at(-1);
+  const goldProjection = cutoffDate
+    ? buildFinancialPositionGoldSummary({ ...args, cutoffDate })
+    : null;
+  const goldOwnership = goldProjection?.available === true ? goldProjection.gold : null;
+  const goldOwnershipDiagnostic = goldProjection && goldProjection.available !== true
+    ? goldProjection.diagnostic.message
+    : !cutoffDate ? 'لا توجد قيود لبناء ملخص الذهب.' : undefined;
 
   return {
     treasuryCash,
-    goldInventory21,
-    merchantGoldLiabilities21,
-    netOwnedGold21: goldInventory21 - merchantGoldLiabilities21,
+    goldOwnership,
+    ...(goldOwnershipDiagnostic ? { goldOwnershipDiagnostic } : {}),
   };
 };

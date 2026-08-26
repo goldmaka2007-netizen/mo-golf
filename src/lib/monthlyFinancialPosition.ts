@@ -42,6 +42,25 @@ export const historicalOverlaysForCutoff = (entries: readonly Entry[], accounts:
 
 export type MonthlyFinancialPositionResult = (FinancialStatementsEgp & { available: true; metalSummary: FinancialPositionMetalSummary; ownership: FinancialPositionOwnershipSnapshot }) | { available: false; diagnostic: InventoryCostDiagnostic };
 
+export type FinancialPositionGoldSummary = Pick<FinancialPositionMetalSummary, 'goldAssetWeight' | 'goldLiabilityWeight' | 'netGoldWeight'>;
+
+/** Shared gold ownership read model for lightweight surfaces such as Home. */
+export const buildFinancialPositionGoldSummary = (args: {
+  entries: Entry[]; accounts: Account[]; canonicalDefinitions: CanonicalAccountDefinition[];
+  openingCostConfig: AnnualOpeningCostConfig[]; cutoffDate: string; goldPriceEgp?: number | null; silverPriceEgp?: number | null;
+}): { available: true; gold: FinancialPositionGoldSummary } | { available: false; diagnostic: InventoryCostDiagnostic } => {
+  const result = buildMonthlyFinancialPosition(args);
+  if (result.available !== true) return { available: false, diagnostic: result.diagnostic };
+  return {
+    available: true,
+    gold: {
+      goldAssetWeight: result.metalSummary.goldAssetWeight,
+      goldLiabilityWeight: result.metalSummary.goldLiabilityWeight,
+      netGoldWeight: result.metalSummary.netGoldWeight,
+    },
+  };
+};
+
 export interface FinancialPositionCsvRow extends Record<string, string | number | null> {
   section: string;
   account: string;

@@ -12,13 +12,16 @@ const entry = (patch: Partial<Entry>): Entry => ({
 });
 
 describe('home operational snapshot', () => {
-  it('uses the central signed E21 balances for cash and owned gold', () => {
-    const snapshot = buildHomeOperationalSnapshot([
-      entry({ id: 'opening', operationKind: 'opening', debit: gold.name, debitAccountId: gold.id, credit: capital.name, creditAccountId: capital.id, weight: '10', arabicWeight: '10', karat: 21 }),
-      entry({ id: 'merchant-receipt', operationKind: 'purchase', debit: gold.name, debitAccountId: gold.id, credit: merchant.name, creditAccountId: merchant.id, weight: '2', arabicWeight: '2', karat: 21, cash: '100' }),
-      entry({ id: 'cash-sale', operationKind: 'sale', debit: cash.name, debitAccountId: cash.id, credit: gold.name, creditAccountId: gold.id, weight: '1', arabicWeight: '1', karat: 21, cash: '200' }),
-    ], [cash, gold, merchant, capital]);
+  it('preserves the lightweight treasury read model while gold uses the Financial Position projection', () => {
+    const snapshot = buildHomeOperationalSnapshot({
+      entries: [
+        entry({ id: 'opening', operationKind: 'opening', debit: gold.name, debitAccountId: gold.id, credit: capital.name, creditAccountId: capital.id, weight: '10', arabicWeight: '10', karat: 21 }),
+        entry({ id: 'merchant-receipt', operationKind: 'purchase', debit: gold.name, debitAccountId: gold.id, credit: merchant.name, creditAccountId: merchant.id, weight: '2', arabicWeight: '2', karat: 21, cash: '100' }),
+        entry({ id: 'cash-sale', operationKind: 'sale', debit: cash.name, debitAccountId: cash.id, credit: gold.name, creditAccountId: gold.id, weight: '1', arabicWeight: '1', karat: 21, cash: '200' }),
+      ],
+      accounts: [cash, gold, merchant, capital], canonicalDefinitions: [], openingCostConfig: [],
+    });
 
-    expect(snapshot).toMatchObject({ treasuryCash: 200, goldInventory21: 11, merchantGoldLiabilities21: 2, netOwnedGold21: 9 });
+    expect(snapshot).toMatchObject({ treasuryCash: 200, goldOwnership: null });
   });
 });
