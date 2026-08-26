@@ -84,12 +84,12 @@ export const OperationalHomeView = React.memo(() => {
       <OperationalCard title="الخزنة" value={money(operational.treasuryCash)} unit="ج.م" icon={Vault} />
 
       <OperationalCard title="الذهب" icon={Gem} gold>
-        <div className="mt-5 grid grid-cols-3 divide-x divide-x-reverse divide-black/15">
+        <div className="mt-5 grid min-w-0 grid-cols-3 divide-x divide-x-reverse divide-black/15">
           {[
             ['الأصول', operational.goldOwnership?.goldAssetWeight],
             ['الخصوم', operational.goldOwnership?.goldLiabilityWeight],
             ['حقوق الملكية', operational.goldOwnership?.netGoldWeight],
-          ].map(([label, value]) => <div key={label as string} className="px-2 first:pl-0 last:pr-0"><p className="text-sm font-black">{label as string}</p><p className="mt-2 font-mono text-xl font-black tabular-nums">{value === undefined ? '—' : money(value as number, 3)}</p><p className="mt-1 text-xs font-black">جم E21</p></div>)}
+          ].map(([label, value]) => <div key={label as string} className="min-w-0 px-1 first:pl-0 last:pr-0"><p className="text-sm font-black">{label as string}</p><p className="mt-2 whitespace-nowrap font-mono text-lg font-black tabular-nums sm:text-xl">{value === undefined ? '—' : money(value as number, 2)}</p><p className="mt-1 whitespace-nowrap text-xs font-black">جم E21</p></div>)}
         </div>
         {operational.goldOwnershipDiagnostic && <p className="mt-3 text-[11px] font-bold">{operational.goldOwnershipDiagnostic}</p>}
       </OperationalCard>
