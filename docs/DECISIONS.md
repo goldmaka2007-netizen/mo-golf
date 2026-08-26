@@ -98,10 +98,12 @@ Official Financial Position and Statement of Changes in Equity remain EGP statem
 Approved reporting semantics:
 
 - Financial Position supporting net metal ownership is derived from the same-date asset and liability positions; unlike dimensions are never netted into EGP.
+- Any Home/UI surface that labels gold Assets, Liabilities, Equity, or net ownership must consume the same Financial Position ownership projection rather than maintain an independent gold-ownership calculation.
 - Fixed assets are classified from authoritative account metadata or the canonical registry by stable source account ID. Arabic account-name matching is not an accounting classification source.
 - The Equity Statement is YTD from January 1 through the selected cutoff. True opening entries belong to opening equity; normal January 1 transactions remain period movements.
 - Capital additions, withdrawals and other direct-to-equity movements use authoritative account classification, not display names.
 - Approved historical inventory overlays dated after year start and on/before the cutoff are presented as direct-to-equity book-value movements. They do not enter current-period P&L and are not balancing plugs. Overlays on/before year start remain opening-basis effects only.
 - Ending equity must equal the same-date Financial Position equity. A material reconciliation difference is fail-closed rather than silently adjusted.
 
-Detailed release record: `docs/FINANCIAL_POSITION_EQUITY_PRODUCTION_RELEASE_2026-08-25.md`.
+Detailed Financial Position/Equity release record: `docs/FINANCIAL_POSITION_EQUITY_PRODUCTION_RELEASE_2026-08-25.md`.
+Home gold-summary consumer release: `docs/HOME_GOLD_SUMMARY_ALIGNMENT_PRODUCTION_RELEASE_2026-08-27.md`.
