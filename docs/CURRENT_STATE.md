@@ -13,7 +13,19 @@ Last reviewed: 2026-08-27
 - Release status: COMPLETED / PRODUCTION DEPLOYED / OWNER MANUAL ACCEPTED / CROSS-SYSTEM VERIFIED.
 - A stale-baseline Hosting deploy risk on 2026-08-27 was recovered by redeploying the approved Production baseline `a9e23b0c51adc0d0ff960dde8d333d2cc94ca194`; owner manual acceptance confirmed the recovered live Home screen.
 
-## Current non-production implementation — Phase 3B Daily Journal Structural Cleanup
+## Current non-production implementation — Phase 3C Daily Journal Presentation Component Split
+
+- Phase 3C Daily Journal presentation split is merged to `main` at application commit `cc1940a82b41f51067fa05e06977143bb4558c0d` via PR #11 after explicit owner approval and two independent acceptance reviews.
+- It is **not deployed**. Production remains on application commit `a9e23b0c51adc0d0ff960dde8d333d2cc94ca194`.
+- Scope: extract Daily Journal entry sections/rows, copy/edit presentation state, development diagnostics, Cash Closing presentation, Smart Daily Management Dashboard, SmartCard, DimensionSummary and Metric into focused presentation components while preserving `DailyJournalView` orchestration and all accounting/report calculations.
+- `DailyJournalView` remains owner of Zustand/store reads, selectedDate state/effects, `buildDailyJournalReport`, `buildDailyJournalSmartDashboard`, `resolveDailyJournalMarketPrice`, the historical DOM effect, raw/canonical data, grouping, selected-date shortcut and CSV orchestration/export.
+- Acceptance correction: the first PR revision introduced Arabic mojibake in `DailyJournalView`; independent review blocked merge, the exact canonical UTF-8 wording was restored from the verified base, and a focused encoding regression guard was added before the second acceptance review passed.
+- Verification: focused Daily Journal tests `20/20 PASS`; encoding regression guard PASS; Typecheck PASS; Balance Contract Guard PASS; Build PASS; `git diff --check` PASS; changed-source mojibake scan clean.
+- Protected Posting Matrix, WAC/COGS, Balance Engine, EntryForm/save-edit contract, store persistence, Firebase backend/data, Golden Baseline, dependencies and deployment configuration were unchanged.
+- No Firebase deploy or Production write occurred.
+- Primary implementation evidence: GitHub PR #11.
+
+## Previous non-production implementation — Phase 3B Daily Journal Structural Cleanup
 
 - Phase 3B Daily Journal structural cleanup is merged to `main` at application commit `4aa40d290807932b301e4123c8883524b7111864` via PR #10 after explicit owner approval.
 - It is **not deployed**. Production remains on application commit `a9e23b0c51adc0d0ff960dde8d333d2cc94ca194`.
