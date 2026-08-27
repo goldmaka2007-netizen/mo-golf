@@ -13,7 +13,17 @@ Last reviewed: 2026-08-27
 - Release status: COMPLETED / PRODUCTION DEPLOYED / OWNER MANUAL ACCEPTED / CROSS-SYSTEM VERIFIED.
 - A stale-baseline Hosting deploy risk on 2026-08-27 was recovered by redeploying the approved Production baseline `a9e23b0c51adc0d0ff960dde8d333d2cc94ca194`; owner manual acceptance confirmed the recovered live Home screen.
 
-## Current non-production implementation — Phase 3A App Shell Cleanup
+## Current non-production implementation — Phase 3B Daily Journal Structural Cleanup
+
+- Phase 3B Daily Journal structural cleanup is merged to `main` at application commit `4aa40d290807932b301e4123c8883524b7111864` via PR #10 after explicit owner approval.
+- It is **not deployed**. Production remains on application commit `a9e23b0c51adc0d0ff960dde8d333d2cc94ca194`.
+- Scope: extract Daily Journal date controls and pure presentation helpers for CSV rows and operation grouping while preserving `DailyJournalView` orchestration and all accounting/report calculations.
+- `buildDailyJournalReport`, `buildDailyJournalSmartDashboard`, `resolveDailyJournalMarketPrice`, selected-date shortcut, `historical` DOM effect, CSV contract, and sale/purchase/expense/other grouping semantics remained unchanged.
+- Verification: focused Daily Journal tests `3/3 PASS`; Typecheck PASS; Balance Contract Guard PASS; Build PASS; `git diff --check` PASS; full Vitest `556 passed / same 11 known pre-existing failures`, with no new failures.
+- Protected Posting Matrix, WAC/COGS, Balance Engine, EntryForm/save-edit contract, store persistence, Firebase backend/data, Golden Baseline and dependencies were unchanged.
+- Primary implementation evidence: GitHub PR #10.
+
+## Previous non-production implementation — Phase 3A App Shell Cleanup
 
 - Phase 3A App Shell cleanup is merged to `main` at application commit `5395cef910dd2a8dd6aa402a928423f39f59c52d` via PR #9 after explicit owner approval.
 - It is **not deployed**. Production remains on application commit `a9e23b0c51adc0d0ff960dde8d333d2cc94ca194`.
