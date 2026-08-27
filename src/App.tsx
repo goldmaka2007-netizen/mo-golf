@@ -1,4 +1,4 @@
-import React, { useState, useEffect, Suspense } from 'react';
+import React, { useState, useEffect } from 'react';
 import { deleteDoc, doc, updateDoc, serverTimestamp, addDoc, collection, getDocsFromServer, query, where } from 'firebase/firestore';
 import { AnimatePresence, motion } from 'framer-motion';
 import { useAppStore } from './store';
@@ -9,40 +9,13 @@ import { isGoldEquivalentEntry } from './utils/accountLogic';
 import { resolveEntryIdentity } from './lib/entryIdentity';
 import { validateAccountingPolicy } from './lib/accountingPolicy';
 
-import { Home, BookOpenCheck, PlusCircle, BarChart3, Menu, RefreshCw, Gem } from 'lucide-react';
+import { Home, BookOpenCheck, PlusCircle, BarChart3, Menu } from 'lucide-react';
 
-import { MainDashboard } from './components/views/MainDashboard';
-import { EntryForm } from './components/views/EntryForm';
 import { EditingEntryModal } from './components/views/EditingEntryModal';
-import { DailyJournalView } from './components/views/DailyJournalView';
-import { AccountingGuideView } from './components/views/AccountingGuideView';
 import { InvoicePrintModal } from './components/views/InvoicePrintModal';
-import { MoreView } from './components/views/MoreView';
-import { CanonicalAccountsView } from './components/views/CanonicalAccountsView';
-
-const ReportsView = React.lazy(() =>
-  import('./components/views/ReportsView').then(module => ({
-    default: module.ReportsView,
-  }))
-);
-
-const InventoryCheckView = React.lazy(() =>
-  import('./components/views/InventoryCheckView').then(module => ({
-    default: module.InventoryCheckView,
-  }))
-);
-
-const StoryBuilderView = React.lazy(() =>
-  import('./components/views/StoryBuilderView').then(module => ({
-    default: module.StoryBuilderView,
-  }))
-);
-
-const SettingsView = React.lazy(() =>
-  import('./components/views/SettingsView').then(module => ({
-    default: module.SettingsView,
-  }))
-);
+import { AppHeader } from './components/app/AppHeader';
+import { AppViewContent } from './components/app/AppViewContent';
+import { getPageTitle, moreViews, reportViews, type AppView } from './components/app/NavigationMetadata';
 
 import { ErrorBoundary } from './components/ErrorBoundary';
 import { NavButton } from './components/ui/NavButton';
@@ -56,33 +29,6 @@ import { useDataSync } from './hooks/useDataSync';
 import { useCostRecalculation } from './hooks/useCostRecalculation';
 import { areOperationWritesLocked } from './lib/costRecalculation';
 import { isAdminEmail } from './lib/adminAccess';
-
-type AppView = ReturnType<typeof useAppStore.getState>['view'];
-
-const reportViews: AppView[] = ['reports', 'inventory', 'profit-analysis', 'advanced-analytics'];
-const moreViews: AppView[] = ['more', 'story', 'guide', 'settings', 'chart-of-accounts'];
-
-const getPageTitle = (view: AppView) => {
-  if (view === 'entry') return 'العمليات';
-  if (view === 'journal') return 'اليومية';
-  if (view === 'database') return 'المخزون';
-  if (reportViews.includes(view)) return 'التقارير';
-  if (view === 'story') return 'حالة واتساب';
-  if (view === 'guide') return 'الدليل المحاسبي';
-  if (view === 'settings') return 'الإعدادات';
-  if (view === 'chart-of-accounts') return 'دليل الحسابات';
-  if (view === 'more') return 'المزيد';
-  return 'الرئيسية';
-};
-
-const LazyViewFallback = ({ label }: { label: string }) => (
-  <div className="flex min-h-[320px] items-center justify-center rounded-2xl border border-[#1a1e2a] bg-[#0e1018] p-8 text-center text-sm font-bold text-[#8a8172]" dir="rtl">
-    <div className="flex flex-col items-center gap-3">
-      <div className="h-6 w-6 animate-spin rounded-full border-2 border-[#c9a84c] border-t-transparent" />
-      <span>جارٍ تحميل {label}...</span>
-    </div>
-  </div>
-);
 
 export default function App() {
   const {
@@ -324,34 +270,7 @@ export default function App() {
         dir="rtl"
       >
         <main className={`mx-auto max-w-2xl px-4 pt-4 sm:pt-6 ${isEntryDarkShell ? 'flex w-full flex-1 flex-col' : ''}`}>
-          <header className={`sticky top-0 z-30 -mx-4 border-b px-4 pb-3 pt-[calc(0.75rem+env(safe-area-inset-top))] backdrop-blur-xl ${isEntryDarkShell ? 'mb-3 border-[#1a1e2a]/80 bg-[#020408]/92' : view === 'entry' ? 'mb-4 border-[#15203b]/10 bg-[#fffdf7]/94' : 'mb-4 border-[#1a1e2a]/80 bg-[#020408]/92'}`}>
-            <div className="flex items-center justify-between gap-3">
-              <div className="min-w-0">
-                {view === 'entry' ? (
-                  <div className="flex items-center gap-2.5">
-                    <span className={`flex h-10 w-10 items-center justify-center rounded-2xl bg-[#c99a2e]/12 ${isEntryDarkShell ? 'text-[#c9a84c]' : 'text-[#b17f1d]'}`}>
-                      <Gem className="h-6 w-6" aria-hidden="true" />
-                    </span>
-                    <h1 className={`truncate text-[30px] font-black leading-none ${isEntryDarkShell ? 'text-[#f5f1e8]' : 'text-[#15203b]'}`}>{pageTitle}</h1>
-                  </div>
-                ) : (
-                  <>
-                    <div className="text-[10px] font-black uppercase tracking-[0.22em] text-[#c9a84c]">نظام مؤسسة مكة</div>
-                    <h1 className="mt-1 truncate text-lg font-black text-[#f5f1e8]">{pageTitle}</h1>
-                  </>
-                )}
-              </div>
-              <button
-                type="button"
-                onClick={refreshData}
-                aria-label="تحديث البيانات"
-                className={`flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl border text-[#c9a84c] transition-all active:scale-95 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#c99a2e] ${isEntryDarkShell ? 'border-[#1a1e2a] bg-[#0e1018]' : view === 'entry' ? 'border-[#15203b]/10 bg-white shadow-sm' : 'border-[#1a1e2a] bg-[#0e1018]'}`}
-                title="تحديث البيانات"
-              >
-                <RefreshCw className="h-5 w-5" />
-              </button>
-            </div>
-          </header>
+          <AppHeader view={view} pageTitle={pageTitle} isEntryDarkShell={isEntryDarkShell} onRefresh={refreshData} />
 
           {(costCalculationRun.status === 'running' || costCalculationRun.status === 'failed') && (
             <div className={`mb-4 rounded-2xl border p-4 text-sm ${costCalculationRun.status === 'failed' ? 'border-red-500/40 bg-red-500/10 text-red-100' : 'border-yellow-500/40 bg-yellow-500/10 text-yellow-100'}`}>
@@ -376,45 +295,7 @@ export default function App() {
             </div>
           )}
 
-          <AnimatePresence mode="wait">
-              <motion.div
-              key={view}
-              initial={{ opacity: 0, y: 8 }}
-              animate={{ opacity: 1, y: 0 }}
-              exit={{ opacity: 0, y: -8 }}
-              transition={{ duration: 0.18 }}
-              className={isEntryDarkShell ? 'flex flex-1 flex-col' : undefined}
-            >
-              {view === 'home' && <MainDashboard />}
-              {view === 'entry' && (
-                <EntryForm onStepChange={setEntryStep} />
-              )}
-              {view === 'journal' && <DailyJournalView />}
-              {view === 'database' && (
-                <Suspense fallback={<LazyViewFallback label="المخزون" />}>
-                  <InventoryCheckView />
-                </Suspense>
-              )}
-              {reportViews.includes(view) && (
-                <Suspense fallback={<LazyViewFallback label="التقارير" />}>
-                  <ReportsView />
-                </Suspense>
-              )}
-              {view === 'more' && <MoreView isFullscreen={isFullscreen} onToggleFullscreen={toggleFullscreen} onLogOut={logOut} />}
-              {view === 'story' && (
-                <Suspense fallback={<LazyViewFallback label="حالة واتساب" />}>
-                  <StoryBuilderView />
-                </Suspense>
-              )}
-              {view === 'guide' && <AccountingGuideView />}
-              {view === 'settings' && (
-                <Suspense fallback={<LazyViewFallback label="الإعدادات" />}>
-                  <SettingsView />
-                </Suspense>
-              )}
-              {view === 'chart-of-accounts' && <CanonicalAccountsView />}
-            </motion.div>
-          </AnimatePresence>
+          <AppViewContent view={view} isEntryDarkShell={isEntryDarkShell} isFullscreen={isFullscreen} onToggleFullscreen={toggleFullscreen} onLogOut={logOut} onEntryStepChange={setEntryStep} />
         </main>
 
         <AppBottomNavigation>
