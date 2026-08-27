@@ -1,0 +1,40 @@
+name: Phase 1 Verify
+
+on:
+  push:
+    branches:
+      - refactor/phase1-safe-cleanup-20260827
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Typecheck
+        run: npm run typecheck
+
+      - name: Tests
+        run: npm test
+
+      - name: Build
+        run: npm run build
+
+      - name: Bundle sizes
+        run: |
+          echo "=== dist/assets sizes (bytes) ==="
+          find dist/assets -maxdepth 1 -type f -printf '%s %f\n' | sort -nr
