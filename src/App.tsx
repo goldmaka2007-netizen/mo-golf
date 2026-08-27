@@ -13,19 +13,34 @@ import { Home, BookOpenCheck, PlusCircle, BarChart3, Menu, RefreshCw, Gem } from
 
 import { MainDashboard } from './components/views/MainDashboard';
 import { EntryForm } from './components/views/EntryForm';
-import { SettingsView } from './components/views/SettingsView';
 import { EditingEntryModal } from './components/views/EditingEntryModal';
 import { DailyJournalView } from './components/views/DailyJournalView';
 import { AccountingGuideView } from './components/views/AccountingGuideView';
-import { StoryBuilderView } from './components/views/StoryBuilderView';
 import { InvoicePrintModal } from './components/views/InvoicePrintModal';
 import { MoreView } from './components/views/MoreView';
 import { CanonicalAccountsView } from './components/views/CanonicalAccountsView';
-import { InventoryCheckView } from './components/views/InventoryCheckView';
 
 const ReportsView = React.lazy(() =>
   import('./components/views/ReportsView').then(module => ({
     default: module.ReportsView,
+  }))
+);
+
+const InventoryCheckView = React.lazy(() =>
+  import('./components/views/InventoryCheckView').then(module => ({
+    default: module.InventoryCheckView,
+  }))
+);
+
+const StoryBuilderView = React.lazy(() =>
+  import('./components/views/StoryBuilderView').then(module => ({
+    default: module.StoryBuilderView,
+  }))
+);
+
+const SettingsView = React.lazy(() =>
+  import('./components/views/SettingsView').then(module => ({
+    default: module.SettingsView,
   }))
 );
 
@@ -46,6 +61,28 @@ type AppView = ReturnType<typeof useAppStore.getState>['view'];
 
 const reportViews: AppView[] = ['reports', 'inventory', 'profit-analysis', 'advanced-analytics'];
 const moreViews: AppView[] = ['more', 'story', 'guide', 'settings', 'chart-of-accounts'];
+
+const getPageTitle = (view: AppView) => {
+  if (view === 'entry') return 'العمليات';
+  if (view === 'journal') return 'اليومية';
+  if (view === 'database') return 'المخزون';
+  if (reportViews.includes(view)) return 'التقارير';
+  if (view === 'story') return 'حالة واتساب';
+  if (view === 'guide') return 'الدليل المحاسبي';
+  if (view === 'settings') return 'الإعدادات';
+  if (view === 'chart-of-accounts') return 'دليل الحسابات';
+  if (view === 'more') return 'المزيد';
+  return 'الرئيسية';
+};
+
+const LazyViewFallback = ({ label }: { label: string }) => (
+  <div className="flex min-h-[320px] items-center justify-center rounded-2xl border border-[#1a1e2a] bg-[#0e1018] p-8 text-center text-sm font-bold text-[#8a8172]" dir="rtl">
+    <div className="flex flex-col items-center gap-3">
+      <div className="h-6 w-6 animate-spin rounded-full border-2 border-[#c9a84c] border-t-transparent" />
+      <span>جارٍ تحميل {label}...</span>
+    </div>
+  </div>
+);
 
 export default function App() {
   const {
@@ -258,18 +295,7 @@ export default function App() {
     { id: 'more' as AppView, label: 'المزيد', icon: <Menu className="h-5 w-5" />, active: moreViews.includes(view), onClick: () => setView('more') },
   ];
 
-  const pageTitle = (() => {
-    if (view === 'entry') return 'العمليات';
-    if (view === 'journal') return 'اليومية';
-    if (view === 'database') return 'المخزون';
-    if (reportViews.includes(view)) return 'التقارير';
-    if (view === 'story') return 'حالة واتساب';
-    if (view === 'guide') return 'الدليل المحاسبي';
-    if (view === 'settings') return 'الإعدادات';
-    if (view === 'chart-of-accounts') return 'دليل الحسابات';
-    if (view === 'more') return 'المزيد';
-    return 'الرئيسية';
-  })();
+  const pageTitle = getPageTitle(view);
 
   if (globalError) {
     return <GlobalErrorView globalError={globalError} setGlobalError={setGlobalError} />;
@@ -359,30 +385,33 @@ export default function App() {
               transition={{ duration: 0.18 }}
               className={isEntryDarkShell ? 'flex flex-1 flex-col' : undefined}
             >
-              {view === 'home' && <MainDashboard refreshData={refreshData} />}
+              {view === 'home' && <MainDashboard />}
               {view === 'entry' && (
                 <EntryForm onStepChange={setEntryStep} />
               )}
               {view === 'journal' && <DailyJournalView />}
-              {view === 'database' && <InventoryCheckView />}
+              {view === 'database' && (
+                <Suspense fallback={<LazyViewFallback label="المخزون" />}>
+                  <InventoryCheckView />
+                </Suspense>
+              )}
               {reportViews.includes(view) && (
-                <Suspense
-                  fallback={
-                    <div className="flex min-h-[320px] items-center justify-center rounded-2xl border border-[#1a1e2a] bg-[#0e1018] p-8 text-center text-sm font-bold text-[#8a8172]" dir="rtl">
-                      <div className="flex flex-col items-center gap-3">
-                        <div className="h-6 w-6 animate-spin rounded-full border-2 border-[#c9a84c] border-t-transparent" />
-                        <span>جارٍ تحميل التقارير...</span>
-                      </div>
-                    </div>
-                  }
-                >
+                <Suspense fallback={<LazyViewFallback label="التقارير" />}>
                   <ReportsView />
                 </Suspense>
               )}
               {view === 'more' && <MoreView isFullscreen={isFullscreen} onToggleFullscreen={toggleFullscreen} onLogOut={logOut} />}
-              {view === 'story' && <StoryBuilderView />}
+              {view === 'story' && (
+                <Suspense fallback={<LazyViewFallback label="حالة واتساب" />}>
+                  <StoryBuilderView />
+                </Suspense>
+              )}
               {view === 'guide' && <AccountingGuideView />}
-              {view === 'settings' && <SettingsView />}
+              {view === 'settings' && (
+                <Suspense fallback={<LazyViewFallback label="الإعدادات" />}>
+                  <SettingsView />
+                </Suspense>
+              )}
               {view === 'chart-of-accounts' && <CanonicalAccountsView />}
             </motion.div>
           </AnimatePresence>
