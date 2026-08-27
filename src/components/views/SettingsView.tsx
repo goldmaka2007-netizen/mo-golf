@@ -44,6 +44,12 @@ import {
   SMART_PURCHASE_TAXONOMY_KEYS,
   parseAssistantNumber,
 } from '../../lib/goldPricingAssistant';
+import { SettingsTabBar, SettingsTab } from './settings/SettingsTabBar';
+import { SettingsRulesPanel } from './settings/SettingsRulesPanel';
+import { SettingsCostPanel } from './settings/SettingsCostPanel';
+import { SettingsImportExportPanel } from './settings/SettingsImportExportPanel';
+import { SettingsAccountsPanel } from './settings/SettingsAccountsPanel';
+import { SettingsSystemInfo } from './settings/SettingsSystemInfo';
 
 export const SettingsView = React.memo(() => {
   const {
@@ -92,7 +98,7 @@ export const SettingsView = React.memo(() => {
   const [isDeletingAll, setIsDeletingAll] = useState(false);
   const [isGeneratingWacAudit, setIsGeneratingWacAudit] = useState(false);
   const [showDeleteAllConfirm, setShowDeleteAllConfirm] = useState(false);
-  const [activeTab, setActiveTab] = useState<'rules' | 'cost' | 'import' | 'accounts'>('rules');
+  const [activeTab, setActiveTab] = useState<SettingsTab>('rules');
 
   useEffect(() => {
     const normalized = normalizeGoldSaleTaxStampPerGramEgp(goldSaleTaxStampPerGramEgp);
@@ -630,7 +636,8 @@ export const SettingsView = React.memo(() => {
         </button>
       </div>
 
-      <div className="flex gap-2 overflow-x-auto pb-4 no-scrollbar">
+      <SettingsTabBar activeTab={activeTab} onTabChange={setActiveTab} />
+      <div className="hidden flex gap-2 overflow-x-auto pb-4 no-scrollbar">
         <button
           onClick={() => setActiveTab('rules')}
           className={cn(
@@ -671,14 +678,7 @@ export const SettingsView = React.memo(() => {
 
       <AnimatePresence mode="wait">
         {activeTab === 'cost' && (
-          <motion.div
-            key="cost"
-            initial={{ opacity: 0, y: 10 }}
-            animate={{ opacity: 1, y: 0 }}
-            exit={{ opacity: 0, y: -10 }}
-            className="space-y-4"
-            dir="rtl"
-          >
+          <SettingsCostPanel>
             <div className="rounded-3xl border border-[#c9a84c]/35 bg-[#0e1018] p-6 shadow-[0_18px_45px_rgba(0,0,0,0.16)]">
               <div className="space-y-1">
                 <h3 className="text-sm font-bold text-[#f0cc6b]">إعدادات تسعير البيع</h3>
@@ -887,17 +887,11 @@ export const SettingsView = React.memo(() => {
                 </table>
               </div>
             </div>
-          </motion.div>
+          </SettingsCostPanel>
         )}
 
         {activeTab === 'import' && (
-          <motion.div
-            key="import"
-            initial={{ opacity: 0, y: 10 }}
-            animate={{ opacity: 1, y: 0 }}
-            exit={{ opacity: 0, y: -10 }}
-            className="space-y-4"
-          >
+          <SettingsImportExportPanel>
             <div className="bg-[#0e1018] border border-[#1a1e2a] rounded-3xl p-6 space-y-6">
               <div className="pb-6 border-b border-[#1a1e2a] space-y-4">
                 <div>
@@ -1057,16 +1051,18 @@ export const SettingsView = React.memo(() => {
                 </div>
               </div>
             </div>
-          </motion.div>
+          </SettingsImportExportPanel>
         )}
 
         {activeTab === 'rules' && (
+          <>
+          <SettingsRulesPanel onOpenGuide={() => setView('guide')} />
           <motion.div
             key="rules"
             initial={{ opacity: 0, y: 10 }}
             animate={{ opacity: 1, y: 0 }}
             exit={{ opacity: 0, y: -10 }}
-            className="space-y-4"
+            className="hidden space-y-4"
           >
             <div className="bg-[#0e1018] border border-[#1a1e2a] rounded-3xl p-8 text-center space-y-6">
               <div className="p-4 bg-[#c9a84c11] rounded-2xl w-20 h-20 mx-auto flex items-center justify-center border border-[#c9a84c22]">
@@ -1086,15 +1082,18 @@ export const SettingsView = React.memo(() => {
               </button>
             </div>
           </motion.div>
+          </>
         )}
 
         {activeTab === 'accounts' && (
+          <>
+          <SettingsAccountsPanel onOpenGuide={() => setView('guide')} />
           <motion.div
             key="accounts"
             initial={{ opacity: 0, y: 10 }}
             animate={{ opacity: 1, y: 0 }}
             exit={{ opacity: 0, y: -10 }}
-            className="space-y-4"
+            className="hidden space-y-4"
           >
              <div className="bg-[#0e1018] border border-[#1a1e2a] rounded-3xl p-8 text-center space-y-6">
               <div className="p-4 bg-[#6a8a9e11] rounded-2xl w-20 h-20 mx-auto flex items-center justify-center border border-[#6a8a9e22]">
@@ -1114,11 +1113,13 @@ export const SettingsView = React.memo(() => {
               </button>
             </div>
           </motion.div>
+          </>
         )}
       </AnimatePresence>
 
+      <SettingsSystemInfo email={user?.email} onReload={() => window.location.reload()} />
       {/* System Info */}
-      <section className="space-y-4 pt-8">
+      <section className="hidden space-y-4 pt-8">
         <h3 className="text-xs font-bold text-[#5a5548] uppercase tracking-widest px-2">معلومات النظام</h3>
         <div className="bg-[#0e1018] border border-[#1a1e2a] rounded-3xl p-6 space-y-4">
           <div className="flex justify-between items-center text-xs">
