@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { Calendar, CheckCircle2, ChevronLeft, ChevronRight, ClipboardPaste, Database, Download, PlusCircle, Scale, TrendingUp, Wallet } from 'lucide-react';
+import { CheckCircle2, ClipboardPaste, Database, Scale, TrendingUp, Wallet } from 'lucide-react';
 import { format } from 'date-fns';
 import { ar } from 'date-fns/locale';
 import { AccountingLeg } from '../../lib/canonicalAccounting';
@@ -11,6 +11,8 @@ import { formatEgpNumber, formatQuantity, formatWeight } from '../../lib/formatt
 import { downloadCsv } from '../../utils/csv';
 import { buildDailyJournalSmartDashboard, resolveDailyJournalMarketPrice } from '../../lib/dailyJournalSmartDashboard';
 import { DailyJournalSmartSupplementalCards } from './DailyJournalSmartSupplementalCards';
+import { DailyJournalDateControls } from './daily-journal/DailyJournalDateControls';
+import { createDailyJournalCsvRows, entryKey, groupDailyJournalEntries, unique } from './daily-journal/dailyJournalPresentation';
 
 const dimensions: { id: DailyJournalDimension; title: string; unit: string; icon: React.ElementType; accent: string }[] = [
   { id: 'gold', title: '\u062d\u0631\u0643\u0629 \u0627\u0644\u0630\u0647\u0628 (21)', unit: '\u062c\u0645', icon: Scale, accent: 'text-[#c9a84c]' },
@@ -18,15 +20,9 @@ const dimensions: { id: DailyJournalDimension; title: string; unit: string; icon
   { id: 'cash', title: '\u062d\u0631\u0643\u0629 \u0627\u0644\u0646\u0642\u062f\u064a\u0629', unit: '\u062c.\u0645', icon: Wallet, accent: 'text-[#6a9e6a]' },
 ];
 
-const entryKey = (entry: Entry) => entry.id || String(entry.seq);
-const unique = (items: string[]) => [...new Set(items)].filter(Boolean);
 const amount = (value: number, dimension: DailyJournalDimension) => dimension === 'cash' ? formatEgpNumber(value) : dimension === 'quantity' ? formatQuantity(value, 3) : formatWeight(value, 2);
-export type DailyJournalExportRow = Record<string, string | number | undefined>;
-
-export const createDailyJournalCsvRows = (summary: DailyJournalExportRow[], operations: DailyJournalExportRow[]) => [
-  ...summary.map(row => ({ التقرير: 'Journal Summary', ...row })),
-  ...operations.map(row => ({ التقرير: 'Operations', ...row })),
-];
+export type { DailyJournalExportRow } from './daily-journal/dailyJournalPresentation';
+export { createDailyJournalCsvRows } from './daily-journal/dailyJournalPresentation';
 
 export const DailyJournalView = React.memo(() => {
   const { entries, setEditingEntry, accountsDb, setView, goldPrice, smartMarginSettings } = useAppStore();
@@ -57,12 +53,7 @@ export const DailyJournalView = React.memo(() => {
     return result;
   }, [report]);
   const groups = useMemo(() => {
-    const next: Record<'sale' | 'purchase' | 'expense' | 'other', Entry[]> = { sale: [], purchase: [], expense: [], other: [] };
-    rawEntries.forEach(entry => {
-      const kind = legsByEntry.get(entryKey(entry))?.[0]?.operationKind;
-      if (kind === 'sale' || kind === 'purchase' || kind === 'expense') next[kind].push(entry); else next.other.push(entry);
-    });
-    return next;
+    return groupDailyJournalEntries(rawEntries, legsByEntry);
   }, [rawEntries, legsByEntry]);
 
   const openEntryForSelectedDate = () => {
@@ -80,21 +71,7 @@ export const DailyJournalView = React.memo(() => {
   };
 
   return <div className="space-y-6 pb-10" dir="rtl">
-    <div className="rounded-2xl border border-[#1a1e2a] bg-[#0e1018] p-3 shadow-lg">
-      <div className="mb-3 flex items-center justify-between gap-3">
-        <h2 className="flex items-center gap-2 text-base font-black text-[#c9a84c]"><Calendar className="h-5 w-5" />{'\u0627\u0644\u064a\u0648\u0645\u064a\u0629 \u0627\u0644\u0639\u0627\u0645\u0629'}</h2>
-        <button type="button" onClick={exportToCsv} className="flex h-10 w-10 items-center justify-center rounded-xl border border-[#c9a84c22] bg-[#c9a84c11] text-[#c9a84c]"><Download className="h-4 w-4" /></button>
-      </div>
-      <div className="grid grid-cols-[44px_1fr_44px] items-center gap-2">
-        <button type="button" onClick={() => { const date = new Date(selectedDate); date.setDate(date.getDate() - 1); setSelectedDate(format(date, 'yyyy-MM-dd')); }} className="flex h-11 items-center justify-center rounded-xl border border-[#1a1e2a] bg-[#080a0f] text-[#ddd8cc]"><ChevronRight className="h-5 w-5" /></button>
-        <div className="relative h-11"><div className="flex h-11 items-center justify-center rounded-xl border border-[#1a1e2a] bg-[#080a0f] px-3 text-center text-sm font-black text-[#ddd8cc]" aria-hidden="true"><bdi dir="rtl">{readableSelectedDate}</bdi></div><input type="date" value={selectedDate} aria-label="اختيار تاريخ اليومية" onChange={event => setSelectedDate(event.target.value)} className="absolute inset-0 h-11 w-full cursor-pointer opacity-0" /></div>
-        <button type="button" onClick={() => { const date = new Date(selectedDate); date.setDate(date.getDate() + 1); setSelectedDate(format(date, 'yyyy-MM-dd')); }} className="flex h-11 items-center justify-center rounded-xl border border-[#1a1e2a] bg-[#080a0f] text-[#ddd8cc]"><ChevronLeft className="h-5 w-5" /></button>
-      </div>
-      <button type="button" onClick={openEntryForSelectedDate} className="mt-3 flex min-h-12 w-full items-center justify-center gap-2 rounded-xl bg-[#c9a84c] px-4 py-3 text-sm font-black text-[#080a0f] shadow-lg shadow-[#c9a84c]/10 transition-all active:scale-[0.99] focus:outline-none focus:ring-2 focus:ring-[#f5f1e8]">
-        <PlusCircle className="h-4 w-4" />
-        {'إضافة عملية لهذا اليوم'}
-      </button>
-    </div>
+    <DailyJournalDateControls selectedDate={selectedDate} readableSelectedDate={readableSelectedDate} onDateChange={setSelectedDate} onExport={exportToCsv} onAddEntry={openEntryForSelectedDate} />
 
     {import.meta.env.DEV && report.diagnostics.groups.length > 0 && <DevelopmentDiagnostics groups={report.diagnostics.groups} total={report.diagnostics.entries.length} />}
 
