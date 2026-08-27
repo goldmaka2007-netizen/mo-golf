@@ -15,6 +15,19 @@ describe('Daily journal CSV export', () => {
     expect(source).toContain('const targetDate = selectedDate || format(new Date(),');
   });
 
+  it('preserves UTF-8 Arabic in the Daily Journal presentation surface', () => {
+    const sources = [
+      readFileSync(new URL('../DailyJournalView.tsx', import.meta.url), 'utf8'),
+      readFileSync(new URL('../daily-journal/DailyJournalDashboardPresentation.tsx', import.meta.url), 'utf8'),
+      readFileSync(new URL('../daily-journal/DailyJournalEntryPresentation.tsx', import.meta.url), 'utf8'),
+    ].join('\n');
+    expect(sources).toContain('اختر التاريخ');
+    expect(sources).toContain('رصيد وإقفال الخزنة');
+    expect(sources).toContain('قرار شراء الذهب الآن');
+    expect(sources).toContain('غير متاح');
+    expect(sources).not.toMatch(/[ÃÂ]|â(?:€|‚)|[™ÅËÆ]/);
+  });
+
   it('preserves operation grouping from canonical leg operationKind', () => {
     const entries = [
       { id: 'sale', seq: 1, operationKind: 'sale' },
