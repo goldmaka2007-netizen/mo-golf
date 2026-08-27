@@ -11,9 +11,20 @@ Last reviewed: 2026-08-27
 - Latest release: Home gold summary alignment with Financial Position + mobile readability correction.
 - Deployment scope: Firebase Hosting only.
 - Release status: COMPLETED / PRODUCTION DEPLOYED / OWNER MANUAL ACCEPTED / CROSS-SYSTEM VERIFIED.
-- ChatGPT directly verified GitHub + Notion + Google Drive against the same final Production state before closure.
+- A stale-baseline Hosting deploy risk on 2026-08-27 was recovered by redeploying the approved Production baseline `a9e23b0c51adc0d0ff960dde8d333d2cc94ca194`; owner manual acceptance confirmed the recovered live Home screen.
 
-## Current non-production implementation — Phase 1 Safe Cleanup
+## Current non-production implementation — Phase 2 Settings UI Refactor
+
+- Phase 2 Settings UI-only refactor is merged to `main` at application commit `41f02379e445deaaf0c29e263f8f91085a9f5db6` via PR #8.
+- It is **not deployed**. Production remains on application commit `a9e23b0c51adc0d0ff960dde8d333d2cc94ca194`.
+- Scope: extract Settings presentation into focused components for tab bar, rules, accounts, cost, import/export and system info while keeping state, effects, validation, Firestore persistence, import/export operations, delete-all, invoice numbering, WAC generation and operation-write locking in `SettingsView`.
+- Migration-only hidden duplicate markup and wrapper-only `children` extraction were removed.
+- The inventory navigation callback regression found during independent review was fixed and covered by a focused source-contract regression test.
+- Verification: focused Settings suite `15/15 PASS`; typecheck PASS; Balance Contract Guard PASS; production build PASS; `git diff --check` PASS; full Vitest `551 passed / same 11 known pre-existing failures`, with no new failures.
+- Protected Posting Matrix, WAC/COGS, Balance Engine, EntryForm/save contract, store persistence, Firebase backend/data, Golden Baseline and dependencies were unchanged.
+- Primary implementation evidence: GitHub PR #8.
+
+## Previous non-production implementation — Phase 1 Safe Cleanup
 
 - Approved Phase 1 implementation is merged to `main` at application commit `6f628b99bcca37df9c5892dd1d03aef9319f6bde` via PR #7.
 - It is **not deployed**. Production remains on application commit `a9e23b0c51adc0d0ff960dde8d333d2cc94ca194`.
