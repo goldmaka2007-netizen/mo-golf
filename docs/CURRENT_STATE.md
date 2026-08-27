@@ -13,6 +13,17 @@ Last reviewed: 2026-08-27
 - Release status: COMPLETED / PRODUCTION DEPLOYED / OWNER MANUAL ACCEPTED / CROSS-SYSTEM VERIFIED.
 - ChatGPT directly verified GitHub + Notion + Google Drive against the same final Production state before closure.
 
+## Current non-production implementation — Phase 1 Safe Cleanup
+
+- Approved Phase 1 implementation is merged to `main` at application commit `6f628b99bcca37df9c5892dd1d03aef9319f6bde` via PR #7.
+- It is **not deployed**. Production remains on application commit `a9e23b0c51adc0d0ff960dde8d333d2cc94ca194`.
+- Scope was limited to lazy-loading `SettingsView`, `StoryBuilderView`, and `InventoryCheckView`; reusing one loading fallback; moving page-title mapping to a pure helper; and removing the unused `refreshData` prop from `MainDashboard`.
+- No dead-code files were deleted because the available reference evidence was not strong enough to prove deletion safety.
+- Protected accounting, save/edit, persistence, Firestore, and Golden Baseline surfaces were not changed.
+- Verification matched the unchanged-app baseline: typecheck PASS; Balance Engine contract + production build PASS; tests remained exactly `550 passed / 11 pre-existing failures` with no new failures.
+- Main JavaScript bundle decreased from `1,433,712` to `1,339,297` bytes (`-94,415`, about `6.6%`). The pre-existing `>500 KB` chunk warning remains open and was not a Phase 1 acceptance target.
+- Primary implementation evidence: GitHub PR #7.
+
 ## Latest production change — Home Gold Summary Alignment
 
 The Operational Home gold card no longer maintains an independent gold-ownership calculation.
@@ -115,8 +126,8 @@ Detailed history belongs in individual release records. Important recent release
 - Completion of the full historical 2116-row migration/reconciliation is not proven by current documentation.
 - Historical `arabicWeight` migration/backfill remains **not approved** and requires a separate Critical migration safety review, dry run, rollback design and explicit owner approval.
 - Legacy Planning/Grill trackers are not evidence of current Production state.
-- Broader performance/dead-code cleanup remains separate work.
-- JavaScript chunk-size warnings above 500KB remain a separate performance item and did not block this release.
+- Further performance/dead-code cleanup beyond Phase 1 remains separate work; Phase 1 deleted no files because dead-code evidence was insufficient.
+- JavaScript chunk-size warnings above 500KB remain a separate performance item and were not cleared by Phase 1.
 
 ## Source roles and closure
 
@@ -125,4 +136,4 @@ Detailed history belongs in individual release records. Important recent release
 - Google Drive: accounting, operational, architecture and reviewer-facing references.
 - `Makka — Current Reviewer Context` must stay short and point to detailed records.
 - Uploaded copies are snapshots only; live GitHub/Notion/Drive sources win when they differ.
-- This release is hard-closed only because the accepted Production state and the affected GitHub + Notion + Google Drive references were directly re-read and found consistent.
+- Production release closure requires the accepted Production state and the affected GitHub + Notion + Google Drive references to be directly re-read and found consistent.
