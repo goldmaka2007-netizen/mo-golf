@@ -2,6 +2,7 @@ import React, { useEffect, useMemo, useState } from 'react';
 import { BarChart3, Book, BookOpen, Briefcase, ChevronRight, Landmark, PieChart, TrendingUp } from 'lucide-react';
 import { format } from 'date-fns';
 import { useAppStore } from '../../store';
+import { MonthlyReportView } from './reports/MonthlyReportView';
 const IncomeStatementView = React.lazy(() => import('./reports/EgpIncomeStatementView').then(module => ({ default: module.IncomeStatementView })));
 const EquityStatementView = React.lazy(() => import('./reports/EquityStatementView').then(module => ({ default: module.EquityStatementView })));
 const BalanceSheetView = React.lazy(() => import('./reports/EgpBalanceSheetView').then(module => ({ default: module.BalanceSheetView })));
@@ -10,7 +11,6 @@ const GeneralLedgerView = React.lazy(() => import('./reports/GeneralLedgerView')
 const InventoryCheckView = React.lazy(() => import('./InventoryCheckView').then(module => ({ default: module.InventoryCheckView })));
 const FinalReportView = React.lazy(() => import('./reports/FinalReportView').then(module => ({ default: module.FinalReportView })));
 const ScrapAnalysisView = React.lazy(() => import('./reports/ScrapAnalysisView').then(module => ({ default: module.ScrapAnalysisView })));
-const MonthlyReportView = React.lazy(() => import('./reports/MonthlyReportView').then(module => ({ default: module.MonthlyReportView })));
 const InventoryProfitabilityReportView = React.lazy(() => import('./reports/InventoryProfitabilityReportView').then(module => ({ default: module.InventoryProfitabilityReportView })));
 const FinancialStatementsView = React.lazy(() => import('./reports/FinancialStatementsView').then(module => ({ default: module.FinancialStatementsView })));
 

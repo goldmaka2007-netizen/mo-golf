@@ -19,8 +19,10 @@ describe('dynamic import recovery', () => {
   it('does not reload for an unrelated application error', () => {
     expect(isDynamicImportFailure(new Error('Invalid accounting entry'))).toBe(false);
   });
-  it('lazy-loads individual report implementations without changing report routing', () => {
+  it('keeps the monthly report out of a second-level lazy chunk', () => {
     const reportsView = readFileSync(new URL('../../components/views/ReportsView.tsx', import.meta.url), 'utf8');
+    expect(reportsView).toContain("import { MonthlyReportView } from './reports/MonthlyReportView'");
+    expect(reportsView).not.toContain("const MonthlyReportView = React.lazy(() => import('./reports/MonthlyReportView')");
     for (const staticImport of [
       "import { IncomeStatementView } from './reports/EgpIncomeStatementView'",
       "import { EquityStatementView } from './reports/EquityStatementView'",
@@ -30,13 +32,12 @@ describe('dynamic import recovery', () => {
       "import { InventoryCheckView } from './InventoryCheckView'",
       "import { FinalReportView } from './reports/FinalReportView'",
       "import { ScrapAnalysisView } from './reports/ScrapAnalysisView'",
-      "import { MonthlyReportView } from './reports/MonthlyReportView'",
       "import { InventoryProfitabilityReportView } from './reports/InventoryProfitabilityReportView'",
       "import { FinancialStatementsView } from './reports/FinancialStatementsView'",
     ]) {
       expect(reportsView).not.toContain(staticImport);
     }
-    expect(reportsView.match(/React\.lazy\(\(\) => import\(/g)).toHaveLength(11);
+    expect(reportsView.match(/React\.lazy\(\(\) => import\(/g)).toHaveLength(10);
     expect(reportsView).toContain('<React.Suspense');
     expect(reportsView).toContain('جارٍ تحميل التقرير...');
     expect(reportsView).toContain("selected === 'inventory-profitability' || selected === 'lifecycle' || selected === 'profit-analysis' || selected === 'advanced-analytics'");
