@@ -2,17 +2,17 @@ import React, { useEffect, useMemo, useState } from 'react';
 import { BarChart3, Book, BookOpen, Briefcase, ChevronRight, Landmark, PieChart, TrendingUp } from 'lucide-react';
 import { format } from 'date-fns';
 import { useAppStore } from '../../store';
-import { IncomeStatementView } from './reports/EgpIncomeStatementView';
-import { EquityStatementView } from './reports/EquityStatementView';
-import { BalanceSheetView } from './reports/EgpBalanceSheetView';
-import { TrialBalanceView } from './reports/TrialBalanceView';
-import { GeneralLedgerView } from './reports/GeneralLedgerView';
-import { InventoryCheckView } from './InventoryCheckView';
-import { FinalReportView } from './reports/FinalReportView';
-import { ScrapAnalysisView } from './reports/ScrapAnalysisView';
-import { MonthlyReportView } from './reports/MonthlyReportView';
-import { InventoryProfitabilityReportView } from './reports/InventoryProfitabilityReportView';
-import { FinancialStatementsView } from './reports/FinancialStatementsView';
+const IncomeStatementView = React.lazy(() => import('./reports/EgpIncomeStatementView').then(module => ({ default: module.IncomeStatementView })));
+const EquityStatementView = React.lazy(() => import('./reports/EquityStatementView').then(module => ({ default: module.EquityStatementView })));
+const BalanceSheetView = React.lazy(() => import('./reports/EgpBalanceSheetView').then(module => ({ default: module.BalanceSheetView })));
+const TrialBalanceView = React.lazy(() => import('./reports/TrialBalanceView').then(module => ({ default: module.TrialBalanceView })));
+const GeneralLedgerView = React.lazy(() => import('./reports/GeneralLedgerView').then(module => ({ default: module.GeneralLedgerView })));
+const InventoryCheckView = React.lazy(() => import('./InventoryCheckView').then(module => ({ default: module.InventoryCheckView })));
+const FinalReportView = React.lazy(() => import('./reports/FinalReportView').then(module => ({ default: module.FinalReportView })));
+const ScrapAnalysisView = React.lazy(() => import('./reports/ScrapAnalysisView').then(module => ({ default: module.ScrapAnalysisView })));
+const MonthlyReportView = React.lazy(() => import('./reports/MonthlyReportView').then(module => ({ default: module.MonthlyReportView })));
+const InventoryProfitabilityReportView = React.lazy(() => import('./reports/InventoryProfitabilityReportView').then(module => ({ default: module.InventoryProfitabilityReportView })));
+const FinancialStatementsView = React.lazy(() => import('./reports/FinancialStatementsView').then(module => ({ default: module.FinancialStatementsView })));
 
 type ReportId = 'ledger' | 'trial' | 'income' | 'equity' | 'balance' | 'inventory' | 'inventory-profitability' | 'lifecycle' | 'profit-analysis' | 'advanced-analytics' | 'final' | 'monthly' | 'scrap' | 'financial-statements';
 const reports: { id: ReportId; label: string; icon: React.ReactNode }[] = [
@@ -73,16 +73,18 @@ export const ReportsView = React.memo(() => {
   return <section className="space-y-3 pb-24" dir="rtl">
     <button type="button" onClick={back} className="flex items-center gap-1 text-sm font-bold text-[#c9a84c]"><ChevronRight className="h-5 w-5" /> رجوع إلى التقارير</button>
     <h2 className="text-lg font-black text-[#f5f1e8]">{title}</h2>
-    {selected === 'ledger' && <GeneralLedgerView entries={entries} initialAccountId={ledgerAccountId} />}
-    {selected === 'trial' && <TrialBalanceView entries={balanceEntries} />}
-    {selected === 'income' && <IncomeStatementView entries={filteredEntries} onOpenLedger={openLedger} />}
-    {selected === 'equity' && <EquityStatementView entries={entries} />}
-    {selected === 'balance' && <BalanceSheetView entries={balanceEntries} onOpenLedger={openLedger} />}
-    {selected === 'inventory' && <InventoryCheckView />}
-    {(selected === 'inventory-profitability' || selected === 'lifecycle' || selected === 'profit-analysis' || selected === 'advanced-analytics') && <InventoryProfitabilityReportView />}
-    {selected === 'monthly' && <MonthlyReportView entries={entries} onNavigate={target => open(target)} />}
-    {selected === 'scrap' && <ScrapAnalysisView entries={filteredEntries} allEntries={entries} />}
-    {selected === 'final' && <FinalReportView entries={filteredEntries} balanceEntries={balanceEntries} />}
-    {selected === 'financial-statements' && <FinancialStatementsView incomeEntries={filteredEntries} balanceEntries={balanceEntries} onOpenLedger={openLedger} />}
+    <React.Suspense fallback={<div className="rounded-2xl border border-[#1a1e2a] bg-[#0e1018] p-8 text-center text-sm font-bold text-[#8a8172]" dir="rtl">جارٍ تحميل التقرير...</div>}>
+      {selected === 'ledger' && <GeneralLedgerView entries={entries} initialAccountId={ledgerAccountId} />}
+      {selected === 'trial' && <TrialBalanceView entries={balanceEntries} />}
+      {selected === 'income' && <IncomeStatementView entries={filteredEntries} onOpenLedger={openLedger} />}
+      {selected === 'equity' && <EquityStatementView entries={entries} />}
+      {selected === 'balance' && <BalanceSheetView entries={balanceEntries} onOpenLedger={openLedger} />}
+      {selected === 'inventory' && <InventoryCheckView />}
+      {(selected === 'inventory-profitability' || selected === 'lifecycle' || selected === 'profit-analysis' || selected === 'advanced-analytics') && <InventoryProfitabilityReportView />}
+      {selected === 'monthly' && <MonthlyReportView entries={entries} onNavigate={target => open(target)} />}
+      {selected === 'scrap' && <ScrapAnalysisView entries={filteredEntries} allEntries={entries} />}
+      {selected === 'final' && <FinalReportView entries={filteredEntries} balanceEntries={balanceEntries} />}
+      {selected === 'financial-statements' && <FinancialStatementsView incomeEntries={filteredEntries} balanceEntries={balanceEntries} onOpenLedger={openLedger} />}
+    </React.Suspense>
   </section>;
 });
