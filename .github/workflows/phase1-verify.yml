@@ -4,6 +4,9 @@ on:
   push:
     branches:
       - refactor/phase1-safe-cleanup-20260827
+  pull_request:
+    branches:
+      - main
   workflow_dispatch:
 
 permissions:
