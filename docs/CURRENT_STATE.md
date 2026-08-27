@@ -13,7 +13,17 @@ Last reviewed: 2026-08-27
 - Release status: COMPLETED / PRODUCTION DEPLOYED / OWNER MANUAL ACCEPTED / CROSS-SYSTEM VERIFIED.
 - A stale-baseline Hosting deploy risk on 2026-08-27 was recovered by redeploying the approved Production baseline `a9e23b0c51adc0d0ff960dde8d333d2cc94ca194`; owner manual acceptance confirmed the recovered live Home screen.
 
-## Current non-production implementation — Phase 2 Settings UI Refactor
+## Current non-production implementation — Phase 3A App Shell Cleanup
+
+- Phase 3A App Shell cleanup is merged to `main` at application commit `5395cef910dd2a8dd6aa402a928423f39f59c52d` via PR #9 after explicit owner approval.
+- It is **not deployed**. Production remains on application commit `a9e23b0c51adc0d0ff960dde8d333d2cc94ca194`.
+- Scope: extract pure navigation metadata/page-title logic, App header presentation, and view-content routing into focused App Shell components while preserving the existing lazy/Suspense mapping.
+- `App.tsx` reduced from 410 to 299 lines. `refreshData`, `handleDelete`, `handleUpdate`, Firestore/audit writes, operation-write locking, cost logic, EntryForm/save-edit contracts, auth/data sync and cost recalculation behavior remained owned by `App.tsx` and behaviorally unchanged.
+- Verification: focused App Shell/navigation tests `7/7 PASS`; Typecheck PASS; Balance Contract Guard PASS; Build PASS; `git diff --check` PASS; full Vitest `555 passed / same 11 known pre-existing failures`, with no new failures.
+- Protected Posting Matrix, WAC/COGS, Balance Engine, Entry save/edit contract, store persistence, Firebase backend/data, Golden Baseline and dependencies were unchanged.
+- Primary implementation evidence: GitHub PR #9.
+
+## Previous non-production implementation — Phase 2 Settings UI Refactor
 
 - Phase 2 Settings UI-only refactor is merged to `main` at application commit `41f02379e445deaaf0c29e263f8f91085a9f5db6` via PR #8.
 - It is **not deployed**. Production remains on application commit `a9e23b0c51adc0d0ff960dde8d333d2cc94ca194`.
