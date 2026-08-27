@@ -32,6 +32,15 @@ Last reviewed: 2026-08-27
 - Protected Posting Matrix, WAC/COGS, Balance Engine, EntryForm/save-edit contract, report/accounting engines, store persistence, Firebase backend/data, Golden Baseline, dependencies and Vite configuration were unchanged.
 - Primary implementation evidence: GitHub PR #12.
 
+## Initial bundle performance audit — no Phase 4B approved
+
+- A follow-up read-only audit measured the current initial/main JavaScript bundle at about `1.34 MB` raw and examined static reachability without changing source, dependencies, Firebase, Firestore, Production data, or deployment state.
+- The audit found additional code-splitting opportunities in secondary screens and conditional UI, but also confirmed that major initial contributors include central Firebase/React runtime code and protected accounting/cost paths that must not be changed merely to reduce bundle size.
+- Protected/high-risk paths explicitly remain out of scope for bundle-size cleanup: `useCostRecalculation`, `costRecalculation.ts`, `inventoryCostEngine.ts`, Posting Matrix, WAC/COGS, Balance Engine, Financial Position ownership logic, Entry save/update/delete contracts, Firebase synchronization, and Golden Baseline.
+- The owner explicitly chose to stop performance cleanup here and **not implement Phase 4B** at this time.
+- No branch, PR, code change, dependency change, Firebase change, Firestore/data write, or deploy was performed for this audit.
+- Future initial-bundle work is deferred until there is a real user-visible performance need or a new explicit owner decision.
+
 ## Cleanup sequence now included in Production
 
 The following previously merged cleanup phases are now included in Production because the deployment was built from current `main` application code at `40649506a3f3181ee2f421412f1d08a1f6734c3e`:
@@ -102,7 +111,7 @@ Do not change these without a separate explicit owner decision and approval:
 - Pre-existing accounting/Golden test failures remain separate follow-up work. Do not regenerate or alter the Golden Baseline merely to clear them.
 - Completion of the full historical 2116-row migration/reconciliation is not proven by current documentation.
 - Historical `arabicWeight` migration/backfill remains **not approved** and requires a separate Critical migration safety review, dry run, rollback design and explicit owner approval.
-- The initial/main JavaScript chunk remains above 500 KB (`~1,340.20 KB`) and is a separate future performance item. Phase 4A removed the ReportsView chunk from the >500 KB list without changing Vite configuration.
+- The initial/main JavaScript chunk remains above 500 KB at about `1.34 MB`, but the 2026-08-27 read-only audit is complete and the owner chose **no Phase 4B for now**. Treat further initial-bundle optimization as deferred, not active work.
 - Legacy Planning/Grill trackers are not evidence of current Production state.
 
 ## Source roles and closure
@@ -112,4 +121,4 @@ Do not change these without a separate explicit owner decision and approval:
 - Google Drive: accounting, operational, architecture and reviewer-facing references.
 - `Makka — Current Reviewer Context` must stay short and point to primary evidence.
 - Uploaded copies are snapshots only; live GitHub/Notion/Drive sources win when they differ.
-- Phase 4A implementation, recovery deployment, Owner Manual Acceptance and final GitHub + Notion + Google Drive verification are complete. Release status is `CROSS-SYSTEM VERIFIED`.
+- Phase 4A remains `CROSS-SYSTEM VERIFIED`. The subsequent initial-bundle audit was read-only; the owner decided not to proceed with Phase 4B and no implementation/deployment followed.
