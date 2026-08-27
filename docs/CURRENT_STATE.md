@@ -7,139 +7,78 @@ Last reviewed: 2026-08-27
 - Repository: `goldmaka2007-netizen/mo-golf`
 - Production: https://makka-central-accounting.web.app
 - Firebase project: `makka-central-accounting`
-- Latest deployed application commit: `a9e23b0c51adc0d0ff960dde8d333d2cc94ca194`
-- Latest release: Home gold summary alignment with Financial Position + mobile readability correction.
+- Latest deployed application commit: `40649506a3f3181ee2f421412f1d08a1f6734c3e`
+- Latest release: Phase 4A Reports Internal Lazy Loading, including the previously merged Phase 1–3C cleanup sequence.
 - Deployment scope: Firebase Hosting only.
-- Release status: COMPLETED / PRODUCTION DEPLOYED / OWNER MANUAL ACCEPTED / CROSS-SYSTEM VERIFIED.
-- A stale-baseline Hosting deploy risk on 2026-08-27 was recovered by redeploying the approved Production baseline `a9e23b0c51adc0d0ff960dde8d333d2cc94ca194`; owner manual acceptance confirmed the recovered live Home screen.
+- Current release status: `PRODUCTION DEPLOYED / TECHNICAL VERIFICATION PASS / OWNER MANUAL ACCEPTANCE PENDING`.
+- Production root returned HTTP 200; deployed main asset `index-CuR-CMKk.js` returned HTTP 200 and its SHA-256 matched the local production build exactly: `2cc0d1721a0ec6a810dc542c4c78c596d39d509ce5b1a70a3633f01b51e28f18`.
+- No Firestore data, Rules, Indexes, Functions, Storage, Auth, accounting rule, Golden Baseline, or backend resource changed during this deployment.
+- Authenticated Production smoke for Reports / Monthly Report is still pending because the deployment environment had no authenticated application session. Per the project manual-acceptance rule, this release is not Closed yet.
 
-## Current non-production implementation — Phase 3C Daily Journal Presentation Component Split
+## Current production implementation — Phase 4A Reports Internal Lazy Loading
 
-- Phase 3C Daily Journal presentation split is merged to `main` at application commit `cc1940a82b41f51067fa05e06977143bb4558c0d` via PR #11 after explicit owner approval and two independent acceptance reviews.
-- It is **not deployed**. Production remains on application commit `a9e23b0c51adc0d0ff960dde8d333d2cc94ca194`.
-- Scope: extract Daily Journal entry sections/rows, copy/edit presentation state, development diagnostics, Cash Closing presentation, Smart Daily Management Dashboard, SmartCard, DimensionSummary and Metric into focused presentation components while preserving `DailyJournalView` orchestration and all accounting/report calculations.
-- `DailyJournalView` remains owner of Zustand/store reads, selectedDate state/effects, `buildDailyJournalReport`, `buildDailyJournalSmartDashboard`, `resolveDailyJournalMarketPrice`, the historical DOM effect, raw/canonical data, grouping, selected-date shortcut and CSV orchestration/export.
-- Acceptance correction: the first PR revision introduced Arabic mojibake in `DailyJournalView`; independent review blocked merge, the exact canonical UTF-8 wording was restored from the verified base, and a focused encoding regression guard was added before the second acceptance review passed.
-- Verification: focused Daily Journal tests `20/20 PASS`; encoding regression guard PASS; Typecheck PASS; Balance Contract Guard PASS; Build PASS; `git diff --check` PASS; changed-source mojibake scan clean.
-- Protected Posting Matrix, WAC/COGS, Balance Engine, EntryForm/save-edit contract, store persistence, Firebase backend/data, Golden Baseline, dependencies and deployment configuration were unchanged.
-- No Firebase deploy or Production write occurred.
-- Primary implementation evidence: GitHub PR #11.
+- Phase 4A was merged through GitHub PR #12 at application commit `40649506a3f3181ee2f421412f1d08a1f6734c3e` after explicit owner approval and two independent acceptance reviews.
+- Root cause: `ReportsView` was already a lazy top-level screen, but it statically imported all report implementations, creating a `526.75 KB` ReportsView chunk.
+- Accepted implementation: 10 report implementations are now loaded on demand from `ReportsView` using `React.lazy` + `Suspense`.
+- Historical PWA compatibility preserved: `MonthlyReportView` remains a static import inside `ReportsView`. The first PR revision attempted to lazy-load it, but independent review blocked merge after tracing the historical regression guard from commit `915b448394ed58687e52f4d0097aa8815117a965` (`fix(pwa): recover monthly report chunk failures`). The original Monthly Report protection was restored before acceptance.
+- Routing semantics preserved: ReportId values, report menu/order/labels, report aliases, `openLedger`, ledger account routing, browser history/back behavior, date filters, `MonthlyReportView.onNavigate`, RTL and report calculations remain unchanged.
+- Focused acceptance: `14/14 PASS`; report UI integration PASS; Typecheck PASS; Balance Contract Guard PASS; Build PASS; `git diff --check` PASS; UTF-8/mojibake check PASS.
+- Production build after accepted correction: initial/main `1,339.82 KB`; ReportsView including MonthlyReportView `432.45 KB`. Only the initial/main chunk remains above 500 KB.
+- ReportsView improvement versus the original Phase 4A baseline: `526.75 KB → 432.45 KB`, a reduction of about `94.30 KB` / `17.89%`, while retaining the historical Monthly Report chunk-safety rule.
+- Protected Posting Matrix, WAC/COGS, Balance Engine, EntryForm/save-edit contract, report/accounting engines, store persistence, Firebase backend/data, Golden Baseline, dependencies and Vite configuration were unchanged.
+- Primary implementation evidence: GitHub PR #12.
 
-## Previous non-production implementation — Phase 3B Daily Journal Structural Cleanup
+## Cleanup sequence now included in Production
 
-- Phase 3B Daily Journal structural cleanup is merged to `main` at application commit `4aa40d290807932b301e4123c8883524b7111864` via PR #10 after explicit owner approval.
-- It is **not deployed**. Production remains on application commit `a9e23b0c51adc0d0ff960dde8d333d2cc94ca194`.
-- Scope: extract Daily Journal date controls and pure presentation helpers for CSV rows and operation grouping while preserving `DailyJournalView` orchestration and all accounting/report calculations.
-- `buildDailyJournalReport`, `buildDailyJournalSmartDashboard`, `resolveDailyJournalMarketPrice`, selected-date shortcut, `historical` DOM effect, CSV contract, and sale/purchase/expense/other grouping semantics remained unchanged.
-- Verification: focused Daily Journal tests `3/3 PASS`; Typecheck PASS; Balance Contract Guard PASS; Build PASS; `git diff --check` PASS; full Vitest `556 passed / same 11 known pre-existing failures`, with no new failures.
-- Protected Posting Matrix, WAC/COGS, Balance Engine, EntryForm/save-edit contract, store persistence, Firebase backend/data, Golden Baseline and dependencies were unchanged.
-- Primary implementation evidence: GitHub PR #10.
+The following previously merged cleanup phases are now included in Production because the deployment was built from current `main` at `40649506a3f3181ee2f421412f1d08a1f6734c3e`:
 
-## Previous non-production implementation — Phase 3A App Shell Cleanup
+### Phase 3C — Daily Journal Presentation Component Split
+- Application commit: `cc1940a82b41f51067fa05e06977143bb4558c0d`, PR #11.
+- Extracted Daily Journal presentation components while preserving orchestration and all report/accounting calculations.
+- First review caught Arabic mojibake; canonical UTF-8 wording and a regression guard were restored before acceptance.
+- Verification at acceptance: focused Daily Journal `20/20 PASS`; Typecheck, Balance Contract, Build and `git diff --check` PASS.
 
-- Phase 3A App Shell cleanup is merged to `main` at application commit `5395cef910dd2a8dd6aa402a928423f39f59c52d` via PR #9 after explicit owner approval.
-- It is **not deployed**. Production remains on application commit `a9e23b0c51adc0d0ff960dde8d333d2cc94ca194`.
-- Scope: extract pure navigation metadata/page-title logic, App header presentation, and view-content routing into focused App Shell components while preserving the existing lazy/Suspense mapping.
-- `App.tsx` reduced from 410 to 299 lines. `refreshData`, `handleDelete`, `handleUpdate`, Firestore/audit writes, operation-write locking, cost logic, EntryForm/save-edit contracts, auth/data sync and cost recalculation behavior remained owned by `App.tsx` and behaviorally unchanged.
-- Verification: focused App Shell/navigation tests `7/7 PASS`; Typecheck PASS; Balance Contract Guard PASS; Build PASS; `git diff --check` PASS; full Vitest `555 passed / same 11 known pre-existing failures`, with no new failures.
-- Protected Posting Matrix, WAC/COGS, Balance Engine, Entry save/edit contract, store persistence, Firebase backend/data, Golden Baseline and dependencies were unchanged.
-- Primary implementation evidence: GitHub PR #9.
+### Phase 3B — Daily Journal Structural Cleanup
+- Application commit: `4aa40d290807932b301e4123c8883524b7111864`, PR #10.
+- Extracted date controls and pure presentation helpers for CSV/grouping while preserving Daily Journal accounting/report behavior.
+- Verification at acceptance: focused `3/3 PASS`; Typecheck, Balance Contract, Build and `git diff --check` PASS; full Vitest `556 passed / same 11 known pre-existing failures`.
 
-## Previous non-production implementation — Phase 2 Settings UI Refactor
+### Phase 3A — App Shell Cleanup
+- Application commit: `5395cef910dd2a8dd6aa402a928423f39f59c52d`, PR #9.
+- Extracted App header, routing presentation and pure navigation metadata while preserving lazy/Suspense behavior and write/accounting handlers.
+- Verification at acceptance: focused `7/7 PASS`; Typecheck, Balance Contract, Build and `git diff --check` PASS; full Vitest `555 passed / same 11 known pre-existing failures`.
 
-- Phase 2 Settings UI-only refactor is merged to `main` at application commit `41f02379e445deaaf0c29e263f8f91085a9f5db6` via PR #8.
-- It is **not deployed**. Production remains on application commit `a9e23b0c51adc0d0ff960dde8d333d2cc94ca194`.
-- Scope: extract Settings presentation into focused components for tab bar, rules, accounts, cost, import/export and system info while keeping state, effects, validation, Firestore persistence, import/export operations, delete-all, invoice numbering, WAC generation and operation-write locking in `SettingsView`.
-- Migration-only hidden duplicate markup and wrapper-only `children` extraction were removed.
-- The inventory navigation callback regression found during independent review was fixed and covered by a focused source-contract regression test.
-- Verification: focused Settings suite `15/15 PASS`; typecheck PASS; Balance Contract Guard PASS; production build PASS; `git diff --check` PASS; full Vitest `551 passed / same 11 known pre-existing failures`, with no new failures.
-- Protected Posting Matrix, WAC/COGS, Balance Engine, EntryForm/save contract, store persistence, Firebase backend/data, Golden Baseline and dependencies were unchanged.
-- Primary implementation evidence: GitHub PR #8.
+### Phase 2 — Settings UI Refactor
+- Application commit: `41f02379e445deaaf0c29e263f8f91085a9f5db6`, PR #8.
+- Split Settings presentation while keeping validation, Firestore persistence, import/export, WAC generation, operation locks and controller behavior in `SettingsView`.
+- Independent review caught and fixed an inventory navigation callback regression before merge.
+- Verification at acceptance: focused `15/15 PASS`; Typecheck, Balance Contract, Build and `git diff --check` PASS; full Vitest `551 passed / same 11 known pre-existing failures`.
 
-## Previous non-production implementation — Phase 1 Safe Cleanup
+### Phase 1 — Safe Cleanup
+- Application commit: `6f628b99bcca37df9c5892dd1d03aef9319f6bde`, PR #7.
+- Lazy-loaded Settings, Story Builder and Inventory Check; reused a loading fallback; extracted page-title mapping; removed one unused MainDashboard prop.
+- Main JavaScript decreased from `1,433,712` to `1,339,297` bytes (`-94,415`, about `6.6%`).
+- No dead-code files were deleted because deletion safety was not proven.
 
-- Approved Phase 1 implementation is merged to `main` at application commit `6f628b99bcca37df9c5892dd1d03aef9319f6bde` via PR #7.
-- It is **not deployed**. Production remains on application commit `a9e23b0c51adc0d0ff960dde8d333d2cc94ca194`.
-- Scope was limited to lazy-loading `SettingsView`, `StoryBuilderView`, and `InventoryCheckView`; reusing one loading fallback; moving page-title mapping to a pure helper; and removing the unused `refreshData` prop from `MainDashboard`.
-- No dead-code files were deleted because the available reference evidence was not strong enough to prove deletion safety.
-- Protected accounting, save/edit, persistence, Firestore, and Golden Baseline surfaces were not changed.
-- Verification matched the unchanged-app baseline: typecheck PASS; Balance Engine contract + production build PASS; tests remained exactly `550 passed / 11 pre-existing failures` with no new failures.
-- Main JavaScript bundle decreased from `1,433,712` to `1,339,297` bytes (`-94,415`, about `6.6%`). The pre-existing `>500 KB` chunk warning remains open and was not a Phase 1 acceptance target.
-- Primary implementation evidence: GitHub PR #7.
+## Previous production release — Home Gold Summary Alignment
 
-## Latest production change — Home Gold Summary Alignment
+The Operational Home gold card consumes the same Financial Position ownership projection used for official supporting E21 quantities.
 
-The Operational Home gold card no longer maintains an independent gold-ownership calculation.
-
-Current approved behavior:
-
-- Home gold summary consumes the same Financial Position ownership projection used for the official supporting E21 quantities.
-- Home displays only Gold Assets, Gold Liabilities, and Gold Equity/Net Ownership as E21 weights.
-- Gold Assets - Gold Liabilities = Gold Equity.
-- Home rounds the three displayed values to two decimal places for mobile readability; the underlying projection remains unchanged.
-- Treasury remains a lightweight operational cash read.
-- If the Financial Position gold projection cannot be built, Home shows `—` plus a diagnostic rather than inventing a value.
-
-Owner live Production acceptance on 2026-08-27:
-
-- Gold Assets: `2,209.75 g E21`.
-- Gold Liabilities: `100.06 g E21`.
-- Gold Equity / Net Ownership: `2,109.69 g E21`.
-- The values were visible on iPhone without clipping or overlap.
-- These displayed values match the reviewed 2026-08-26 Financial Position quantities after display rounding from `2209.750 / 100.060 / 2109.690`.
-
-Implementation commits:
-
-- `04b39a40c3c845a07bb3085d8be16170efa604d5` — align Home gold card with Financial Position.
-- `a9e23b0c51adc0d0ff960dde8d333d2cc94ca194` — improve Home gold card readability.
-
-Final Production asset: `/assets/index-D4l93UvJ.js`.
-
-Detailed record:
-- `docs/HOME_GOLD_SUMMARY_ALIGNMENT_PRODUCTION_RELEASE_2026-08-27.md`
+- Previous Production application commit: `a9e23b0c51adc0d0ff960dde8d333d2cc94ca194`.
+- Home displays Gold Assets, Gold Liabilities and Gold Equity/Net Ownership as E21 weights.
+- Owner live acceptance on 2026-08-27 showed `2,209.75 / 100.06 / 2,109.69 g E21` without clipping/overlap and matched the reviewed Financial Position quantities after display rounding.
+- Detailed record: `docs/HOME_GOLD_SUMMARY_ALIGNMENT_PRODUCTION_RELEASE_2026-08-27.md`.
 - Decision: `docs/DECISIONS.md` D-020.
 
-## Validation and safety
+## Production recovery incident — 2026-08-27
 
-Gold-source alignment validation:
-
-- Focused Home / Financial Position / UI tests: `11/11 PASS`.
-- Typecheck: PASS.
-- Balance Engine contract guard: PASS.
-- Production build: PASS.
-- `git diff --check`: PASS.
-- The known `financialPositionCentralBalances.test.ts` sign failure remained pre-existing and unchanged.
-
-Readability follow-up validation:
-
-- Focused Home/UI: `3/3 PASS`.
-- Typecheck: PASS.
-- Balance Engine contract guard: PASS.
-- Production build: PASS.
-- `git diff --check`: PASS.
-
-Deployment evidence:
-
-- Firebase Hosting only.
-- Production root: HTTP 200.
-- Final Production asset: HTTP 200.
-- Local / Production asset SHA-256 matched.
-
-This release did **not** change:
-
-- Posting Matrix.
-- Inventory WAC semantics / legacy precedence.
-- COGS semantics.
-- Balance Engine semantics.
-- Entry save contract/schema.
-- Firestore Production data or historical entries.
-- Historical overlay directives or approved economic values.
-- Firestore Rules / Indexes / Functions / Storage / Auth configuration.
-- Golden Baseline.
+- A stale-baseline Hosting deploy risk had previously been detected.
+- Recovery redeployed Firebase Hosting only from approved Production baseline `a9e23b0c51adc0d0ff960dde8d333d2cc94ca194` and was manually accepted by the owner.
+- This incident is why every deploy must verify exact `origin/main`, deployment HEAD and local/Production asset hashes before acceptance.
 
 ## Manual / visual acceptance rule
 
-Codex may perform code work, automated tests, build and technical deployment verification. Final Visual / UX / operational acceptance on Firebase Production belongs to the owner. ChatGPT may guide and verify screenshots/exports. A task is not Closed until owner acceptance when applicable and GitHub + Notion + Google Drive are synchronized and directly verified by ChatGPT.
+Codex may perform code work, automated tests, build and technical deployment verification. Final Visual / UX / operational acceptance on Firebase Production belongs to the owner. ChatGPT may guide and verify screenshots/exports. A task is not Closed until owner acceptance when applicable and GitHub + Notion + Google Drive are synchronized and directly re-read by ChatGPT.
 
 ## Protected accounting/data invariants
 
@@ -153,30 +92,20 @@ Do not change these without a separate explicit owner decision and approval:
 - Firestore Rules / Indexes / Functions / Storage / Auth.
 - Golden Baseline.
 
-## Recent production sequence
-
-Detailed history belongs in individual release records. Important recent releases include:
-
-- Financial Position + Equity correction — application commit `1a97d66da6d4475f704e025cfcb1ef940e0cf48e`.
-- E21 / WAC / Al-Safi consistency — application commit `f66cc5678df8b54a00809705a9ff54b2b030f061`.
-- Story Compact Fit + Story-only Buy Spread — application commit `1be587d3aa22196e9d1d544459693e5a69ddfd5b`.
-- Financial Position baseline release — application commit `b304f1205fe92fea49f1de209b9a180233761a73`.
-- Operational Home original release — application commit `5086600f740b86277f635fa2f4113470ee4b7669`; its original independent Home gold calculation was superseded by the 2026-08-27 Home Gold Summary Alignment release.
-
 ## Known open items
 
 - Pre-existing accounting/Golden test failures remain separate follow-up work. Do not regenerate or alter the Golden Baseline merely to clear them.
 - Completion of the full historical 2116-row migration/reconciliation is not proven by current documentation.
 - Historical `arabicWeight` migration/backfill remains **not approved** and requires a separate Critical migration safety review, dry run, rollback design and explicit owner approval.
+- The initial/main JavaScript chunk remains above 500 KB (`~1,339.82 KB`) and is a separate future performance item. Phase 4A removed the ReportsView chunk from the >500 KB list without changing Vite configuration.
 - Legacy Planning/Grill trackers are not evidence of current Production state.
-- Further performance/dead-code cleanup beyond Phase 1 remains separate work; Phase 1 deleted no files because dead-code evidence was insufficient.
-- JavaScript chunk-size warnings above 500KB remain a separate performance item and were not cleared by Phase 1.
 
 ## Source roles and closure
 
 - GitHub: execution truth for code, tests, deployment implementation and technical state.
 - Notion: workflow, approved decisions, task status and change history.
 - Google Drive: accounting, operational, architecture and reviewer-facing references.
-- `Makka — Current Reviewer Context` must stay short and point to detailed records.
+- `Makka — Current Reviewer Context` must stay short and point to primary evidence.
 - Uploaded copies are snapshots only; live GitHub/Notion/Drive sources win when they differ.
-- Production release closure requires the accepted Production state and the affected GitHub + Notion + Google Drive references to be directly re-read and found consistent.
+- Current Phase 4A Production deployment is technically verified but remains `OWNER MANUAL ACCEPTANCE PENDING` until the owner opens the authenticated Reports flow, including Monthly Report, and confirms normal behavior.
+- Hard closure requires the final accepted Production state and affected GitHub + Notion + Google Drive references to be directly re-read and found consistent.
