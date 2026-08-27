@@ -9,8 +9,6 @@ import {
   AlertTriangle,
   Loader2,
   CheckCircle2,
-  BookOpen,
-  LayoutGrid,
   Save,
   FilePlus,
 } from 'lucide-react';
@@ -24,7 +22,6 @@ import {
 import { db } from '../../firebase';
 import { AnnualOpeningCostConfig } from '../../types';
 import { useAppStore } from '../../store';
-import { cn } from '../../lib/utils';
 import { formatMinorUnitsToEgpInput, getAccessoryOpeningCostsMinorByAccountId, getGoldOpeningPriceMinor, getSilverOpeningPriceMinor, mergeAnnualOpeningCostRows, parseEgpToMinorUnits } from '../../lib/openingCostConfig';
 import { normalizeNumerals } from '../../lib/accounting';
 import { areOperationWritesLocked } from '../../lib/costRecalculation';
@@ -639,7 +636,7 @@ export const SettingsView = React.memo(() => {
       <SettingsTabBar activeTab={activeTab} onTabChange={setActiveTab} />
       <AnimatePresence mode="wait">
         {activeTab === 'cost' && (
-          <SettingsCostPanel salePricingForm={salePricingForm} salePricingError={salePricingError} salePricingSuccess={salePricingSuccess} isSavingSalePricing={isSavingSalePricing} onSalePricingRateChange={(field,value)=>setSalePricingForm(previous=>({...previous,[field]:normalizeNumerals(value)}))} onSaveSalePricing={handleSaveSalePricing} storySpreadForm={storySpreadForm} storySpreadError={storySpreadError} storySpreadSuccess={storySpreadSuccess} isSavingStorySpread={isSavingStorySpread} onStorySpreadChange={value=>setStorySpreadForm(normalizeNumerals(value))} onSaveStorySpread={saveStorySpread} smartMarginForm={smartMarginForm} onSmartMarginChange={(field,value)=>setSmartMarginForm(previous=>({...previous,[field]:value}))} onSaveSmartMargin={saveSmartMarginSettings} pricingConfigForm={pricingConfigForm} isSavingPricingConfig={isSavingSalePricing} onUnitWorkmanshipChange={(field,unitWeight,mode,value)=>setPricingConfigForm(previous=>({...previous,[field]:{...previous[field],[String(unitWeight)]:{mode,value:Math.max(0,Number(normalizeNumerals(value))||0)}}}))} onJewelryDefaultChange={setJewelryDefault} onPurchaseDefaultChange={setPurchaseDefault} onSavePricingConfig={savePricingConfig} openingPriceForm={openingPriceForm} openingPriceError={openingPriceError} openingPriceSuccess={openingPriceSuccess} isSavingOpeningPrice={isSavingOpeningPrice} sortedOpeningCostConfig={sortedOpeningCostConfig} accessoryAccounts={accessoryAccounts} onOpeningYearChange={value=>setOpeningPriceForm(previous=>({...previous,year:value}))} onOpeningGoldChange={value=>setOpeningPriceForm(previous=>({...previous,gold:value}))} onOpeningSilverChange={value=>setOpeningPriceForm(previous=>({...previous,silver:value}))} onOpeningAccessoryChange={(accountId,value)=>setOpeningPriceForm(previous=>({...previous,accessories:{...previous.accessories,[accountId]:value}}))} onSaveOpeningPrice={handleSaveOpeningPrice} onEditOpeningPrice={handleEditOpeningPrice} onDeleteOpeningPrice={handleDeleteOpeningPrice} />
+          <SettingsCostPanel salePricingForm={salePricingForm} salePricingError={salePricingError} salePricingSuccess={salePricingSuccess} isSavingSalePricing={isSavingSalePricing} onSalePricingRateChange={(field,value)=>setSalePricingForm(previous=>({...previous,[field]:normalizeNumerals(value)}))} onSaveSalePricing={handleSaveSalePricing} storySpreadForm={storySpreadForm} storySpreadError={storySpreadError} storySpreadSuccess={storySpreadSuccess} isSavingStorySpread={isSavingStorySpread} onStorySpreadChange={value=>setStorySpreadForm(normalizeNumerals(value))} onSaveStorySpread={saveStorySpread} smartMarginForm={smartMarginForm} onSmartMarginChange={(field,value)=>setSmartMarginForm(previous=>({...previous,[field]:value}))} onSaveSmartMargin={saveSmartMarginSettings} pricingConfigForm={pricingConfigForm} onUnitWorkmanshipChange={(field,unitWeight,mode,value)=>setPricingConfigForm(previous=>({...previous,[field]:{...previous[field],[String(unitWeight)]:{mode,value:Math.max(0,Number(normalizeNumerals(value))||0)}}}))} onJewelryDefaultChange={setJewelryDefault} onPurchaseDefaultChange={setPurchaseDefault} onSavePricingConfig={savePricingConfig} openingPriceForm={openingPriceForm} openingPriceError={openingPriceError} openingPriceSuccess={openingPriceSuccess} isSavingOpeningPrice={isSavingOpeningPrice} sortedOpeningCostConfig={sortedOpeningCostConfig} accessoryAccounts={accessoryAccounts} onOpeningYearChange={value=>setOpeningPriceForm(previous=>({...previous,year:value}))} onOpeningGoldChange={value=>setOpeningPriceForm(previous=>({...previous,gold:value}))} onOpeningSilverChange={value=>setOpeningPriceForm(previous=>({...previous,silver:value}))} onOpeningAccessoryChange={(accountId,value)=>setOpeningPriceForm(previous=>({...previous,accessories:{...previous.accessories,[accountId]:value}}))} onSaveOpeningPrice={handleSaveOpeningPrice} onEditOpeningPrice={handleEditOpeningPrice} onDeleteOpeningPrice={handleDeleteOpeningPrice} />
         )}
 
         {activeTab === 'import' && (

@@ -153,7 +153,7 @@ export const SettingsImportExportPanel=React.memo(({importText,importProgress,is
                         <div className="text-[10px] text-[#5a5548] mt-1 pr-1">مطابقة القائمة الدفترية مع الجرد الفعلي للمحلات وحفظها بالسجلات.</div>
                       </div>
                       <button
-                        onClick={() => onOpenInventory}
+                        onClick={onOpenInventory}
                         className="px-4 py-2 bg-[#c9a84c] text-[#0e1018] text-[10px] font-bold rounded-xl hover:bg-[#d4b455] transition-all"
                       >
                         فتح الشاشة
