@@ -1,0 +1,3 @@
+import type { TransactionRule } from '../types';
+const normalize = (value: unknown) => String(value ?? '').normalize('NFKC').trim().replace(/\s+/g, ' ').toLocaleLowerCase('en-US');
+export const effectiveAddUseDocumentId = (userId: string, rule: Pick<TransactionRule,'tx'|'debit'|'credit'|'debitAccountId'|'creditAccountId'|'karat'|'multiplier'>) => `use_${Array.from(new TextEncoder().encode([userId,rule.tx,rule.debitAccountId || normalize(rule.debit),rule.creditAccountId || normalize(rule.credit),rule.karat ?? '',rule.multiplier ?? 1].join('|'))).map(byte => byte.toString(16).padStart(2,'0')).join('')}`;

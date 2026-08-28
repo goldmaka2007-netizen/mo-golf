@@ -1,0 +1,9 @@
+import { beforeEach, describe, expect, it, vi } from 'vitest';
+import type { Account, TransactionRule } from '../../types';
+const fake = vi.hoisted(() => ({ writes: [] as Array<{ id: string; data: Record<string, unknown> }>, existing: [] as TransactionRule[] }));
+vi.mock('firebase/firestore', () => ({ collection: (_db: unknown, name: string) => ({ name }), query: (ref: unknown) => ref, where: () => ({}), doc: (_db: unknown, _collection: string, id: string) => ({ id }), serverTimestamp: () => 'timestamp', getDocs: async () => ({ docs: fake.existing.map(rule => ({ id: rule.id, data: () => rule })) }), runTransaction: async (_db: unknown, handler: (tx: { get: (ref: { id: string }) => Promise<{ exists: () => boolean }>; set: (ref: { id: string }, data: Record<string, unknown>) => void }) => Promise<void>) => handler({ get: async () => ({ exists: () => false }), set: (ref, data) => { fake.writes.push({ id: ref.id, data }); } }) }));
+import { addAccountUse } from '../accountUseService';
+const account: Account = { id: 'customer', name: 'عميل', mainType: 'assets', subType: 'customer', balanceNature: 'debit', userId: 'u', type: 'other', metal: null, is_inventory: false };
+const candidate = { tx: 'تحصيل', side: 'credit' as const, counterpartName: 'الخزنة', counterpartAccountId: 'cash', multiplier: 1, category: 'x' };
+beforeEach(() => { fake.writes.length = 0; fake.existing = []; });
+describe('isolated account use persistence', () => { it('writes one independent rule with explicit managed identity', async () => { const result = await addAccountUse({ firestore: {} as never, userId: 'u', account, candidate, rules: [], accounts: [account] }); expect(fake.writes).toHaveLength(1); expect(fake.writes[0].data).toMatchObject({ tx: 'تحصيل', creditAccountId: 'customer', debitAccountId: 'cash' }); expect(result.id).toBe(fake.writes[0].id); }); });

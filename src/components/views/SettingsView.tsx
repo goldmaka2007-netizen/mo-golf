@@ -645,7 +645,7 @@ export const SettingsView = React.memo(() => {
 
         {activeTab === 'rules' && <SettingsRulesPanel onOpenGuide={() => setView('guide')} />}
 
-        {activeTab === 'accounts' && <SettingsAccountsPanel onOpenGuide={() => setView('guide')} />}
+        {activeTab === 'accounts' && <SettingsAccountsPanel onOpenAccounts={() => setView('chart-of-accounts')} />}
       </AnimatePresence>
 
       <SettingsSystemInfo email={user?.email} onReload={() => window.location.reload()} />
