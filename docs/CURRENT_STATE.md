@@ -122,3 +122,11 @@ Do not change these without a separate explicit owner decision and approval:
 - `Makka — Current Reviewer Context` must stay short and point to primary evidence.
 - Uploaded copies are snapshots only; live GitHub/Notion/Drive sources win when they differ.
 - Phase 4A remains `CROSS-SYSTEM VERIFIED`. The subsequent initial-bundle audit was read-only; the owner decided not to proceed with Phase 4B and no implementation/deployment followed.
+
+## Operational Home redesign — production release (2026-08-28)
+
+- Owner-accepted mobile Home uses the existing Story Builder for WhatsApp Status and exposes exactly the operational shortcuts مساعد الشراء، مساعد البيع، and جرد الأصناف. Recent Entries are absent; Treasury and the Financial Position-aligned Gold summary remain prominent, and Gold details open Reports → Financial Position through `reportsTab = 'balance'`.
+- MetalPriceEditor is compact on mobile with side-by-side Gold 21/Silver fields, explicit Save, Clear X, and temporary empty drafts. Visible input normalization converts Arabic/Persian digits and supported Arabic decimal separators to canonical English numeric text while typing; `saveMetalPrices` remains the explicit validated persistence path.
+- Owner live iPhone visual/manual acceptance: PASS on 2026-08-28. Focused tests, typecheck, Balance Contract Guard, build, and `git diff --check`: PASS.
+- Firebase Hosting-only Production deployment was completed earlier; accepted asset: `/assets/index-BxviThw1.js`. Deployment verification made no Production accounting write. This GitHub source-sync release performs no additional deploy.
+- Posting Matrix, WAC/COGS, Balance Engine, Financial Position calculations, Entry contracts, Firestore data/rules/indexes/functions/storage/auth, Golden Baseline, pricingConfig, Gold Assistant rules, dependencies, and Vite/Firebase configuration remain unchanged.
