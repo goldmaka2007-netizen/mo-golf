@@ -1,12 +1,12 @@
 import { collection, doc, getDocs, query, runTransaction, serverTimestamp, where, type Firestore } from 'firebase/firestore';
 import type { Account, CanonicalAccountDefinition, TransactionRule } from '../types';
 import { effectiveAddUseDocumentId } from './accountUseServiceId';
-import { findSafeAddUseCandidate, hasEffectiveDuplicate, isProtectedAccountForUses, type AddUseCandidate } from './accountUses';
+import { findSafeAddUseCandidate, hasEffectiveDuplicate, isProtectedAccountForUses, resolveEffectiveCanonicalAccount, type AddUseCandidate } from './accountUses';
 
-export const addAccountUse = async (args: { firestore: Firestore; userId: string; account: Account; canonical: CanonicalAccountDefinition; candidate: AddUseCandidate; rules: TransactionRule[]; accounts: Account[] }) => {
+export const addAccountUse = async (args: { firestore: Firestore; userId: string; account: Account; canonicalAccounts: CanonicalAccountDefinition[]; candidate: AddUseCandidate; rules: TransactionRule[]; accounts: Account[] }) => {
   if (!args.account.id) throw new Error('Account identity is required.');
-  if (!args.canonical) throw new Error('Canonical account context is required.');
-  if (isProtectedAccountForUses(args.account, args.canonical)) throw new Error('Protected accounts cannot receive new uses.');
+  const canonical = resolveEffectiveCanonicalAccount(args.account, args.accounts, args.canonicalAccounts);
+  if (!canonical || isProtectedAccountForUses(args.account, canonical)) throw new Error('Protected or unresolved canonical account.');
   const derived = findSafeAddUseCandidate(args.account, args.candidate.tx, args.rules, args.accounts);
   const candidateMatches = derived
     && derived.side === args.candidate.side

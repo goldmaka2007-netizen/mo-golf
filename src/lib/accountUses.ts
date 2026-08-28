@@ -1,9 +1,19 @@
 import type { Account, CanonicalAccountDefinition, TransactionRule } from '../types';
 import { getLedgerAccountGroupId } from './ledgerReport';
 import { normalizeCloneAccountName } from './accountCloning';
+import { buildAccountRegistry, validateCanonicalAccount } from './accountRegistry';
 
 export interface AccountUse { rule: TransactionRule; side: 'debit' | 'credit'; karat?: number | null; }
 export interface AddUseCandidate { tx: string; side: 'debit' | 'credit'; counterpartName: string; counterpartAccountId?: string; karat?: number | null; multiplier: number; category: string; }
+
+export const resolveEffectiveCanonicalAccount = (account: Account, accounts: Account[], canonicalAccounts: CanonicalAccountDefinition[] = []): CanonicalAccountDefinition | null => {
+  if (!account.id) return null;
+  const registry = buildAccountRegistry(accounts, [], canonicalAccounts);
+  const resolution = registry.resolve(account.id);
+  const matches = registry.accounts.filter(item => item.sourceAccountId === account.id);
+  if (resolution.status !== 'resolved' || matches.length !== 1 || resolution.account.sourceAccountId !== account.id || validateCanonicalAccount(resolution.account).length > 0) return null;
+  return resolution.account;
+};
 
 const protectedSubTypes = new Set(['inventory_gold', 'inventory_silver', 'inventory_accessory', 'cash', 'merchant_gold', 'merchant_silver', 'capital', 'retained_earnings', 'withdrawals', 'gold_surplus', 'gold_shortage', 'silver_surplus', 'silver_shortage', 'adjustment', 'historical']);
 const accountClass = (account: Account): string | null => { const subtype = account.canonicalSubType; const group = getLedgerAccountGroupId(account); return !subtype && group === 'unclassified' ? null : `${subtype || group}|${account.type || ''}|${account.metal || ''}|${account.karat || ''}`; };
