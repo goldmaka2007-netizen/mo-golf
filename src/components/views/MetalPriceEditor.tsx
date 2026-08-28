@@ -1,8 +1,8 @@
 import React from 'react';
-import { Coins, Gem, Save } from 'lucide-react';
+import { Coins, Gem, Save, X } from 'lucide-react';
 import { useShallow } from 'zustand/react/shallow';
 import { useAppStore } from '../../store';
-import { parseMetalPrice, saveMetalPrices } from '../../lib/metalPrices';
+import { normalizeMetalPriceInput, parseMetalPrice, saveMetalPrices } from '../../lib/metalPrices';
 
 export const applySavedMetalPrices = (
   goldPrice: number,
@@ -28,8 +28,8 @@ const PriceField = ({ id, label, value, onChange, accent }: {
   onChange: (value: string) => void;
   accent: 'gold' | 'silver';
 }) => (
-  <label htmlFor={id} className="min-w-0 rounded-2xl border border-white/[0.07] bg-black/20 p-3">
-    <span className="mb-2 flex items-center gap-2 text-xs font-black text-[#ddd8cc]">
+  <label htmlFor={id} className="min-w-0 rounded-2xl border border-white/[0.07] bg-black/20 p-2">
+    <span className="mb-1 flex min-h-8 items-center gap-1 text-[11px] font-black leading-tight text-[#ddd8cc]">
       {accent === 'gold' ? <Gem className="h-4 w-4 text-[#c9a84c]" /> : <Coins className="h-4 w-4 text-slate-300" />}
       {label}
     </span>
@@ -37,14 +37,13 @@ const PriceField = ({ id, label, value, onChange, accent }: {
       <input
         id={id}
         aria-label={label}
-        type="number"
+        type="text"
         inputMode="decimal"
-        min="0.01"
-        step="0.01"
         value={value}
-        onChange={event => onChange(event.target.value)}
-        className="w-full min-w-0 rounded-xl border border-white/[0.09] bg-[#080a0f] px-3 py-3 pl-12 text-left font-mono text-lg font-black tabular-nums text-[#f5f1e8] outline-none focus:border-[#c9a84c]/60"
+        onChange={event => onChange(normalizeMetalPriceInput(event.target.value))}
+        className="w-full min-w-0 rounded-xl border border-white/[0.09] bg-[#080a0f] px-3 py-2 pl-12 text-left font-mono text-lg font-black tabular-nums text-[#f5f1e8] outline-none focus:border-[#c9a84c]/60"
       />
+      {value !== '' && <button type="button" aria-label={`مسح ${label}`} onClick={() => onChange('')} className="absolute right-2 top-1/2 flex h-8 w-8 -translate-y-1/2 items-center justify-center rounded-full text-[#8a8172] hover:bg-white/10"><X className="h-4 w-4" /></button>}
       <span className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-[10px] font-black text-[#78736a]">ج.م</span>
     </span>
   </label>
@@ -76,9 +75,11 @@ export const MetalPriceEditor = React.memo(({ goldOnly = false }: { goldOnly?: b
   const [silverDraft, setSilverDraft] = React.useState(String(silverPrice));
   const [saving, setSaving] = React.useState(false);
   const [message, setMessage] = React.useState<{ kind: 'success' | 'error'; text: string } | null>(null);
+  const goldDraftDirty = React.useRef(false);
+  const silverDraftDirty = React.useRef(false);
 
-  React.useEffect(() => setGoldDraft(String(goldPrice)), [goldPrice]);
-  React.useEffect(() => setSilverDraft(String(silverPrice)), [silverPrice]);
+  React.useEffect(() => { if (!goldDraftDirty.current) setGoldDraft(String(goldPrice)); }, [goldPrice]);
+  React.useEffect(() => { if (!silverDraftDirty.current) setSilverDraft(String(silverPrice)); }, [silverPrice]);
 
   const handleSave = async () => {
     const nextGoldPrice = parseMetalPrice(goldDraft);
@@ -112,16 +113,16 @@ export const MetalPriceEditor = React.memo(({ goldOnly = false }: { goldOnly?: b
   };
 
   return (
-    <section aria-labelledby="metal-price-editor-title" className={`rounded-[24px] border border-[#c9a84c]/20 bg-[#0d1017] p-4 shadow-[0_18px_44px_rgba(0,0,0,0.2)] ${goldOnly ? '[&>div:nth-of-type(2)>label:nth-child(2)]:hidden' : ''}`} dir="rtl">
-      <div className="mb-3">
+    <section aria-labelledby="metal-price-editor-title" className={`rounded-[20px] border border-[#c9a84c]/20 bg-[#0d1017] p-3 shadow-[0_14px_34px_rgba(0,0,0,0.2)] ${goldOnly ? '[&>div:nth-of-type(2)>label:nth-child(2)]:hidden' : ''}`} dir="rtl">
+      <div className="mb-2">
         <h2 id="metal-price-editor-title" className="text-sm font-black text-[#f5f1e8]">{goldOnly ? 'سعر الذهب الرسمي الحالي' : 'أسعار المعادن الحالية'}</h2>
         <p className="mt-1 text-[10px] font-bold text-[#78736a]">سعر بيع الجرام المستخدم للعرض والعمليات الجديدة</p>
       </div>
-      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-        <PriceField id="dashboard-gold-price" label="سعر جرام الذهب عيار 21" value={goldDraft} onChange={setGoldDraft} accent="gold" />
-        <PriceField id="dashboard-silver-price" label="سعر جرام الفضة" value={silverDraft} onChange={setSilverDraft} accent="silver" />
+      <div className="grid grid-cols-2 gap-2">
+        <PriceField id="dashboard-gold-price" label="سعر جرام الذهب عيار 21" value={goldDraft} onChange={value => { goldDraftDirty.current = true; setGoldDraft(value); }} accent="gold" />
+        <PriceField id="dashboard-silver-price" label="سعر جرام الفضة" value={silverDraft} onChange={value => { silverDraftDirty.current = true; setSilverDraft(value); }} accent="silver" />
       </div>
-      <div className="mt-3 flex flex-wrap items-center justify-between gap-3">
+      <div className="mt-2 flex flex-wrap items-center justify-between gap-2">
         <div aria-live="polite" className={`min-h-5 text-[11px] font-bold ${message?.kind === 'error' ? 'text-red-300' : 'text-emerald-300'}`}>
           {message?.text}
         </div>

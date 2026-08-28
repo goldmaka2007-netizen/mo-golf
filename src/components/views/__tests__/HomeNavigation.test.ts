@@ -34,9 +34,24 @@ describe('Operational Home quick actions', () => {
   const source = readFileSync(new URL('../OperationalHomeView.tsx', import.meta.url), 'utf8');
 
   it('opens the existing Story Builder from the WhatsApp Status action', () => {
-    expect(source).toContain('label="حالة واتساب"');
-    expect(source).toContain("const openStory = () => setView('story')");
-    expect(source).toContain('onClick={openStory}');
+    expect(source).toContain('onClick={() => setView(\'story\')}');
+    expect(source).toContain('فتح حالة واتساب');
+  });
+
+  it('routes the three operational shortcuts to existing flows', () => {
+    expect(source).toContain('label="مساعد البيع"');
+    expect(source).toContain("openAssistant('sale')");
+    expect(source).toContain('label="مساعد الشراء"');
+    expect(source).toContain("openAssistant('purchase')");
+    expect(source).toContain('label="جرد الأصناف"');
+    expect(source).toContain("setView('database')");
+  });
+
+  it('opens Financial Position from the existing Home gold projection', () => {
+    expect(source).toContain("setReportsTab('balance')");
+    expect(source).toContain("setView('reports')");
+    expect(source).toContain('operational.goldOwnership?.goldAssetWeight');
+    expect(source).not.toContain('computeAccountBalances');
   });
 
   it('keeps the gold summary as three two-decimal single-line values', () => {
@@ -46,5 +61,7 @@ describe('Operational Home quick actions', () => {
     expect(source).toContain('الأصول');
     expect(source).toContain('الخصوم');
     expect(source).toContain('حقوق الملكية');
+    expect(source).not.toContain('آخر العمليات');
+    expect(source).toContain('grid grid-cols-3 gap-2');
   });
 });

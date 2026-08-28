@@ -8,9 +8,19 @@ export interface MetalPricesInput {
   silverSpread: number;
 }
 
+const arabicIndicDigits = '٠١٢٣٤٥٦٧٨٩';
+const persianDigits = '۰۱۲۳۴۵۶۷۸۹';
+
+/** Normalize display text without coercing an empty draft or imposing a saved value. */
+export const normalizeMetalPriceInput = (value: string): string => value
+  .replace(/[٠-٩]/g, digit => String(arabicIndicDigits.indexOf(digit)))
+  .replace(/[۰-۹]/g, digit => String(persianDigits.indexOf(digit)))
+  .replace(/[٫,،]/g, '.');
+
 export const parseMetalPrice = (value: string): number | null => {
-  if (value.trim() === '') return null;
-  const parsed = Number(value);
+  const normalized = normalizeMetalPriceInput(value).trim();
+  if (normalized === '' || !/^\d+(?:\.\d+)?$/.test(normalized)) return null;
+  const parsed = Number(normalized);
   return Number.isFinite(parsed) && parsed > 0 ? parsed : null;
 };
 

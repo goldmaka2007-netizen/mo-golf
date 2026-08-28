@@ -2,7 +2,7 @@ import React from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { MetalPriceEditor, applySavedMetalPrices } from '../MetalPriceEditor';
-import { parseMetalPrice, saveMetalPrices } from '../../../lib/metalPrices';
+import { normalizeMetalPriceInput, parseMetalPrice, saveMetalPrices } from '../../../lib/metalPrices';
 import { createDashboardDataCache } from '../../../hooks/useDashboardMetrics';
 
 const mocks = vi.hoisted(() => ({
@@ -56,6 +56,21 @@ describe('Dashboard metal prices and return cache', () => {
 
   it('accepts a positive decimal price', () => {
     expect(parseMetalPrice('7350.50')).toBe(7350.5);
+    expect(parseMetalPrice('٧٣٥٠٫٥٠')).toBe(7350.5);
+    expect(parseMetalPrice('۷۳۵۰,۵۰')).toBe(7350.5);
+    expect(parseMetalPrice('7350,50')).toBe(7350.5);
+    expect(normalizeMetalPriceInput('٧٣٥٠٫٥٠')).toBe('7350.50');
+    expect(normalizeMetalPriceInput('۶۵۰۰')).toBe('6500');
+    expect(normalizeMetalPriceInput('6500.5')).toBe('6500.5');
+    expect(normalizeMetalPriceInput('')).toBe('');
+  });
+
+  it('keeps the empty draft editable instead of coercing it to zero', () => {
+    const html = renderToStaticMarkup(<MetalPriceEditor />);
+    expect(html).toContain('type="text"');
+    expect(html).toContain('inputMode="decimal"');
+    expect(html).not.toContain('type="number"');
+    expect(html).toContain('grid-cols-2');
   });
 
   it('saves into the existing user settings document with merge semantics', async () => {
