@@ -5,10 +5,9 @@ interface AppHeaderProps {
   view: AppView;
   pageTitle: string;
   isEntryDarkShell: boolean;
-  onRefresh: () => void;
 }
 
-export function AppHeader({ view, pageTitle, isEntryDarkShell, onRefresh }: AppHeaderProps) {
+export function AppHeader({ view, pageTitle, isEntryDarkShell }: AppHeaderProps) {
   return (
           <header className={`sticky top-0 z-30 -mx-4 border-b px-4 pb-3 pt-[calc(0.75rem+env(safe-area-inset-top))] backdrop-blur-xl ${isEntryDarkShell ? 'mb-3 border-[#1a1e2a]/80 bg-[#020408]/92' : view === 'entry' ? 'mb-4 border-[#15203b]/10 bg-[#fffdf7]/94' : 'mb-4 border-[#1a1e2a]/80 bg-[#020408]/92'}`}>
             <div className="flex items-center justify-between gap-3">
@@ -27,15 +26,15 @@ export function AppHeader({ view, pageTitle, isEntryDarkShell, onRefresh }: AppH
                   </>
                 )}
               </div>
-              <button
-                type="button"
-                onClick={onRefresh}
-                aria-label="تحديث البيانات"
-                className={`flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl border text-[#c9a84c] transition-all active:scale-95 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#c99a2e] ${isEntryDarkShell ? 'border-[#1a1e2a] bg-[#0e1018]' : view === 'entry' ? 'border-[#15203b]/10 bg-white shadow-sm' : 'border-[#1a1e2a] bg-[#0e1018]'}`}
-                title="تحديث البيانات"
+              <div
+                role="status"
+                aria-label="المزامنة تلقائية"
+                className={`flex h-11 shrink-0 items-center gap-2 rounded-2xl border px-3 text-xs font-bold text-[#c9a84c] ${isEntryDarkShell ? 'border-[#1a1e2a] bg-[#0e1018]' : view === 'entry' ? 'border-[#15203b]/10 bg-white shadow-sm' : 'border-[#1a1e2a] bg-[#0e1018]'}`}
+                title="المزامنة تلقائية"
               >
-                <RefreshCw className="h-5 w-5" />
-              </button>
+                <RefreshCw className="h-4 w-4" aria-hidden="true" />
+                <span className="hidden sm:inline">المزامنة تلقائية</span>
+              </div>
             </div>
           </header>
   );

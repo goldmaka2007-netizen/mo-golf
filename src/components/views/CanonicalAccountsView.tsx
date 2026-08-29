@@ -20,6 +20,15 @@ interface AccountRow {
   eligibility: CloneEligibility;
 }
 
+const cloneErrorMessage = (error: unknown): string => {
+  const code = typeof error === 'object' && error !== null && 'code' in error ? String(error.code) : '';
+  const detail = error instanceof Error ? error.message : '';
+  if (code === 'resource-exhausted' || /quota exceeded|resource[- ]exhausted/i.test(`${code} ${detail}`)) {
+    return 'تم تجاوز حد استخدام قاعدة البيانات حاليًا. لم يتم إنشاء الحساب. حاول مرة أخرى لاحقًا.';
+  }
+  return detail || 'تعذر إنشاء الحساب.';
+};
+
 const classificationLabel = (account: Account): string => {
   if (account.type === 'merchant') return account.metal === 'silver' ? 'تاجر فضة' : 'تاجر ذهب';
   if (account.is_inventory) {
@@ -45,6 +54,7 @@ export const CanonicalAccountsView = React.memo(() => {
   const [name, setName] = useState('');
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
+  const [cloneError, setCloneError] = useState<string | null>(null);
   const [usesAccountId, setUsesAccountId] = useState<string | null>(null);
   const [useTx, setUseTx] = useState('');
   const [useCandidate, setUseCandidate] = useState<AddUseCandidate | null>(null);
@@ -104,6 +114,7 @@ export const CanonicalAccountsView = React.memo(() => {
     if (!user?.uid || !selected?.account.id || !selected.eligibility.allowed || busy) return;
     setBusy(true);
     setMessage(null);
+    setCloneError(null);
     try {
       const result = await createAccountClone({
         firestore: db,
@@ -119,7 +130,7 @@ export const CanonicalAccountsView = React.memo(() => {
       setName('');
       setSourceId(null);
     } catch (error) {
-      setMessage({ type: 'error', text: error instanceof Error ? error.message : 'تعذر إنشاء الحساب.' });
+      setCloneError(cloneErrorMessage(error));
     } finally {
       setBusy(false);
     }
@@ -189,7 +200,7 @@ export const CanonicalAccountsView = React.memo(() => {
                         <div className="grid w-full grid-cols-1 gap-2 sm:w-auto sm:grid-cols-2">
                           <button type="button" onClick={() => { setUsesAccountId(account.id ?? null); setUseTx(''); setUseCandidate(null); setMessage(null); }} className="flex min-h-11 w-full items-center justify-center gap-1 rounded-xl border border-[#6a8a9e55] bg-[#6a8a9e11] px-3 text-[11px] font-black text-[#9fc4d5]"><Settings2 className="h-4 w-4" />إدارة استخدامات الحساب</button>
                           {eligibility.allowed && (
-                            <button type="button" onClick={() => { setSourceId(account.id ?? null); setName(''); setMessage(null); }} className="min-h-11 w-full rounded-xl border border-[#c9a84c55] bg-[#c9a84c11] px-3 text-[11px] font-black text-[#c9a84c]">
+                            <button type="button" onClick={() => { setSourceId(account.id ?? null); setName(''); setMessage(null); setCloneError(null); }} className="min-h-11 w-full rounded-xl border border-[#c9a84c55] bg-[#c9a84c11] px-3 text-[11px] font-black text-[#c9a84c]">
                             إنشاء حساب مشابه
                             </button>
                           )}
@@ -225,7 +236,7 @@ export const CanonicalAccountsView = React.memo(() => {
               <input autoFocus maxLength={120} value={name} onChange={event => setName(event.target.value)} onKeyDown={event => { if (event.key === 'Enter' && name.trim()) void submit(); }} placeholder="اكتب الاسم الجديد فقط" className="mt-2 min-h-12 w-full rounded-xl border border-[#252a36] bg-[#080a0f] px-3 text-sm outline-none focus:border-[#c9a84c66]" />
             </label>
             </div>
-            <div className="shrink-0 border-t border-[#252a36] p-5 pt-3 pb-[calc(1.25rem+env(safe-area-inset-bottom))]"><button type="button" disabled={busy || !name.trim()} onClick={() => void submit()} className="min-h-12 w-full rounded-xl bg-[#c9a84c] text-sm font-black text-[#080a0f] disabled:opacity-40">
+            <div className="shrink-0 border-t border-[#252a36] p-5 pt-3 pb-[calc(1.25rem+env(safe-area-inset-bottom))]">{cloneError && <div role="alert" className="mb-3 rounded-xl border border-red-500/25 bg-red-500/10 p-3 text-xs font-bold leading-5 text-red-200">{cloneError}</div>}<button type="button" disabled={busy || !name.trim()} onClick={() => void submit()} className="min-h-12 w-full rounded-xl bg-[#c9a84c] text-sm font-black text-[#080a0f] disabled:opacity-40">
               {busy ? 'جارٍ الإنشاء والتحقق…' : 'إنشاء الحساب المشابه'}
             </button></div>
           </div>

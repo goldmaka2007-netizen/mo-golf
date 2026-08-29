@@ -1,9 +1,8 @@
 import React, { useState, useEffect } from 'react';
-import { deleteDoc, doc, updateDoc, serverTimestamp, addDoc, collection, getDocsFromServer, query, where } from 'firebase/firestore';
+import { deleteDoc, doc, updateDoc, serverTimestamp, addDoc, collection } from 'firebase/firestore';
 import { AnimatePresence, motion } from 'framer-motion';
 import { useAppStore } from './store';
 import { db, firebaseProjectId, firestoreDatabaseId, logOut } from './firebase';
-import { Entry } from './types';
 import { buildGoldEquivalent21Audit, canCalculateGoldEquivalent21, inferGoldKaratFromMultiplier } from './lib/goldEquivalent';
 import { isGoldEquivalentEntry } from './utils/accountLogic';
 import { resolveEntryIdentity } from './lib/entryIdentity';
@@ -28,12 +27,11 @@ import { useAuthInit } from './hooks/useAuthInit';
 import { useDataSync } from './hooks/useDataSync';
 import { useCostRecalculation } from './hooks/useCostRecalculation';
 import { areOperationWritesLocked } from './lib/costRecalculation';
-import { isAdminEmail } from './lib/adminAccess';
 
 export default function App() {
   const {
-    user, isAuthReady, setEntries, view, setView, setReportsTab,
-    globalError, setGlobalError, setIsUpdatingPrice,
+    user, isAuthReady, view, setView, setReportsTab,
+    globalError, setGlobalError,
     editingEntry, setEditingEntry, accountsDb,
     costCalculationRun, requestCostRetry
   } = useAppStore();
@@ -59,37 +57,6 @@ export default function App() {
   useEffect(() => {
     if (view !== 'entry') setEntryStep(1);
   }, [view]);
-
-  const refreshData = async () => {
-    if (!user) return;
-    setIsUpdatingPrice(true);
-    try {
-      const isAdmin = isAdminEmail(user.email);
-      const q = isAdmin
-        ? query(collection(db, 'entries'))
-        : query(collection(db, 'entries'), where('userId', '==', user.uid));
-
-      const snapshot = await getDocsFromServer(q);
-      const data = snapshot.docs.map(d => {
-        const docData = d.data();
-        return { id: d.id, ...docData } as Entry;
-      });
-
-      const sortedData = data.sort((a, b) => {
-        const dateA = a.date || '';
-        const dateB = b.date || '';
-        if (dateA !== dateB) return dateB.localeCompare(dateA);
-        return (b.seq || 0) - (a.seq || 0);
-      });
-
-      setEntries(sortedData);
-    } catch (error) {
-      console.error('Refresh Error:', error);
-      setGlobalError('فشل تحديث البيانات من السيرفر. يرجى التحقق من اتصالك بالإنترنت.');
-    } finally {
-      setIsUpdatingPrice(false);
-    }
-  };
 
   const toggleFullscreen = () => {
     if (isIOS && !isStandalone) {
@@ -270,7 +237,7 @@ export default function App() {
         dir="rtl"
       >
         <main className={`mx-auto max-w-2xl px-4 pt-4 sm:pt-6 ${isEntryDarkShell ? 'flex w-full flex-1 flex-col' : ''}`}>
-          <AppHeader view={view} pageTitle={pageTitle} isEntryDarkShell={isEntryDarkShell} onRefresh={refreshData} />
+          <AppHeader view={view} pageTitle={pageTitle} isEntryDarkShell={isEntryDarkShell} />
 
           {(costCalculationRun.status === 'running' || costCalculationRun.status === 'failed') && (
             <div className={`mb-4 rounded-2xl border p-4 text-sm ${costCalculationRun.status === 'failed' ? 'border-red-500/40 bg-red-500/10 text-red-100' : 'border-yellow-500/40 bg-yellow-500/10 text-yellow-100'}`}>
