@@ -1,40 +1,38 @@
 # Current Project State
 
-Last reviewed: 2026-08-29
+Last reviewed: 2026-08-30
 
 ## Production baseline
 
 - Repository: `goldmaka2007-netizen/mo-golf`
 - Production: https://makka-central-accounting.web.app
 - Firebase project: `makka-central-accounting`
-- Current deployed application commit: `1fa1da6bc8be0f0dd8b6583cd9edb944a5567e82`
-- Latest release family: Account Management + Safe Account Uses + Firestore read-quota follow-up.
+- Current deployed application commit: `5241d44d3251a515a81ec6004fb6ae8447a64956`
+- Latest release family: Smart Sale Product Groups + Bullion/Coin Price Board.
 - Deployment scope: Firebase Hosting only.
 - Current release status: `COMPLETED / PRODUCTION DEPLOYED / OWNER MANUAL ACCEPTED / CROSS-SYSTEM VERIFIED`.
 
-## Current production behavior — account management
+## Current production behavior — Smart Gold Sale Assistant
 
-- Settings → Accounts opens the operational Chart of Accounts.
-- Account creation remains clone-only through “إنشاء حساب مشابه”.
-- Account-level current operational uses are visible through “إدارة استخدامات الحساب”.
-- Protected/system/inventory/merchant-sensitive accounts remain read-only for Add Use.
-- Add Use is derived only from one unambiguous existing operational pattern; no free debit/credit editor exists.
-- Persistence independently re-validates canonical identity and the safe candidate, writes independent deterministic-ID rules, does not mutate existing rules, and rejects effective duplicates.
-- Mobile clone modal layering, safe-area/keyboard behavior, and mobile account-row layout are owner-accepted on Production.
+- Smart Sale opens by default on a read-only `السبائك والجنيهات` price board for fast customer quoting.
+- `منتجات أفرنجي` is a dedicated selector for structurally classified 18k jewelry plus foreign scrap.
+- `منتجات عربي` is a dedicated selector for structurally classified 21k jewelry plus Arabic scrap; coin/bar are excluded.
+- `اختيار سبيكة/جنيه للبيع` is a separate selector for `gold.direct.bar` and `gold.direct.coin`, reusing the existing fixed-weight/count/pricing/review sale flow.
+- The price board itself has no sell action and does not prefill EntryForm.
+- Bullion/coin board pricing reuses the Story Builder pricing authority and fallback semantics: `pricingConfig` first, legacy read-only charges second, then zero; displayed totals round up to the nearest 5 EGP.
+- Smart Purchase behavior and the existing EntryForm review/save handoff remain unchanged.
+- Verification: focused gold pricing tests `24/24 PASS`; TypeScript PASS; Balance Contract Guard PASS; build PASS; `git diff --check` PASS; Hosting-only deploy PASS.
+- Owner live iPhone functional and visual acceptance: PASS on 2026-08-30. A duplicated `ج.م` label found during acceptance was corrected by the one-line production fix in `5241d44d3251a515a81ec6004fb6ae8447a64956` without changing price calculation.
+
+Primary detailed record: Google Drive `Makka Application — Smart Sale Product Groups & Bullion Price Board Production Release — 2026-08-30` (Drive ID `1_lpimnJ4QQHNeML80ztVBaFsOvkChwuj6d8i1YbwYzA`).
+
+## Previous production behavior — account management / read-quota follow-up
+
+- Settings → Accounts opens the operational Chart of Accounts; account creation remains clone-only and safe account-use persistence remains independently re-validated.
+- The 29 Aug read-quota follow-up removed the redundant global full-history manual refresh while leaving the realtime sync path unchanged.
+- Clone errors remain visible inside the active modal and quota/resource exhaustion maps to clear Arabic copy.
 
 Primary record: `docs/ACCOUNT_MANAGEMENT_PRODUCTION_RELEASE_2026-08-29.md`.
-
-## Firestore read-quota follow-up — 2026-08-29
-
-- Production clone creation exposed Firestore `Quota exceeded` while Firebase usage showed read pressure (`~38k` current reads versus `4` writes).
-- `useDataSync` already maintained realtime listeners, including the full entries history.
-- A separate global header refresh also called `getDocsFromServer(...)` on the complete entries history, creating redundant server reads.
-- Accepted limited fix removed that full-history manual refresh path from `App.tsx`.
-- `AppHeader` now exposes a passive automatic-sync indicator with no click handler and no Firestore read action.
-- The underlying realtime/history loading strategy was intentionally not redesigned in this limited-risk change.
-- Clone errors now remain visible inside the active clone modal; quota/resource exhaustion maps to clear Arabic copy.
-- Verification: focused `3 files / 12 tests PASS`; TypeScript PASS; Balance Contract Guard PASS; `git diff --check` PASS; build PASS; Hosting deploy PASS; root/main asset HTTP 200 and deployed asset matched generated build.
-- Owner Production acceptance: quota error displayed correctly inside the modal and no account was created while quota was exhausted.
 
 ## Protected accounting/data invariants
 
@@ -48,12 +46,12 @@ Do not change without a separate explicit owner decision and approval:
 - Firestore Rules / Indexes / Functions / Storage / Auth.
 - Golden Baseline.
 
-The current release and read-quota follow-up changed none of these surfaces and made no Production Firestore data write during deployment or verification.
+The Smart Sale release changed none of these surfaces and made no Production Firestore data write during deployment or verification.
 
 ## Known accepted UX limitations
 
 - Existing operation labels can still appear in Add Use when a safe pattern exists even if that operation is already represented in current uses; persistence independently re-derives the candidate and rejects effective duplicates. Owner accepted this limitation on 2026-08-29; future UI filtering is separate work.
-- On the narrowest mobile layout, the passive automatic-sync header control may show only the refresh-style icon while the “المزامنة تلقائية” text is hidden. It has no click handler and cannot trigger a Firestore read. Owner accepted the current presentation; future label-visibility polish is separate work.
+- On the narrowest mobile layout, the passive automatic-sync header control may show only the refresh-style icon while the `المزامنة تلقائية` text is hidden. It has no click handler and cannot trigger a Firestore read. Owner accepted the current presentation; future label-visibility polish is separate work.
 
 ## Other current project notes
 
