@@ -45,6 +45,58 @@ export const SUPPORTED_JEWELRY_TAXONOMY_KEYS = Object.freeze(INVENTORY_COST_TAXO
 export const SMART_PURCHASE_TAXONOMY_KEYS = Object.freeze(['gold.raw.scrap_foreign', 'gold.raw.scrap_arabic', 'gold.direct.coin', 'gold.direct.bar'] as const);
 export const DEFAULT_GOLD_PRICING_CONFIG: GoldPricingConfig = Object.freeze({ version: 1, saleWorkmanshipDefaults: {}, bullionWorkmanshipByWeight: {}, coinWorkmanshipByWeight: {}, purchaseDiscountPercent: {} });
 
+export interface SaleAssistantProductGroups {
+  afrangi: GoldAssistantProduct[];
+  arabi: GoldAssistantProduct[];
+}
+
+export const groupSaleAssistantProducts = (products: GoldAssistantProduct[]): SaleAssistantProductGroups => ({
+  afrangi: products.filter(product => product.taxonomyKey === 'gold.raw.scrap_foreign' || (product.taxonomyKey?.startsWith('gold.product.') && product.karat === 18)),
+  arabi: products.filter(product => product.taxonomyKey === 'gold.raw.scrap_arabic' || (product.taxonomyKey?.startsWith('gold.product.') && product.karat === 21)),
+});
+
+export type GoldPriceBoardItemType = 'bullion' | 'coin';
+export interface GoldPriceBoardRow {
+  type: GoldPriceBoardItemType;
+  weight: number;
+  label: string;
+  charge: number;
+  price: number;
+}
+
+export const goldDisplayPriceRoundedToFive = (value: number): number => Math.ceil(value / 5) * 5;
+
+export const workmanshipChargeForDisplay = (
+  type: GoldPriceBoardItemType,
+  weight: number,
+  pricingConfig: GoldPricingConfig,
+  legacyCharges: Record<number, number> | undefined,
+): number => {
+  const configured = type === 'bullion'
+    ? pricingConfig.bullionWorkmanshipByWeight[String(weight)]
+    : pricingConfig.coinWorkmanshipByWeight[String(weight)];
+  return workmanshipForUnitWeight(configured, weight)?.perGram
+    ?? legacyCharges?.[weight]
+    ?? 0;
+};
+
+export const buildGoldPriceBoardRows = (args: {
+  p24Sell: number;
+  p21Sell: number;
+  pricingConfig: GoldPricingConfig;
+  legacyBullionCharges?: Record<number, number>;
+  legacyCoinCharges?: Record<number, number>;
+}): GoldPriceBoardRow[] => [
+  ...APPROVED_BULLION_UNIT_WEIGHTS.map(weight => {
+    const charge = workmanshipChargeForDisplay('bullion', weight, args.pricingConfig, args.legacyBullionCharges);
+    return { type: 'bullion' as const, weight, label: `سبيكة ${weight} جم`, charge, price: goldDisplayPriceRoundedToFive(weight * (args.p24Sell + charge)) };
+  }),
+  ...APPROVED_COIN_UNIT_WEIGHTS.map(weight => {
+    const charge = workmanshipChargeForDisplay('coin', weight, args.pricingConfig, args.legacyCoinCharges);
+    return { type: 'coin' as const, weight, label: `جنيه ذهب ${weight} جم`, charge, price: goldDisplayPriceRoundedToFive(weight * (args.p21Sell + charge)) };
+  }),
+];
+
 const weightKey = (weight: number): string => String(Number(weight.toFixed(4)));
 const normalizeWorkmanship = (value: unknown): WorkmanshipDefault | null => {
   if (!value || typeof value !== 'object') return null;

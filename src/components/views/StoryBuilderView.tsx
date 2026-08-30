@@ -1,7 +1,7 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { Download, Image as ImageIcon, Share2 } from 'lucide-react';
 import { useAppStore } from '../../store';
-import { APPROVED_BULLION_UNIT_WEIGHTS, APPROVED_COIN_UNIT_WEIGHTS, workmanshipForUnitWeight } from '../../lib/goldPricingAssistant';
+import { APPROVED_BULLION_UNIT_WEIGHTS, APPROVED_COIN_UNIT_WEIGHTS, goldDisplayPriceRoundedToFive, workmanshipChargeForDisplay } from '../../lib/goldPricingAssistant';
 import { calculateStoryGoldBuyPrices } from '../../lib/storyPricing';
 
 const STORY_WIDTH = 1080;
@@ -33,7 +33,7 @@ interface StoryData {
   customerMessage: string;
 }
 
-const formatPrice = (num: number) => Math.ceil(num / 5) * 5;
+const formatPrice = goldDisplayPriceRoundedToFive;
 
 const roundedPanel = (
   ctx: CanvasRenderingContext2D,
@@ -425,20 +425,14 @@ export const StoryBuilderView = () => {
   const currentBullionCharges = useMemo(() => Object.fromEntries(
     BULLION_LIST.map(item => [
       item.weight,
-      workmanshipForUnitWeight(store.pricingConfig.bullionWorkmanshipByWeight[String(item.weight)], item.weight)?.perGram
-        // Legacy fallback values are readOnly display data; pricingConfig remains authoritative.
-        ?? store.bullionCharges?.[item.weight]
-        ?? 0,
+      workmanshipChargeForDisplay('bullion', item.weight, store.pricingConfig, store.bullionCharges),
     ]),
   ), [store.pricingConfig.bullionWorkmanshipByWeight, store.bullionCharges]);
 
   const currentCoinCharges = useMemo(() => Object.fromEntries(
     COIN_LIST.map(item => [
       item.weight,
-      workmanshipForUnitWeight(store.pricingConfig.coinWorkmanshipByWeight[String(item.weight)], item.weight)?.perGram
-        // Legacy fallback values are readOnly display data; pricingConfig remains authoritative.
-        ?? store.coinCharges?.[item.weight]
-        ?? 0,
+      workmanshipChargeForDisplay('coin', item.weight, store.pricingConfig, store.coinCharges),
     ]),
   ), [store.pricingConfig.coinWorkmanshipByWeight, store.coinCharges]);
 

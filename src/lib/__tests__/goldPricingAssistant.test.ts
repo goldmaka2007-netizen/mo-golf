@@ -1,6 +1,7 @@
 import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
 import type { Account } from '../../types';
+import type { GoldAssistantProduct } from '../goldPricingAssistant';
 import { SEED_ACCOUNTS } from '../../migrationData';
 import { buildAccountRegistry } from '../accountRegistry';
 import {
@@ -31,16 +32,19 @@ import {
   transferredCountForProduct,
   workmanshipPerGramFromPiece,
   workmanshipPieceFromPerGram,
+  groupSaleAssistantProducts,
+  buildGoldPriceBoardRows,
+  goldDisplayPriceRoundedToFive,
 } from '../goldPricingAssistant';
 
 const taxSettings = { 18: 15, 21: 12 } as const;
 
-const product = (overrides: Partial<ReturnType<typeof makeProduct>> = {}) => ({
+const product = (overrides: Partial<GoldAssistantProduct> = {}): GoldAssistantProduct => ({
   ...makeProduct(),
   ...overrides,
 });
 
-function makeProduct() {
+function makeProduct(): GoldAssistantProduct {
   return {
     accountId: 'gold-21',
     taxonomyKey: undefined as string | undefined,
@@ -249,6 +253,35 @@ describe('account rules and EntryForm handoff', () => {
 });
 
 describe('sale pricing settings', () => {
+  it('groups sale products structurally into Afrangi and Arabi without direct bullion/coin', () => {
+    const grouped = groupSaleAssistantProducts([
+      product({ accountId: 'j18', taxonomyKey: 'gold.product.ring', karat: 18 }),
+      product({ accountId: 'j21', taxonomyKey: 'gold.product.chain', karat: 21 }),
+      product({ accountId: 'foreign', taxonomyKey: 'gold.raw.scrap_foreign', karat: 18 }),
+      product({ accountId: 'arabic', taxonomyKey: 'gold.raw.scrap_arabic', karat: 21 }),
+      product({ accountId: 'coin', taxonomyKey: 'gold.direct.coin', karat: 21 }),
+      product({ accountId: 'bar', taxonomyKey: 'gold.direct.bar', karat: 24 }),
+    ]);
+    expect(grouped.afrangi.map(item => item.accountId)).toEqual(['j18', 'foreign']);
+    expect(grouped.arabi.map(item => item.accountId)).toEqual(['j21', 'arabic']);
+  });
+
+  it('builds the read-only bullion/coin board from approved weights and Story pricing semantics', () => {
+    const rows = buildGoldPriceBoardRows({
+      p24Sell: 7200,
+      p21Sell: 6300,
+      pricingConfig: { version: 1, saleWorkmanshipDefaults: {}, bullionWorkmanshipByWeight: { '1': { mode: 'perGram', value: 12 } }, coinWorkmanshipByWeight: { '2': { mode: 'perPiece', value: 25 } }, purchaseDiscountPercent: {} },
+      legacyBullionCharges: { 2.5: 99 },
+      legacyCoinCharges: { 4: 30 },
+    });
+    expect(rows.filter(row => row.type === 'bullion').map(row => row.weight)).toEqual([...APPROVED_BULLION_UNIT_WEIGHTS]);
+    expect(rows.filter(row => row.type === 'coin').map(row => row.weight)).toEqual([...APPROVED_COIN_UNIT_WEIGHTS]);
+    expect(rows.find(row => row.type === 'bullion' && row.weight === 1)).toMatchObject({ charge: 12, price: 7215 });
+    expect(rows.find(row => row.type === 'coin' && row.weight === 2)).toMatchObject({ charge: 12.5, price: 12625 });
+    expect(rows.find(row => row.type === 'bullion' && row.weight === 2.5)?.charge).toBe(99);
+    expect(goldDisplayPriceRoundedToFive(12341)).toBe(12345);
+  });
+
   it('keeps the approved fixed-weight lists exact and excludes legacy 100g', () => {
     expect(APPROVED_BULLION_UNIT_WEIGHTS).toEqual([0.25, 0.5, 1, 2.5, 5, 10, 20, 31.1, 50]);
     expect(APPROVED_BULLION_UNIT_WEIGHTS).not.toContain(100);

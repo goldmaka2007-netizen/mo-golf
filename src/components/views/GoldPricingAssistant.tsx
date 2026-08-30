@@ -30,6 +30,8 @@ import {
   workmanshipPieceFromPerGram,
   workmanshipForUnitWeight,
   totalWeightForAssistant,
+  buildGoldPriceBoardRows,
+  groupSaleAssistantProducts,
 } from '../../lib/goldPricingAssistant';
 import { cn } from '../../lib/utils';
 
@@ -104,8 +106,17 @@ export const GoldPricingAssistant = ({
   onReview,
 }: GoldPricingAssistantProps) => {
   const [state, setState] = useState(() => createEmptyGoldAssistantState());
+  const [saleEntryPoint, setSaleEntryPoint] = useState<'bullion' | 'afrangi' | 'arabi'>('bullion');
   const workmanshipSource = useRef<WorkmanshipSource>('perGram');
   const sale = mode === 'sale';
+  const saleProductGroups = useMemo(() => groupSaleAssistantProducts(products), [products]);
+  const bullionPriceBoard = useMemo(() => buildGoldPriceBoardRows({
+    p24Sell: Math.round((session.gold21PriceSnapshot / 21) * 24),
+    p21Sell: session.gold21PriceSnapshot,
+    pricingConfig,
+    legacyBullionCharges,
+    legacyCoinCharges,
+  }), [legacyBullionCharges, legacyCoinCharges, pricingConfig, session.gold21PriceSnapshot]);
   const product = state.product;
   const officialPrice = product ? officialGoldKaratPrice(session.gold21PriceSnapshot, product.multiplier) : null;
   const unitWeight = parseAssistantNumber(state.weight);
@@ -317,6 +328,28 @@ export const GoldPricingAssistant = ({
         </div>
       </div>
 
+      {sale && (
+        <div className="grid grid-cols-1 gap-2 sm:grid-cols-3">
+          {([
+            ['bullion', 'السبائك والجنيهات'],
+            ['afrangi', 'منتجات أفرنجي'],
+            ['arabi', 'منتجات عربي'],
+          ] as const).map(([value, label]) => (
+            <button key={value} type="button" onClick={() => { setSaleEntryPoint(value); setState(createEmptyGoldAssistantState()); }} className={cn('min-h-12 rounded-2xl border px-3 text-sm font-black', saleEntryPoint === value ? 'border-[#d2ad4a] bg-[#d2ad4a]/15 text-[#f3cf70]' : 'border-[#292e3a] bg-[#10141d] text-[#c8c1b4]')}>
+              {label}
+            </button>
+          ))}
+        </div>
+      )}
+
+      {sale && saleEntryPoint === 'bullion' ? (
+        <div className="rounded-3xl border border-[#d2ad4a]/35 bg-[linear-gradient(145deg,#111723,#090c12)] p-4 shadow-[0_18px_50px_rgba(0,0,0,0.28)]">
+          <div className="mb-3"><h3 className="text-base font-black text-[#f3cf70]">أسعار السبائك والجنيهات</h3><p className="mt-1 text-[10px] font-bold text-[#8e8778]">عرض استرشادي للقراءة فقط — لا يبدأ عملية بيع</p></div>
+          <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+            {bullionPriceBoard.map(row => <div key={`${row.type}-${row.weight}`} className="flex items-center justify-between rounded-2xl border border-[#252b37] bg-[#0b0f17] px-3 py-3"><span className="text-sm font-black text-[#ddd8cc]">{row.label}</span><strong className="font-mono text-lg text-[#f3cf70]">{formatEgpAmount(row.price, 0)} ج.م</strong></div>)}
+          </div>
+        </div>
+      ) : (
       <div className="rounded-3xl border border-[#292e3a] bg-[linear-gradient(145deg,#111723,#090c12)] p-4 shadow-[0_18px_50px_rgba(0,0,0,0.28)]">
         <label className="space-y-2">
           <span className="block text-xs font-black text-[#d7cdaF]">المنتج</span>
@@ -326,7 +359,7 @@ export const GoldPricingAssistant = ({
             className="min-h-14 w-full rounded-2xl border border-[#343a48] bg-[#080b12] px-4 text-sm font-black text-[#f5f1e8] outline-none focus:border-[#d2ad4a]"
           >
             <option value="">اختر منتج الذهب</option>
-            {products.map(item => <option key={item.accountId} value={item.accountId}>{item.name}</option>)}
+            {(sale ? (saleEntryPoint === 'afrangi' ? saleProductGroups.afrangi : saleProductGroups.arabi) : products).map(item => <option key={item.accountId} value={item.accountId}>{item.name}</option>)}
           </select>
         </label>
         {product && (
@@ -342,14 +375,15 @@ export const GoldPricingAssistant = ({
           </div>
         )}
       </div>
+      )}
 
-      {products.length === 0 && (
+      {(!sale || saleEntryPoint !== 'bullion') && products.length === 0 && (
         <div className="rounded-2xl border border-amber-400/30 bg-amber-400/10 p-4 text-xs font-bold leading-6 text-amber-100">
           لا توجد منتجات مؤهلة في قواعد العملية الحالية وAccount Registry.
         </div>
       )}
 
-      {product && (
+      {product && (!sale || saleEntryPoint !== 'bullion') && (
         <>
           <div className="grid grid-cols-1 gap-3 rounded-3xl border border-[#252b37] bg-[#0d1119] p-4 sm:grid-cols-2">
             {fixedWeight ? (
