@@ -264,6 +264,8 @@ describe('sale pricing settings', () => {
     ]);
     expect(grouped.afrangi.map(item => item.accountId)).toEqual(['j18', 'foreign']);
     expect(grouped.arabi.map(item => item.accountId)).toEqual(['j21', 'arabic']);
+    expect(grouped.direct.map(item => item.accountId)).toEqual(['coin', 'bar']);
+    expect(grouped.direct.every(item => item.taxonomyKey === 'gold.direct.coin' || item.taxonomyKey === 'gold.direct.bar')).toBe(true);
   });
 
   it('builds the read-only bullion/coin board from approved weights and Story pricing semantics', () => {

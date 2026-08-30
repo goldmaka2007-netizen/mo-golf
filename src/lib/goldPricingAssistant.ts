@@ -48,11 +48,13 @@ export const DEFAULT_GOLD_PRICING_CONFIG: GoldPricingConfig = Object.freeze({ ve
 export interface SaleAssistantProductGroups {
   afrangi: GoldAssistantProduct[];
   arabi: GoldAssistantProduct[];
+  direct: GoldAssistantProduct[];
 }
 
 export const groupSaleAssistantProducts = (products: GoldAssistantProduct[]): SaleAssistantProductGroups => ({
   afrangi: products.filter(product => product.taxonomyKey === 'gold.raw.scrap_foreign' || (product.taxonomyKey?.startsWith('gold.product.') && product.karat === 18)),
   arabi: products.filter(product => product.taxonomyKey === 'gold.raw.scrap_arabic' || (product.taxonomyKey?.startsWith('gold.product.') && product.karat === 21)),
+  direct: products.filter(product => product.taxonomyKey === 'gold.direct.bar' || product.taxonomyKey === 'gold.direct.coin'),
 });
 
 export type GoldPriceBoardItemType = 'bullion' | 'coin';

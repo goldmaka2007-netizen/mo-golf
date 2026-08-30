@@ -106,7 +106,7 @@ export const GoldPricingAssistant = ({
   onReview,
 }: GoldPricingAssistantProps) => {
   const [state, setState] = useState(() => createEmptyGoldAssistantState());
-  const [saleEntryPoint, setSaleEntryPoint] = useState<'bullion' | 'afrangi' | 'arabi'>('bullion');
+  const [saleEntryPoint, setSaleEntryPoint] = useState<'bullion' | 'afrangi' | 'arabi' | 'direct'>('bullion');
   const workmanshipSource = useRef<WorkmanshipSource>('perGram');
   const sale = mode === 'sale';
   const saleProductGroups = useMemo(() => groupSaleAssistantProducts(products), [products]);
@@ -329,16 +329,13 @@ export const GoldPricingAssistant = ({
       </div>
 
       {sale && (
-        <div className="grid grid-cols-1 gap-2 sm:grid-cols-3">
-          {([
-            ['bullion', 'السبائك والجنيهات'],
-            ['afrangi', 'منتجات أفرنجي'],
-            ['arabi', 'منتجات عربي'],
-          ] as const).map(([value, label]) => (
-            <button key={value} type="button" onClick={() => { setSaleEntryPoint(value); setState(createEmptyGoldAssistantState()); }} className={cn('min-h-12 rounded-2xl border px-3 text-sm font-black', saleEntryPoint === value ? 'border-[#d2ad4a] bg-[#d2ad4a]/15 text-[#f3cf70]' : 'border-[#292e3a] bg-[#10141d] text-[#c8c1b4]')}>
-              {label}
-            </button>
-          ))}
+        <div className="space-y-3 rounded-3xl border border-[#292e3a] bg-[linear-gradient(145deg,#111723,#090c12)] p-4 shadow-[0_18px_50px_rgba(0,0,0,0.28)]">
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+            <label className="space-y-2"><span className="block text-xs font-black text-[#d7cdaf]">منتجات أفرنجي</span><select value={saleEntryPoint === 'afrangi' ? product?.accountId ?? '' : ''} onChange={event => { setSaleEntryPoint('afrangi'); selectProduct(event.target.value); }} className="min-h-12 w-full rounded-2xl border border-[#343a48] bg-[#080b12] px-3 text-sm font-black text-[#f5f1e8]"><option value="">اختر منتج أفرنجي</option>{saleProductGroups.afrangi.map(item => <option key={item.accountId} value={item.accountId}>{item.name}</option>)}</select></label>
+            <label className="space-y-2"><span className="block text-xs font-black text-[#d7cdaf]">منتجات عربي</span><select value={saleEntryPoint === 'arabi' ? product?.accountId ?? '' : ''} onChange={event => { setSaleEntryPoint('arabi'); selectProduct(event.target.value); }} className="min-h-12 w-full rounded-2xl border border-[#343a48] bg-[#080b12] px-3 text-sm font-black text-[#f5f1e8]"><option value="">اختر منتج عربي</option>{saleProductGroups.arabi.map(item => <option key={item.accountId} value={item.accountId}>{item.name}</option>)}</select></label>
+          </div>
+          <button type="button" onClick={() => { setSaleEntryPoint('bullion'); setState(createEmptyGoldAssistantState()); }} className={cn('min-h-12 w-full rounded-2xl border px-3 text-sm font-black', saleEntryPoint === 'bullion' ? 'border-[#d2ad4a] bg-[#d2ad4a]/15 text-[#f3cf70]' : 'border-[#292e3a] bg-[#10141d] text-[#c8c1b4]')}>السبائك والجنيهات</button>
+          <label className="block max-w-sm space-y-2"><span className="block text-[11px] font-black text-[#b8af9b]">اختيار سبيكة/جنيه للبيع</span><select value={saleEntryPoint === 'direct' ? product?.accountId ?? '' : ''} onChange={event => { setSaleEntryPoint('direct'); selectProduct(event.target.value); }} className="min-h-11 w-full rounded-2xl border border-[#343a48] bg-[#080b12] px-3 text-sm font-black text-[#f5f1e8]"><option value="">اختر سبيكة/جنيه</option>{saleProductGroups.direct.map(item => <option key={item.accountId} value={item.accountId}>{item.name}</option>)}</select></label>
         </div>
       )}
 
@@ -351,7 +348,7 @@ export const GoldPricingAssistant = ({
         </div>
       ) : (
       <div className="rounded-3xl border border-[#292e3a] bg-[linear-gradient(145deg,#111723,#090c12)] p-4 shadow-[0_18px_50px_rgba(0,0,0,0.28)]">
-        <label className="space-y-2">
+        {!sale && <label className="space-y-2">
           <span className="block text-xs font-black text-[#d7cdaF]">المنتج</span>
           <select
             value={product?.accountId ?? ''}
@@ -359,9 +356,9 @@ export const GoldPricingAssistant = ({
             className="min-h-14 w-full rounded-2xl border border-[#343a48] bg-[#080b12] px-4 text-sm font-black text-[#f5f1e8] outline-none focus:border-[#d2ad4a]"
           >
             <option value="">اختر منتج الذهب</option>
-            {(sale ? (saleEntryPoint === 'afrangi' ? saleProductGroups.afrangi : saleProductGroups.arabi) : products).map(item => <option key={item.accountId} value={item.accountId}>{item.name}</option>)}
+            {products.map(item => <option key={item.accountId} value={item.accountId}>{item.name}</option>)}
           </select>
-        </label>
+        </label>}
         {product && (
           <div className="mt-3 grid grid-cols-2 gap-2">
             <div className="rounded-2xl border border-[#252b37] bg-[#0b0f17] p-3">
