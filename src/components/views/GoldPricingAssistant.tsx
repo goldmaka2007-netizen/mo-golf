@@ -343,7 +343,7 @@ export const GoldPricingAssistant = ({
         <div className="rounded-3xl border border-[#d2ad4a]/35 bg-[linear-gradient(145deg,#111723,#090c12)] p-4 shadow-[0_18px_50px_rgba(0,0,0,0.28)]">
           <div className="mb-3"><h3 className="text-base font-black text-[#f3cf70]">أسعار السبائك والجنيهات</h3><p className="mt-1 text-[10px] font-bold text-[#8e8778]">عرض استرشادي للقراءة فقط — لا يبدأ عملية بيع</p></div>
           <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
-            {bullionPriceBoard.map(row => <div key={`${row.type}-${row.weight}`} className="flex items-center justify-between rounded-2xl border border-[#252b37] bg-[#0b0f17] px-3 py-3"><span className="text-sm font-black text-[#ddd8cc]">{row.label}</span><strong className="font-mono text-lg text-[#f3cf70]">{formatEgpAmount(row.price, 0)} ج.م</strong></div>)}
+            {bullionPriceBoard.map(row => <div key={`${row.type}-${row.weight}`} className="flex items-center justify-between rounded-2xl border border-[#252b37] bg-[#0b0f17] px-3 py-3"><span className="text-sm font-black text-[#ddd8cc]">{row.label}</span><strong className="font-mono text-lg text-[#f3cf70]">{formatEgpAmount(row.price, 0)}</strong></div>)}
           </div>
         </div>
       ) : (
