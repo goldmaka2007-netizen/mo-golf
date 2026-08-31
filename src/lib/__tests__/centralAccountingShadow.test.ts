@@ -127,14 +127,18 @@ describe('Central Accounting Shadow Phase 2', () => {
     expect(report.blockers.filter(blocker => blocker.code === 'operation_identity_mismatch')).toHaveLength(1);
   });
 
-  it('allows a covered legacy row with no stored operationKind', () => {
+  it('allows a covered legacy row with no stored operationKind and normalizes only its parity copy', () => {
     const rows = [entry({ operationKind: undefined })];
+    const before = JSON.stringify(rows);
     const report = buildCentralAccountingShadowReport({ accounts, entries: rows });
 
     expect(report.status).toBe('compared');
     expect(report.blockers).toEqual([]);
     expect(report.parity).not.toBeNull();
+    expect(report.parity?.rows[0].legacyResult.operationKind).toBe('purchase');
+    expect(report.parity?.rows[0].canonicalResult.operationKind).toBe('purchase');
     expect(rows[0].operationKind).toBeUndefined();
+    expect(JSON.stringify(rows)).toBe(before);
   });
 
   it.each([
@@ -164,6 +168,7 @@ describe('Central Accounting Shadow Phase 2', () => {
     },
   ])('normalizes missing operationKind from the Registry for $tx before parity', ({ tx, expectedKind, patch }) => {
     const row = entry({ tx, operationKind: undefined, ...patch });
+    const before = JSON.stringify(row);
     const report = buildCentralAccountingShadowReport({ accounts, entries: [row] });
 
     expect(report.coverage.shadowReady).toBe(true);
@@ -173,6 +178,7 @@ describe('Central Accounting Shadow Phase 2', () => {
     expect(report.parity?.rows[0].legacyResult.operationKind).toBe(expectedKind);
     expect(report.parity?.rows[0].canonicalResult.operationKind).toBe(expectedKind);
     expect(row.operationKind).toBeUndefined();
+    expect(JSON.stringify(row)).toBe(before);
   });
 
   it('is read-only and leaves source entries unchanged', () => {
