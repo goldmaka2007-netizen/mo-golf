@@ -58,9 +58,9 @@ const buildRegistryApprovedRuntimeEntries = (
  * leaves the existing downstream Ledger, Trial Balance, and Financial Statement
  * outputs unchanged. Runtime therefore performs only the required Central
  * Registry/Shadow identity gate, avoiding the cost of recalculating every Phase 3
- * evidence output on each UI refresh. Operation identity still comes exclusively
- * from complete Central Shadow parity and is applied only to temporary in-memory
- * Entry copies. There is no legacy/source-identity fallback or persistence side effect.
+ * evidence output on each UI refresh. Shadow receives the full account registry so
+ * historical rows may still resolve accounts that later became inactive; the Trial
+ * Balance engine retains its existing active-account presentation scope.
  */
 export const buildCentralAccountingReadOnlyRuntimeTrialBalance = ({
   accounts,
@@ -105,13 +105,14 @@ export const buildCentralAccountingReadOnlyRuntimeTrialBalance = ({
     };
   }
 
+  const activeAccounts = accounts.filter(account => account.isActive !== false);
   return {
     version: CENTRAL_ACCOUNTING_READ_ONLY_RUNTIME_VERSION,
     mode: 'read_only_runtime_trial_balance',
     status: 'ready',
     shadow,
     blockers: [],
-    trialBalance: buildUnifiedTrialBalance(normalizedEntries, accounts, startDate, endDate, {
+    trialBalance: buildUnifiedTrialBalance(normalizedEntries, activeAccounts, startDate, endDate, {
       canonicalDefinitions: manualAccountDefinitions,
       timeline,
     }),
