@@ -37,6 +37,7 @@ export interface CentralAccountingCoverageReport {
   unmappedOperations: RegistryOperationUsage[];
   historicalOnlyOperationsUsed: RegistryOperationUsage[];
   transitionOperationsUsed: RegistryOperationUsage[];
+  transitionOperationsStillWritable: string[];
   operationUsage: RegistryOperationUsage[];
   ambiguousAccountAliases: string[];
   historicalAccountsNeedingMapping: RegistryAccountCoverageIssue[];
@@ -116,6 +117,10 @@ export const buildCentralAccountingCoverageReport = (
   const unmappedOperations = usage.filter(item => !item.operationId);
   const historicalOnlyOperationsUsed = usage.filter(item => item.availability === 'historical_only');
   const transitionOperationsUsed = usage.filter(item => item.availability === 'transition_only');
+  const transitionOperationsStillWritable = operationCatalog
+    .filter(operation => operation.availability === 'transition_only' && operation.userSelectable)
+    .map(operation => operation.id)
+    .sort();
   const ambiguousAccountAliases = [...accountRegistry.ambiguousAliases.keys()].sort((a, b) => a.localeCompare(b, 'ar'));
   const accountIssues = collectAccountIssues(accountRegistry);
   const accountApproval = canApproveRegistry(accountRegistry, entries);
@@ -126,13 +131,14 @@ export const buildCentralAccountingCoverageReport = (
   const cutoverReady = shadowReady
     && accountApproval.allowed
     && accountIssues.mapping.length === 0
-    && transitionOperationsUsed.length === 0;
+    && transitionOperationsStillWritable.length === 0;
   return {
     registryVersion: CENTRAL_ACCOUNTING_REGISTRY_VERSION,
     operationCatalogIssues,
     unmappedOperations,
     historicalOnlyOperationsUsed,
     transitionOperationsUsed,
+    transitionOperationsStillWritable,
     operationUsage: usage,
     ambiguousAccountAliases,
     historicalAccountsNeedingMapping: accountIssues.mapping,
