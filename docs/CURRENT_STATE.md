@@ -49,11 +49,13 @@ Last reviewed: 2026-09-01
 - Working branch: `feature/central-read-only-runtime-trial-balance-phase4`, created from `main` `d3544e2effe9b3a77223626c694c5823ec2af9a2`.
 - Status: `CODE IMPLEMENTATION COMPLETE / REPOSITORY VERIFICATION PENDING / NOT MERGED / NOT DEPLOYED`.
 - Decision: D-024 / ADR-013.
-- Approved runtime flow: `Trial Balance UI → Central read-only runtime adapter → Phase 3 evidence → exact Central Shadow + complete parity identity → temporary Registry-normalized Entries → existing buildUnifiedTrialBalance`.
+- Phase 3 remains the offline acceptance proof that Registry-approved identity does not change Ledger, Unified Trial Balance, or EGP Financial Statement outputs; the interactive runtime does not recalculate that full evidence chain on every refresh.
+- Approved runtime flow: `Trial Balance UI → Central read-only runtime adapter → Central Registry-gated exact Shadow + complete parity identity → temporary Registry-normalized Entries → existing buildUnifiedTrialBalance`.
 - The Trial Balance UI no longer directly invokes `buildUnifiedTrialBalance`; the existing engine remains the sole calculation engine behind the Central runtime adapter.
-- Runtime execution requires Phase 3 evidence to be `matched` and exact. Missing or contradictory identity, incomplete parity, or any Phase 3 mismatch fails closed.
+- Runtime execution requires Central Shadow `status=compared`, non-null parity, and `exactParity=true`. Missing or contradictory identity or incomplete parity fails closed.
 - The UI does not silently fall back to the old direct runtime path when Central readiness blocks; it displays a blocked state.
 - Source Entries remain unchanged. No React/UI accounting rule, legacy RAW_DATA/CATS/OPERATION_RULES authority, Firebase persistence, or writer path was added.
+- Self-review removed an initially heavier design that reran the entire Phase 3 Ledger + Trial Balance + Financial Statements evidence on each UI refresh; final runtime uses only the exact Registry-gated Shadow plus the requested Trial Balance engine.
 - General Ledger and EGP Financial Statements are not switched by this first Phase 4A step; each requires focused runtime verification before widening the read-only migration.
 - Repository verification and independent Evidence Pack are required before merge review. No deployment is authorized by this checkpoint.
 
