@@ -1,5 +1,5 @@
 import type { Account, CanonicalAccountDefinition, Entry } from '../types';
-import { buildAccountRegistry, type AccountRegistry } from './accountRegistry';
+import { buildAccountRegistry, canApproveRegistry, type AccountRegistry } from './accountRegistry';
 import {
   CANONICAL_OPERATION_CATALOG,
   buildCanonicalOperationAliasIndex,
@@ -42,6 +42,7 @@ export interface CentralAccountingCoverageReport {
   historicalAccountsNeedingMapping: RegistryAccountCoverageIssue[];
   accountClassificationConflicts: RegistryAccountCoverageIssue[];
   accountsNeedingApproval: RegistryAccountCoverageIssue[];
+  accountApprovalReasons: string[];
   shadowReady: boolean;
   cutoverReady: boolean;
 }
@@ -117,13 +118,14 @@ export const buildCentralAccountingCoverageReport = (
   const transitionOperationsUsed = usage.filter(item => item.availability === 'transition_only');
   const ambiguousAccountAliases = [...accountRegistry.ambiguousAliases.keys()].sort((a, b) => a.localeCompare(b, 'ar'));
   const accountIssues = collectAccountIssues(accountRegistry);
+  const accountApproval = canApproveRegistry(accountRegistry, entries);
   const shadowReady = operationCatalogIssues.length === 0
     && unmappedOperations.length === 0
     && ambiguousAccountAliases.length === 0
     && accountIssues.conflicts.length === 0;
   const cutoverReady = shadowReady
+    && accountApproval.allowed
     && accountIssues.mapping.length === 0
-    && accountIssues.approvals.length === 0
     && transitionOperationsUsed.length === 0;
   return {
     registryVersion: CENTRAL_ACCOUNTING_REGISTRY_VERSION,
@@ -136,6 +138,7 @@ export const buildCentralAccountingCoverageReport = (
     historicalAccountsNeedingMapping: accountIssues.mapping,
     accountClassificationConflicts: accountIssues.conflicts,
     accountsNeedingApproval: accountIssues.approvals,
+    accountApprovalReasons: accountApproval.reasons,
     shadowReady,
     cutoverReady,
   };
