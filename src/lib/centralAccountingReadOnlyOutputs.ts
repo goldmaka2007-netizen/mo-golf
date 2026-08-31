@@ -10,6 +10,7 @@ export const CENTRAL_ACCOUNTING_READ_ONLY_OUTPUT_EVIDENCE_VERSION = 'central-acc
 export type CentralReadOnlyOutputBlockerCode =
   | 'shadow_blocked'
   | 'shadow_parity_not_exact'
+  | 'shadow_parity_incomplete'
   | 'projection_mismatch'
   | 'trial_balance_mismatch'
   | 'financial_statements_mismatch';
@@ -59,6 +60,13 @@ interface OutputBundle {
   projection: LegacyLedgerLeg[];
   trialBalance: UnifiedTrialBalanceReport;
   financialStatements: FinancialStatementsEgp;
+}
+
+interface NormalizedEntriesResult {
+  ok: boolean;
+  entries: Entry[];
+  parityRowCount: number;
+  missingIndexes: number[];
 }
 
 const stableSerialize = (value: unknown): string => {
@@ -145,12 +153,26 @@ const summarize = (bundle: OutputBundle): CentralReadOnlyOutputSummary => ({
   incomeNetProfit: bundle.financialStatements.incomeStatement.netProfit,
 });
 
-const normalizedEntriesFromShadow = (entries: Entry[], shadow: CentralAccountingShadowReport): Entry[] => {
-  if (!shadow.parity) return entries.map(entry => ({ ...entry }));
-  return entries.map((entry, index) => ({
-    ...entry,
-    operationKind: shadow.parity?.rows[index]?.canonicalResult.operationKind ?? entry.operationKind,
-  }));
+const normalizedEntriesFromShadow = (entries: Entry[], shadow: CentralAccountingShadowReport): NormalizedEntriesResult => {
+  const rows = shadow.parity?.rows ?? [];
+  const missingIndexes: number[] = [];
+  const normalized: Entry[] = [];
+
+  entries.forEach((entry, index) => {
+    const operationKind = rows[index]?.canonicalResult.operationKind;
+    if (!operationKind) {
+      missingIndexes.push(index);
+      return;
+    }
+    normalized.push({ ...entry, operationKind });
+  });
+
+  return {
+    ok: rows.length === entries.length && missingIndexes.length === 0,
+    entries: normalized,
+    parityRowCount: rows.length,
+    missingIndexes,
+  };
 };
 
 /**
@@ -158,11 +180,12 @@ const normalizedEntriesFromShadow = (entries: Entry[], shadow: CentralAccounting
  *
  * No output is compared unless Phase 2 Shadow is both unblocked and exact.
  * Once accepted, only temporary entry copies receive the Registry-approved
- * operation identity already exposed by Shadow parity. Existing projection,
- * Trial Balance, and Financial Statement engines are then run twice: once on
- * the untouched source entries and once on the temporary normalized copies.
- * Any downstream difference fails closed as evidence; no writer or persistence
- * path is activated here.
+ * operation identity already exposed by Shadow parity. Missing parity identity
+ * is a fail-closed blocker; source Entry identity is never used as fallback.
+ * Existing projection, Trial Balance, and Financial Statement engines are then
+ * run twice: once on untouched source entries and once on temporary normalized
+ * copies. Any downstream difference fails closed as evidence; no writer or
+ * persistence path is activated here.
  */
 export const buildCentralAccountingReadOnlyOutputEvidence = ({
   accounts,
@@ -210,10 +233,26 @@ export const buildCentralAccountingReadOnlyOutputEvidence = ({
     };
   }
 
+  const normalization = normalizedEntriesFromShadow(entries, shadow);
+  if (!normalization.ok) {
+    return {
+      version: CENTRAL_ACCOUNTING_READ_ONLY_OUTPUT_EVIDENCE_VERSION,
+      mode: 'read_only_output_evidence',
+      status: 'blocked',
+      shadow,
+      blockers: [{
+        code: 'shadow_parity_incomplete',
+        message: `Central Shadow parity identity is incomplete (${normalization.parityRowCount}/${entries.length} rows; missing indexes: ${normalization.missingIndexes.join(',') || 'none'}); downstream read-only outputs were not evaluated.`,
+      }],
+      comparison: null,
+      sourceSummary: null,
+      centralSummary: null,
+    };
+  }
+
   const definitions = manualAccountDefinitions;
-  const normalizedEntries = normalizedEntriesFromShadow(entries, shadow);
   const source = buildOutputBundle(entries, accounts, definitions, timeline, startDate, endDate);
-  const central = buildOutputBundle(normalizedEntries, accounts, definitions, timeline, startDate, endDate);
+  const central = buildOutputBundle(normalization.entries, accounts, definitions, timeline, startDate, endDate);
 
   const projectionExact = stableSerialize(projectionSnapshot(source.projection))
     === stableSerialize(projectionSnapshot(central.projection));
