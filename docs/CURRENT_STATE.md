@@ -1,6 +1,6 @@
 # Current Project State
 
-Last reviewed: 2026-08-30
+Last reviewed: 2026-08-31
 
 ## Production baseline
 
@@ -8,9 +8,26 @@ Last reviewed: 2026-08-30
 - Production: https://makka-central-accounting.web.app
 - Firebase project: `makka-central-accounting`
 - Current deployed application commit: `5241d44d3251a515a81ec6004fb6ae8447a64956`
+- Current GitHub `main` baseline at task start: `8e1e3d9c0fdb8c4093d3f2095c0ebad8bb79ddd7`.
 - Latest release family: Smart Sale Product Groups + Bullion/Coin Price Board.
 - Deployment scope: Firebase Hosting only.
 - Current release status: `COMPLETED / PRODUCTION DEPLOYED / OWNER MANUAL ACCEPTED / CROSS-SYSTEM VERIFIED`.
+
+## Approved implementation checkpoint — Central Accounting Registry Phase 1
+
+- Working branch: `feature/central-accounting-registry-phase1`.
+- Draft PR: `#14`.
+- Status: `CODE IMPLEMENTATION COMPLETE / REPOSITORY VERIFICATION PENDING / NOT MERGED / NOT DEPLOYED`.
+- Owner approval to implement Phase 1 was given on 2026-08-31 after the Central Accounting Domain Grill.
+- Target decision: D-021 / ADR-010 — one logical Central Accounting Registry becomes the future single accounting-definition authority after a separately approved Cutover.
+- Phase 1 adds a versioned canonical operation catalog, a read-only Central Accounting Registry composition boundary, Coverage/Readiness reporting, and focused architecture/coverage tests.
+- Phase 1 does **not** connect the new registry to EntryForm save/edit, does not activate a new posting path, and does not change current Production behavior.
+- Shadow readiness and Cutover readiness are separate fail-closed gates. Cutover is blocked while operation mapping is incomplete, account aliases/classification conflict, historical account mapping remains unresolved, canonical accounts remain unapproved, or a transition-only operation remains writable for new operations. Historical transition rows remain readable and do not by themselves block Cutover.
+- `مرتجع ذهب` and `مرتجع فضة` are mapped as historical-only compatibility operations per owner decision; they are not part of the target new-operation set.
+- Protected surfaces remain unchanged in this phase: Posting Matrix, WAC/COGS, Merchant Metal WAC, Balance Engine, Entry save contract, Golden Baseline, Production Firestore data, and Firebase backend resources.
+- Local/source-level validation of the new boundary passed, but full repository Vitest/typecheck/build/balance-contract gates are still pending because this environment cannot run the repository dependency stack and the repository has no configured GitHub Actions checks.
+- Draft PR #14 must remain unmerged until those repository-level gates are executed and reviewed.
+- No deployment is authorized for this phase at the current checkpoint.
 
 ## Current production behavior — Smart Gold Sale Assistant
 

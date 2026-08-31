@@ -107,3 +107,7 @@ Approved reporting semantics:
 
 Detailed Financial Position/Equity release record: `docs/FINANCIAL_POSITION_EQUITY_PRODUCTION_RELEASE_2026-08-25.md`.
 Home gold-summary consumer release: `docs/HOME_GOLD_SUMMARY_ALIGNMENT_PRODUCTION_RELEASE_2026-08-27.md`.
+
+## D-021 — Central Accounting Registry is the target single accounting authority
+
+Makka will converge on one logical Central Accounting Registry for stable account identity/metadata, versioned operation identity, abstract account roles, field requirements, operation contracts, and mapping/readiness coverage. Phase 1 is read-only and does not change EntryForm saves, Posting Matrix, WAC/COGS, Balance Engine, Firestore, historical rows, or Production behavior. Legacy rules are compatibility-only during transition; after an explicitly approved Cutover they cannot create new operations or act as fallback authority. Shadow readiness and Cutover readiness are separate fail-closed gates. See ADR-010.
