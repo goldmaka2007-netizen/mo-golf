@@ -69,6 +69,8 @@ describe('Central Accounting Registry Phase 1', () => {
     expect(registry.resolveOperation('بيع ذهب')).toMatchObject({ status: 'resolved', operation: { id: 'sale.gold' } });
     expect(registry.coverage.unmappedOperations).toEqual([]);
     expect(registry.coverage.shadowReady).toBe(true);
+    expect(registry.coverage.cutoverReady).toBe(false);
+    expect(registry.coverage.accountsNeedingApproval.length).toBeGreaterThan(0);
     expect(rows[0]).toEqual(entry({}));
   });
 
