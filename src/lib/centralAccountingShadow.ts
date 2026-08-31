@@ -80,13 +80,33 @@ const operationIdentityBlockers = (
 });
 
 /**
+ * Build parity-only entry copies whose operation identity comes from the
+ * Central Accounting Registry. The source rows remain untouched. This avoids
+ * lower-level legacy operationKind fallback becoming a second Shadow authority
+ * when historical rows do not store operationKind.
+ */
+const buildRegistryIdentityParityEntries = (
+  registry: CentralAccountingRegistry,
+  entries: Entry[],
+): Entry[] => entries.map(entry => {
+  const resolution = registry.resolveOperation(entry.tx);
+  if (resolution.status !== 'resolved') return { ...entry };
+  return {
+    ...entry,
+    operationKind: resolution.operation.operationKind,
+  };
+});
+
+/**
  * Phase 2 read-only shadow boundary.
  *
- * The Central Accounting Registry is the mandatory preflight gate. If its
- * Shadow readiness checks fail, or stored operation identity contradicts the
- * Registry identity resolved from tx, no canonical parity comparison is
- * exposed. Existing Production posting/save behavior remains authoritative
- * and this function has no persistence side effects.
+ * The Central Accounting Registry is the mandatory preflight gate and operation
+ * identity authority. If its Shadow readiness checks fail, or stored operation
+ * identity contradicts the Registry identity resolved from tx, no canonical
+ * parity comparison is exposed. Once preflight succeeds, parity receives only
+ * temporary entry copies whose operationKind is normalized from the Registry.
+ * Existing Production posting/save behavior remains authoritative and this
+ * function has no persistence side effects.
  */
 export const buildCentralAccountingShadowReport = ({
   accounts,
@@ -115,7 +135,8 @@ export const buildCentralAccountingShadowReport = ({
     };
   }
 
-  const parity = buildParityReport(entries, accounts, registry.accountRegistry);
+  const parityEntries = buildRegistryIdentityParityEntries(registry, entries);
+  const parity = buildParityReport(parityEntries, accounts, registry.accountRegistry);
   return {
     version: CENTRAL_ACCOUNTING_SHADOW_VERSION,
     mode: 'read_only_shadow',
