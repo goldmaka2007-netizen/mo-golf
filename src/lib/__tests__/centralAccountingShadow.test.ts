@@ -55,7 +55,7 @@ const accounts: Account[] = [
   account({
     id: 'customer',
     name: 'عميل اختبار',
-    type: 'customer',
+    type: 'other',
     mainType: 'اصول',
     balanceNature: 'جنية مصري',
   }),
