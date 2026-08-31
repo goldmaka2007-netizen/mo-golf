@@ -1,15 +1,15 @@
 import type { Account, CanonicalAccountDefinition, Entry } from '../types';
 import type { InventoryCostTimeline } from './inventoryCostTypes';
 import {
-  buildCentralAccountingReadOnlyOutputEvidence,
-  type CentralAccountingReadOnlyOutputEvidenceReport,
-} from './centralAccountingReadOnlyOutputs';
+  buildCentralAccountingShadowReport,
+  type CentralAccountingShadowReport,
+} from './centralAccountingShadow';
 import { buildUnifiedTrialBalance, type UnifiedTrialBalanceReport } from './unifiedTrialBalance';
 
 export const CENTRAL_ACCOUNTING_READ_ONLY_RUNTIME_VERSION = 'central-accounting-read-only-runtime-v1' as const;
 
 export type CentralReadOnlyRuntimeBlockerCode =
-  | 'central_evidence_not_matched'
+  | 'central_shadow_not_exact'
   | 'runtime_identity_incomplete';
 
 export interface CentralReadOnlyRuntimeBlocker {
@@ -30,16 +30,16 @@ export interface CentralTrialBalanceRuntimeReport {
   version: typeof CENTRAL_ACCOUNTING_READ_ONLY_RUNTIME_VERSION;
   mode: 'read_only_runtime_trial_balance';
   status: 'ready' | 'blocked';
-  evidence: CentralAccountingReadOnlyOutputEvidenceReport;
+  shadow: CentralAccountingShadowReport;
   blockers: CentralReadOnlyRuntimeBlocker[];
   trialBalance: UnifiedTrialBalanceReport | null;
 }
 
 const buildRegistryApprovedRuntimeEntries = (
   entries: Entry[],
-  evidence: CentralAccountingReadOnlyOutputEvidenceReport,
+  shadow: CentralAccountingShadowReport,
 ): Entry[] | null => {
-  const rows = evidence.shadow.parity?.rows ?? [];
+  const rows = shadow.parity?.rows ?? [];
   if (rows.length !== entries.length) return null;
 
   const normalized: Entry[] = [];
@@ -54,10 +54,13 @@ const buildRegistryApprovedRuntimeEntries = (
 /**
  * Phase 4A read-only runtime adapter for the Unified Trial Balance.
  *
- * Runtime use is allowed only after the complete Phase 3 evidence boundary
- * returns an exact match. Operation identity comes exclusively from complete
- * Central Shadow parity and is applied only to temporary in-memory Entry copies.
- * There is no legacy/source-identity fallback and no persistence side effect.
+ * Phase 3 already proved offline that exact Registry-approved Shadow identity
+ * leaves the existing downstream Ledger, Trial Balance, and Financial Statement
+ * outputs unchanged. Runtime therefore performs only the required Central
+ * Registry/Shadow identity gate, avoiding the cost of recalculating every Phase 3
+ * evidence output on each UI refresh. Operation identity still comes exclusively
+ * from complete Central Shadow parity and is applied only to temporary in-memory
+ * Entry copies. There is no legacy/source-identity fallback or persistence side effect.
  */
 export const buildCentralAccountingReadOnlyRuntimeTrialBalance = ({
   accounts,
@@ -67,36 +70,33 @@ export const buildCentralAccountingReadOnlyRuntimeTrialBalance = ({
   manualAccountDefinitions = [],
   timeline = null,
 }: CentralTrialBalanceRuntimeInput): CentralTrialBalanceRuntimeReport => {
-  const evidence = buildCentralAccountingReadOnlyOutputEvidence({
+  const shadow = buildCentralAccountingShadowReport({
     accounts,
     entries,
-    startDate,
-    endDate,
     manualAccountDefinitions,
-    timeline,
   });
 
-  if (evidence.status !== 'matched' || evidence.comparison?.exact !== true) {
+  if (shadow.status !== 'compared' || !shadow.parity || !shadow.exactParity) {
     return {
       version: CENTRAL_ACCOUNTING_READ_ONLY_RUNTIME_VERSION,
       mode: 'read_only_runtime_trial_balance',
       status: 'blocked',
-      evidence,
+      shadow,
       blockers: [{
-        code: 'central_evidence_not_matched',
-        message: `Central read-only evidence is ${evidence.status}; Trial Balance runtime wiring did not execute.`,
+        code: 'central_shadow_not_exact',
+        message: 'Central Registry-gated Shadow must be complete and exact before Trial Balance runtime execution.',
       }],
       trialBalance: null,
     };
   }
 
-  const normalizedEntries = buildRegistryApprovedRuntimeEntries(entries, evidence);
+  const normalizedEntries = buildRegistryApprovedRuntimeEntries(entries, shadow);
   if (!normalizedEntries) {
     return {
       version: CENTRAL_ACCOUNTING_READ_ONLY_RUNTIME_VERSION,
       mode: 'read_only_runtime_trial_balance',
       status: 'blocked',
-      evidence,
+      shadow,
       blockers: [{
         code: 'runtime_identity_incomplete',
         message: 'Complete Registry-approved Shadow parity identity is required before Trial Balance runtime execution.',
@@ -109,7 +109,7 @@ export const buildCentralAccountingReadOnlyRuntimeTrialBalance = ({
     version: CENTRAL_ACCOUNTING_READ_ONLY_RUNTIME_VERSION,
     mode: 'read_only_runtime_trial_balance',
     status: 'ready',
-    evidence,
+    shadow,
     blockers: [],
     trialBalance: buildUnifiedTrialBalance(normalizedEntries, accounts, startDate, endDate, {
       canonicalDefinitions: manualAccountDefinitions,
