@@ -53,15 +53,15 @@ const build = (entries: Entry[]) => buildCentralAccountingReadOnlyRuntimeTrialBa
 });
 
 describe('Central Accounting Read-Only Runtime Phase 4A', () => {
-  it('runs Trial Balance only after exact Central evidence and preserves source Entries', () => {
+  it('runs Trial Balance only after exact Central Shadow and preserves source Entries', () => {
     const rows = [entry({ operationKind: undefined })];
     const before = JSON.stringify(rows);
 
     const report = build(rows);
 
     expect(report.status).toBe('ready');
-    expect(report.evidence.status).toBe('matched');
-    expect(report.evidence.comparison?.exact).toBe(true);
+    expect(report.shadow.status).toBe('compared');
+    expect(report.shadow.exactParity).toBe(true);
     expect(report.blockers).toEqual([]);
     expect(report.trialBalance).not.toBeNull();
     expect(report.trialBalance?.rows.length).toBeGreaterThan(0);
@@ -74,8 +74,8 @@ describe('Central Accounting Read-Only Runtime Phase 4A', () => {
 
     expect(report.status).toBe('blocked');
     expect(report.trialBalance).toBeNull();
-    expect(report.evidence.shadow.blockers.map(blocker => blocker.code)).toContain('operation_identity_mismatch');
-    expect(report.blockers.map(blocker => blocker.code)).toContain('central_evidence_not_matched');
+    expect(report.shadow.blockers.map(blocker => blocker.code)).toContain('operation_identity_mismatch');
+    expect(report.blockers.map(blocker => blocker.code)).toContain('central_shadow_not_exact');
   });
 
   it('fails closed for an unknown operation instead of using a legacy fallback', () => {
@@ -83,15 +83,17 @@ describe('Central Accounting Read-Only Runtime Phase 4A', () => {
 
     expect(report.status).toBe('blocked');
     expect(report.trialBalance).toBeNull();
-    expect(report.evidence.shadow.status).toBe('blocked');
+    expect(report.shadow.status).toBe('blocked');
   });
 
-  it('keeps the runtime adapter read-only and free from independent accounting authority', () => {
+  it('keeps runtime light: exact Shadow gate only, with Phase 3 remaining offline acceptance evidence', () => {
     const source = readFileSync(new URL('../centralAccountingReadOnlyRuntime.ts', import.meta.url), 'utf8');
 
-    expect(source).toMatch(/buildCentralAccountingReadOnlyOutputEvidence/);
+    expect(source).toMatch(/buildCentralAccountingShadowReport/);
     expect(source).toMatch(/canonicalResult\.operationKind/);
     expect(source).toMatch(/buildUnifiedTrialBalance/);
+    expect(source).not.toMatch(/buildCentralAccountingReadOnlyOutputEvidence/);
+    expect(source).not.toMatch(/buildFinancialStatementsEgp|buildLegacyLedgerLegs/);
     expect(source).not.toMatch(/\?\?\s*entry\.operationKind/);
     expect(source).not.toMatch(/RAW_DATA|OPERATION_RULES|CATS/);
     expect(source).not.toMatch(/from ['"]firebase|setDoc\(|addDoc\(|deleteDoc\(|writeBatch\(/);
