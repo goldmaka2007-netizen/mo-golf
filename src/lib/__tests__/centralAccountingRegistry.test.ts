@@ -2,6 +2,7 @@ import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
 import type { Account, Entry } from '../../types';
 import { CATS, OPERATION_RULES } from '../../constants';
+import { buildAccountRegistry } from '../accountRegistry';
 import {
   CANONICAL_OPERATION_CATALOG,
   resolveCanonicalOperationLabel,
@@ -86,6 +87,28 @@ describe('Central Accounting Registry Phase 1', () => {
     expect(registry.coverage.shadowReady).toBe(true);
     expect(registry.coverage.cutoverReady).toBe(false);
     expect(registry.coverage.historicalAccountsNeedingMapping.map(item => item.accountName)).toContain('حساب تاريخي فقط');
+  });
+
+  it('does not let historical transition rows block cutover after that transition is disabled for new writes', () => {
+    const rows = [entry({ tx: 'تسوية', operationKind: 'adjustment' })];
+    const approvedDefinitions = buildAccountRegistry(accounts, rows).accounts.map(definition => ({
+      ...definition,
+      reviewStatus: 'reviewed' as const,
+      approvalStatus: 'approved' as const,
+    }));
+    const cutoverCatalog = CANONICAL_OPERATION_CATALOG.map(operation => operation.availability === 'transition_only'
+      ? { ...operation, userSelectable: false }
+      : operation);
+    const registry = buildCentralAccountingRegistry({
+      accounts,
+      entries: rows,
+      manualAccountDefinitions: approvedDefinitions,
+      operationCatalog: cutoverCatalog,
+    });
+    expect(registry.coverage.transitionOperationsUsed.map(item => item.label)).toContain('تسوية');
+    expect(registry.coverage.transitionOperationsStillWritable).toEqual([]);
+    expect(registry.coverage.accountApprovalReasons).toEqual([]);
+    expect(registry.coverage.cutoverReady).toBe(true);
   });
 
   it('has no Firebase/React/legacy constants dependency in the new runtime registry boundary', () => {
