@@ -25,10 +25,10 @@ export interface RegistryOperationUsage {
   availability?: CanonicalOperationDefinition['availability'];
 }
 
-export interface RegistryHistoricalAccountMappingIssue {
+export interface RegistryAccountCoverageIssue {
   accountId: string;
   accountName: string;
-  reason: 'historical_account_needs_mapping' | 'classification_conflict';
+  reason: 'historical_account_needs_mapping' | 'classification_conflict' | 'account_needs_approval';
 }
 
 export interface CentralAccountingCoverageReport {
@@ -39,8 +39,9 @@ export interface CentralAccountingCoverageReport {
   transitionOperationsUsed: RegistryOperationUsage[];
   operationUsage: RegistryOperationUsage[];
   ambiguousAccountAliases: string[];
-  historicalAccountsNeedingMapping: RegistryHistoricalAccountMappingIssue[];
-  accountClassificationConflicts: RegistryHistoricalAccountMappingIssue[];
+  historicalAccountsNeedingMapping: RegistryAccountCoverageIssue[];
+  accountClassificationConflicts: RegistryAccountCoverageIssue[];
+  accountsNeedingApproval: RegistryAccountCoverageIssue[];
   shadowReady: boolean;
   cutoverReady: boolean;
 }
@@ -75,9 +76,10 @@ const operationUsage = (
     .sort((a, b) => a.label.localeCompare(b.label, 'ar'));
 };
 
-const collectHistoricalAccountIssues = (registry: AccountRegistry): {
-  mapping: RegistryHistoricalAccountMappingIssue[];
-  conflicts: RegistryHistoricalAccountMappingIssue[];
+const collectAccountIssues = (registry: AccountRegistry): {
+  mapping: RegistryAccountCoverageIssue[];
+  conflicts: RegistryAccountCoverageIssue[];
+  approvals: RegistryAccountCoverageIssue[];
 } => {
   const mapping = registry.accounts
     .filter(account => account.isHistoricalOnly && !account.sourceAccountId && account.approvalStatus !== 'approved')
@@ -93,7 +95,14 @@ const collectHistoricalAccountIssues = (registry: AccountRegistry): {
       accountName: account.displayName,
       reason: 'classification_conflict' as const,
     }));
-  return { mapping, conflicts };
+  const approvals = registry.accounts
+    .filter(account => account.isActive && account.approvalStatus !== 'approved')
+    .map(account => ({
+      accountId: account.id,
+      accountName: account.displayName,
+      reason: 'account_needs_approval' as const,
+    }));
+  return { mapping, conflicts, approvals };
 };
 
 export const buildCentralAccountingCoverageReport = (
@@ -107,13 +116,14 @@ export const buildCentralAccountingCoverageReport = (
   const historicalOnlyOperationsUsed = usage.filter(item => item.availability === 'historical_only');
   const transitionOperationsUsed = usage.filter(item => item.availability === 'transition_only');
   const ambiguousAccountAliases = [...accountRegistry.ambiguousAliases.keys()].sort((a, b) => a.localeCompare(b, 'ar'));
-  const accountIssues = collectHistoricalAccountIssues(accountRegistry);
+  const accountIssues = collectAccountIssues(accountRegistry);
   const shadowReady = operationCatalogIssues.length === 0
     && unmappedOperations.length === 0
     && ambiguousAccountAliases.length === 0
     && accountIssues.conflicts.length === 0;
   const cutoverReady = shadowReady
     && accountIssues.mapping.length === 0
+    && accountIssues.approvals.length === 0
     && transitionOperationsUsed.length === 0;
   return {
     registryVersion: CENTRAL_ACCOUNTING_REGISTRY_VERSION,
@@ -125,6 +135,7 @@ export const buildCentralAccountingCoverageReport = (
     ambiguousAccountAliases,
     historicalAccountsNeedingMapping: accountIssues.mapping,
     accountClassificationConflicts: accountIssues.conflicts,
+    accountsNeedingApproval: accountIssues.approvals,
     shadowReady,
     cutoverReady,
   };
