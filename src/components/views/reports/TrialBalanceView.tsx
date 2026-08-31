@@ -20,16 +20,15 @@ export const TrialBalanceView = React.memo(({ entries }: { entries: Entry[] }) =
   const { accountsDb, canonicalAccounts, costCalculationRun } = useAppStore();
   const [from, setFrom] = useState(yearStart); const [to, setTo] = useState(today);
   const [expanded, setExpanded] = useState<Set<string>>(new Set());
-  const activeAccounts = useMemo(() => accountsDb.filter(account => account.isActive !== false), [accountsDb]);
   const runtimeEntries = useMemo(() => entries.filter(entry => entry.date <= to), [entries, to]);
   const runtime = useMemo(() => buildCentralAccountingReadOnlyRuntimeTrialBalance({
-    accounts: activeAccounts,
+    accounts: accountsDb,
     entries: runtimeEntries,
     startDate: from,
     endDate: to,
     manualAccountDefinitions: canonicalAccounts,
     timeline: costCalculationRun.status === 'valid' ? costCalculationRun.timeline : null,
-  }), [activeAccounts, runtimeEntries, canonicalAccounts, costCalculationRun, from, to]);
+  }), [accountsDb, runtimeEntries, canonicalAccounts, costCalculationRun, from, to]);
   const report = runtime.trialBalance;
   const groups = useMemo(() => report ? [...new Set(report.rows.map(row => row.group))].map(group => ({ group, label: report.rows.find(row => row.group === group)?.groupLabel ?? group, rows: report.rows.filter(row => row.group === group) })) : [], [report]);
   const exportCsv = () => { if (!report) return; const url = URL.createObjectURL(new Blob([buildUnifiedTrialBalanceCsv(report)], { type: 'text/csv;charset=utf-8' })); const link = document.createElement('a'); link.href = url; link.download = `unified-trial-balance_${from}_${to}.csv`; link.click(); URL.revokeObjectURL(url); };
