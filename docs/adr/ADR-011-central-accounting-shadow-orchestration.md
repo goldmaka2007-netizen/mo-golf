@@ -10,24 +10,29 @@ Makka already contains read-only shadow/parity helpers and a `canonical_preview`
 
 If a new Shadow Mode path bypasses the Central Accounting Registry, Makka would recreate multiple accounting-definition authorities instead of converging on one logical source of truth.
 
+A second risk exists when a historical/runtime row carries both a visible transaction label (`tx`) and a stored `operationKind`. If those two identities disagree, lower-level legacy/parity helpers can agree with each other on the stored kind while contradicting the Central Registry identity, producing misleading exact-parity evidence.
+
 ## Decision
 
 All newly approved Central Accounting Shadow orchestration must begin at the Central Accounting Registry boundary.
 
 The Phase 2 flow is:
 
-`Central Accounting Registry → Shadow readiness gate → existing read-only parity engine → comparison report`
+`Central Accounting Registry → Shadow readiness + operation-identity consistency gate → existing read-only parity engine → comparison report`
 
 The Registry is the mandatory preflight authority for operation coverage and account-definition safety. The existing parity engine remains a calculation helper; it is not promoted to a separate accounting-definition authority.
 
+When `operationKind` is present on a row, it must match the operation kind resolved by the Central Registry from `tx` before parity is exposed. A mismatch fails closed. Absence of `operationKind` alone does not block a covered legacy row; the existing historical compatibility resolution remains available for read-only analysis.
+
 ## Fail-closed behavior
 
-No parity comparison is exposed when Registry Shadow readiness is false.
+No parity comparison is exposed when Registry Shadow readiness is false or operation identity is internally inconsistent.
 
 Blocking conditions include, at minimum:
 
 - invalid canonical operation catalog;
 - unmapped operation labels, including blank/whitespace labels;
+- stored `operationKind` contradicting the operation identity resolved by the Central Registry from `tx`;
 - ambiguous account aliases;
 - account classification conflicts.
 
@@ -58,6 +63,8 @@ Existing low-level shadow/parity helpers may remain for historical tests and com
 
 They should not be broadly deleted or refactored merely for architectural neatness; migration away from direct callers must be evidence-led and incremental.
 
+Historical rows without a stored `operationKind` are not rejected merely for that absence. When a stored kind exists, however, contradictory identity is evidence that the row cannot safely participate in an exact-parity claim until the inconsistency is understood.
+
 ## Verification
 
 Phase 2 regression coverage must prove:
@@ -65,8 +72,10 @@ Phase 2 regression coverage must prove:
 1. a covered operation can pass Central Registry preflight and reach parity comparison;
 2. unknown operations fail closed before parity;
 3. blank/whitespace operation labels fail closed before parity;
-4. Shadow orchestration does not mutate source entries;
-5. the new orchestration boundary has no React/UI, Firebase persistence, or legacy decision-constant dependency;
-6. protected accounting/data surfaces remain unchanged.
+4. stored `operationKind` that contradicts the Central Registry identity fails closed before parity;
+5. absence of `operationKind` alone does not block an otherwise covered legacy row;
+6. Shadow orchestration does not mutate source entries;
+7. the new orchestration boundary has no React/UI, Firebase persistence, or legacy decision-constant dependency;
+8. protected accounting/data surfaces remain unchanged.
 
 Repository-level verification is required before merge. Live Production Shadow activation or deployment is a later workflow gate, not implied by merging this read-only foundation.
