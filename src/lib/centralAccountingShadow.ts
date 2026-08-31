@@ -2,6 +2,7 @@ import type { Account, CanonicalAccountDefinition, Entry } from '../types';
 import {
   buildCentralAccountingRegistry,
   type CentralAccountingCoverageReport,
+  type CentralAccountingRegistry,
 } from './centralAccountingRegistry';
 import { buildParityReport, type ParityReport } from './shadowAccounting';
 
@@ -10,6 +11,7 @@ export const CENTRAL_ACCOUNTING_SHADOW_VERSION = 'central-accounting-shadow-v1' 
 export type CentralAccountingShadowBlockerCode =
   | 'operation_catalog_invalid'
   | 'operation_unmapped'
+  | 'operation_identity_mismatch'
   | 'account_alias_ambiguous'
   | 'account_classification_conflict';
 
@@ -63,13 +65,28 @@ const coverageBlockers = (coverage: CentralAccountingCoverageReport): CentralAcc
   return blockers;
 };
 
+const operationIdentityBlockers = (
+  registry: CentralAccountingRegistry,
+  entries: Entry[],
+): CentralAccountingShadowBlocker[] => entries.flatMap(entry => {
+  if (!entry.operationKind) return [];
+  const resolution = registry.resolveOperation(entry.tx);
+  if (resolution.status !== 'resolved' || resolution.operation.operationKind === entry.operationKind) return [];
+  const sourceOperationId = entry.id || entry.legacyOperationId || entry.legacyOperationNo || String(entry.seq ?? '');
+  return [{
+    code: 'operation_identity_mismatch' as const,
+    message: `Operation ${sourceOperationId || '(unknown id)'} resolves tx "${String(entry.tx ?? '').trim()}" to ${resolution.operation.id}/${resolution.operation.operationKind} but stores operationKind=${entry.operationKind}.`,
+  }];
+});
+
 /**
  * Phase 2 read-only shadow boundary.
  *
  * The Central Accounting Registry is the mandatory preflight gate. If its
- * Shadow readiness checks fail, no canonical parity comparison is exposed.
- * Existing Production posting/save behavior remains authoritative and this
- * function has no persistence side effects.
+ * Shadow readiness checks fail, or stored operation identity contradicts the
+ * Registry identity resolved from tx, no canonical parity comparison is
+ * exposed. Existing Production posting/save behavior remains authoritative
+ * and this function has no persistence side effects.
  */
 export const buildCentralAccountingShadowReport = ({
   accounts,
@@ -81,7 +98,10 @@ export const buildCentralAccountingShadowReport = ({
     entries,
     manualAccountDefinitions,
   });
-  const blockers = coverageBlockers(registry.coverage);
+  const blockers = [
+    ...coverageBlockers(registry.coverage),
+    ...operationIdentityBlockers(registry, entries),
+  ];
 
   if (!registry.coverage.shadowReady || blockers.length > 0) {
     return {
