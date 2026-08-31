@@ -62,15 +62,18 @@ interface OutputBundle {
 }
 
 const stableSerialize = (value: unknown): string => {
-  const seen = new WeakSet<object>();
+  const stack = new WeakSet<object>();
   const normalize = (input: unknown): unknown => {
     if (input === null || typeof input !== 'object') return input;
-    if (seen.has(input as object)) return '[Circular]';
-    seen.add(input as object);
-    if (Array.isArray(input)) return input.map(normalize);
-    return Object.fromEntries(Object.entries(input as Record<string, unknown>)
-      .sort(([left], [right]) => left.localeCompare(right, 'en'))
-      .map(([key, item]) => [key, normalize(item)]));
+    if (stack.has(input as object)) return '[Circular]';
+    stack.add(input as object);
+    const normalized = Array.isArray(input)
+      ? input.map(normalize)
+      : Object.fromEntries(Object.entries(input as Record<string, unknown>)
+        .sort(([left], [right]) => left.localeCompare(right, 'en'))
+        .map(([key, item]) => [key, normalize(item)]));
+    stack.delete(input as object);
+    return normalized;
   };
   return JSON.stringify(normalize(value));
 };
