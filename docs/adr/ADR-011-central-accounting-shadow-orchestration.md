@@ -22,9 +22,9 @@ The Phase 2 flow is:
 
 The Registry is the mandatory preflight authority for operation coverage, operation identity, and account-definition safety. The existing parity engine remains a calculation helper; it is not promoted to a separate accounting-definition authority.
 
-When `operationKind` is present on a source row, it must match the operation kind resolved by the Central Registry from `tx` before parity is exposed. A mismatch fails closed.
+When `operationKind` is present on a source row, it must match the operation kind resolved by the Central Accounting Registry from `tx` before parity is exposed. A mismatch fails closed.
 
-Absence of `operationKind` alone does not block a covered historical row. Instead, after preflight succeeds, Shadow builds temporary read-only copies of the rows and sets their comparison-only `operationKind` from the Central Registry identity. The source entries remain unchanged. Lower-level legacy fallback is therefore not an operation-identity authority for an approved Central Shadow comparison.
+Absence of `operationKind` alone does not block a covered historical row. After preflight succeeds, Shadow builds temporary read-only copies of all compared rows and sets their comparison-only `operationKind` from the Central Accounting Registry identity. The source entries remain unchanged. Lower-level legacy fallback is therefore not an operation-identity authority for an approved Central Shadow comparison.
 
 ## Fail-closed behavior
 
@@ -34,7 +34,7 @@ Blocking conditions include, at minimum:
 
 - invalid canonical operation catalog;
 - unmapped operation labels, including blank/whitespace labels;
-- stored `operationKind` contradicting the operation identity resolved by the Central Registry from `tx`;
+- stored `operationKind` contradicting the operation identity resolved by the Central Accounting Registry from `tx`;
 - ambiguous account aliases;
 - account classification conflicts.
 
@@ -66,7 +66,7 @@ Existing low-level shadow/parity helpers may remain for historical tests and com
 
 They should not be broadly deleted or refactored merely for architectural neatness; migration away from direct callers must be evidence-led and incremental.
 
-Historical rows without a stored `operationKind` remain readable and are not rewritten. For approved Central Shadow comparison only, their temporary parity copies use the operation kind resolved by the Central Registry. When a stored kind exists, contradictory identity is evidence that the row cannot safely participate in parity until the inconsistency is understood.
+Historical rows without a stored `operationKind` remain readable and are not rewritten. For approved Central Shadow comparison only, their temporary parity copies use the operation kind resolved by the Central Accounting Registry. When a stored kind exists, contradictory identity is evidence that the row cannot safely participate in parity until the inconsistency is understood.
 
 Historical-only operation availability remains historical-only. Registry-normalizing a parity copy does not promote that operation into the new-write path.
 
