@@ -48,6 +48,18 @@ Last reviewed: 2026-09-01
 - Verification used isolated dummy Firebase environment values only; no Firebase/Auth/Firestore write occurred and verification modified no tracked file.
 - Phase 2 merging does **not** activate live Production Shadow execution and does not require a deployment. Production runtime remains on deployed application commit `5241d44d3251a515a81ec6004fb6ae8447a64956`.
 
+## Central Read-Only Output Evidence Phase 3 — implementation checkpoint
+
+- Owner approved Phase 3 implementation on 2026-09-01.
+- Working branch: `feature/central-read-only-output-evidence-phase3`, created from GitHub `main` `2869e7e21fbfa90703b6264eb0b309dfbbdd1fcc`.
+- Status: `CODE IMPLEMENTATION COMPLETE / REPOSITORY VERIFICATION PENDING / NOT MERGED / NOT DEPLOYED`.
+- Decision: D-023 / ADR-012 — before runtime read-only wiring, exact Central Shadow must prove unchanged downstream Ledger/financial projection, Unified Trial Balance, and EGP Financial Statements.
+- The Phase 3 boundary runs only after Central Shadow is unblocked and exact. Registry-approved operation identity is consumed from the existing Shadow parity result and applied only to temporary in-memory Entry copies.
+- Existing downstream engines are reused; no report accounting rule is reimplemented. The untouched source-entry outputs are compared with temporary Registry-normalized outputs for projection, Unified Trial Balance, and EGP Financial Statements.
+- Any downstream mismatch fails closed and is reported by layer. Source Entry rows remain unchanged.
+- Phase 3 adds no UI/runtime activation and no Firebase persistence. EntryForm, Entry save/edit, Production writer, Posting Matrix, Inventory WAC/COGS, Merchant Metal WAC, Balance Engine semantics, Trial Balance/financial-statement accounting rules, Golden Baseline, Production Firestore data, and Firebase backend resources remain outside the approved implementation scope.
+- Repository verification and Evidence Pack are still required before merge review. No merge or deployment is authorized by this checkpoint.
+
 ## Current production behavior — Smart Gold Sale Assistant
 
 - Smart Sale opens by default on a read-only `السبائك والجنيهات` price board for fast customer quoting.
@@ -82,7 +94,7 @@ Do not change without a separate explicit owner decision and approval:
 - Firestore Rules / Indexes / Functions / Storage / Auth.
 - Golden Baseline.
 
-The current Central Registry/Shadow phases changed none of these protected surfaces and made no Production Firestore data write.
+The current Central Registry/Shadow/Output Evidence phases changed none of these protected surfaces and made no Production Firestore data write.
 
 ## Known accepted UX limitations
 
