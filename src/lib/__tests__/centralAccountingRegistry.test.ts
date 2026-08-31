@@ -81,6 +81,32 @@ describe('Central Accounting Registry Phase 1', () => {
     expect(registry.coverage.unmappedOperations).toEqual([{ label: 'عملية غير معروفة', count: 1 }]);
   });
 
+  it('fails closed when operation labels are blank or whitespace-only', () => {
+    const rows = [
+      entry({ id: 'blank-operation', tx: '', operationKind: 'other' }),
+      entry({ id: 'spaces-operation', seq: 2, tx: '   ', operationKind: 'other' }),
+    ];
+    const approvedDefinitions = buildAccountRegistry(accounts, rows).accounts.map(definition => ({
+      ...definition,
+      reviewStatus: 'reviewed' as const,
+      approvalStatus: 'approved' as const,
+    }));
+    const cutoverCatalog = CANONICAL_OPERATION_CATALOG.map(operation => operation.availability === 'transition_only'
+      ? { ...operation, userSelectable: false }
+      : operation);
+    const registry = buildCentralAccountingRegistry({
+      accounts,
+      entries: rows,
+      manualAccountDefinitions: approvedDefinitions,
+      operationCatalog: cutoverCatalog,
+    });
+    expect(registry.resolveOperation('')).toMatchObject({ status: 'unknown' });
+    expect(registry.resolveOperation('   ')).toMatchObject({ status: 'unknown' });
+    expect(registry.coverage.unmappedOperations).toEqual([{ label: '', count: 2 }]);
+    expect(registry.coverage.shadowReady).toBe(false);
+    expect(registry.coverage.cutoverReady).toBe(false);
+  });
+
   it('allows shadow analysis but blocks cutover while an unmatched historical account still needs mapping', () => {
     const rows = [entry({ credit: 'حساب تاريخي فقط', creditAccountId: undefined })];
     const registry = buildCentralAccountingRegistry({ accounts, entries: rows });
