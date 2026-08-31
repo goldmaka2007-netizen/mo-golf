@@ -66,7 +66,7 @@ const operationUsage = (
   const counts = new Map<string, number>();
   entries.forEach(entry => {
     const label = String(entry.tx ?? '').trim();
-    if (label) counts.set(label, (counts.get(label) ?? 0) + 1);
+    counts.set(label, (counts.get(label) ?? 0) + 1);
   });
   return [...counts.entries()]
     .map(([label, count]) => {
