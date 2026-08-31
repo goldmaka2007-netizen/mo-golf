@@ -95,13 +95,17 @@ describe('Central Accounting Read-Only Output Evidence Phase 3', () => {
     expect(report.comparison).toBeNull();
   });
 
-  it('keeps Phase 3 free from UI, Firebase persistence, EntryForm, and legacy decision constants', () => {
+  it('keeps Phase 3 free from fallback identity, UI, Firebase persistence, EntryForm, and legacy decision constants', () => {
     const source = readFileSync(new URL('../centralAccountingReadOnlyOutputs.ts', import.meta.url), 'utf8');
 
     expect(source).toMatch(/buildCentralAccountingShadowReport/);
     expect(source).toMatch(/buildLegacyLedgerLegs/);
     expect(source).toMatch(/buildUnifiedTrialBalance/);
     expect(source).toMatch(/buildFinancialStatementsEgp/);
+    expect(source).toMatch(/shadow_parity_incomplete/);
+    expect(source).toMatch(/rows\.length === entries\.length/);
+    expect(source).not.toMatch(/\?\?\s*entry\.operationKind/);
+    expect(source).not.toMatch(/if \(!shadow\.parity\) return entries\.map/);
     expect(source).not.toMatch(/from ['"][^'"]*constants['"]|RAW_DATA|OPERATION_RULES|CATS/);
     expect(source).not.toMatch(/from ['"]firebase|setDoc\(|addDoc\(|deleteDoc\(|writeBatch\(/);
     expect(source).not.toMatch(/from ['"]react|EntryForm|from ['"]\.\.\/store/);
