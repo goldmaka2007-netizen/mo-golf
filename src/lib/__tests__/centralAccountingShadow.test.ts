@@ -58,6 +58,33 @@ describe('Central Accounting Shadow Phase 2', () => {
     expect(report.parity?.total).toBe(1);
   });
 
+  it('fails closed before parity when stored operationKind contradicts the Central Registry identity', () => {
+    const report = buildCentralAccountingShadowReport({
+      accounts,
+      entries: [entry({ tx: 'شراء فضة', operationKind: 'sale' })],
+    });
+
+    expect(report.coverage.shadowReady).toBe(true);
+    expect(report.status).toBe('blocked');
+    expect(report.parity).toBeNull();
+    expect(report.exactParity).toBe(false);
+    expect(report.blockers.map(blocker => blocker.code)).toContain('operation_identity_mismatch');
+    expect(report.blockers.find(blocker => blocker.code === 'operation_identity_mismatch')?.message)
+      .toContain('purchase.silver/purchase');
+  });
+
+  it('does not block a covered legacy row merely because operationKind is absent', () => {
+    const report = buildCentralAccountingShadowReport({
+      accounts,
+      entries: [entry({ operationKind: undefined })],
+    });
+
+    expect(report.coverage.shadowReady).toBe(true);
+    expect(report.blockers.map(blocker => blocker.code)).not.toContain('operation_identity_mismatch');
+    expect(report.status).toBe('compared');
+    expect(report.parity).not.toBeNull();
+  });
+
   it('fails closed before parity for an unknown operation label', () => {
     const report = buildCentralAccountingShadowReport({
       accounts,
