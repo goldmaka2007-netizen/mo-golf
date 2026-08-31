@@ -1,6 +1,6 @@
 # Current Project State
 
-Last reviewed: 2026-08-31
+Last reviewed: 2026-09-01
 
 ## Production baseline
 
@@ -28,6 +28,25 @@ Last reviewed: 2026-08-31
 - Architecture review PASS. Protected surfaces remain unchanged: Posting Matrix, WAC/COGS, Merchant Metal WAC, Balance Engine, Entry save contract, Golden Baseline, Production Firestore data, and Firebase backend resources.
 - Verification used isolated dummy Firebase environment values only; no Firebase/Auth/Firestore network write occurred and verification modified no tracked file.
 - No deployment is authorized or required for this read-only Phase 1 checkpoint. Production runtime remains on deployed application commit `5241d44d3251a515a81ec6004fb6ae8447a64956` until a separately approved later phase changes runtime behavior.
+
+## Central Accounting Shadow Phase 2 — merged read-only orchestration
+
+- Original Draft PR: `#16`; replacement merge PR: `#17` because the connector could not transition the verified draft to Ready for Review.
+- Merged to `main` on 2026-09-01 (Cairo project date) as merge commit `cdb33afd776abd65c00faa7bf36a223182d97b1c`.
+- Status: `IMPLEMENTATION COMPLETE / VERIFIED / MERGED / NOT DEPLOYED`.
+- Owner approved Phase 2 execution on 2026-09-01 after Phase 1 closure.
+- Decision: D-022 / ADR-011 — every newly approved Central Shadow run must enter through the Central Accounting Registry before existing parity helpers.
+- Approved read-only flow: `Central Accounting Registry → Shadow readiness gate → stored operation-identity consistency gate → Registry-normalized temporary parity copies → existing parity engine`.
+- Unknown, blank, and whitespace-only operation labels fail closed before parity. A stored `operationKind` that contradicts the Registry identity resolved from `tx` blocks the entire Shadow run with `parity=null` and `exactParity=false`.
+- Covered historical rows with missing `operationKind` remain unchanged. Shadow supplies the Registry operation kind only to temporary parity copies so lower-level legacy fallback cannot become the operation-identity authority.
+- The previously discovered fallback conflicts for `دفع لعميل`, `مرتجع ذهب`, and `مرتجع فضة` are covered by regression tests; `مرتجع ذهب` and `مرتجع فضة` remain `historical_only` and non-user-selectable.
+- Final focused verification passed `34/34` tests across four focused files. TypeScript PASS, Balance Contract PASS, build PASS, and `git diff --check` PASS.
+- Full missing-`operationKind` catalog audit checked `33` current/historical labels/aliases with `0` Registry-vs-parity identity mismatches.
+- Full suite remained `598 PASS / 13 FAIL` with the same previously proven pre-existing failure set; no automated regression failure was introduced by Phase 2.
+- Architecture review PASS. The new wrapper has no React/UI, Firebase persistence, EntryForm, RAW_DATA/CATS/OPERATION_RULES decision authority, local WAC/COGS, or local posting-template authority.
+- Protected surfaces remain unchanged: Entry save/edit contract, Production writer, Posting Matrix, Inventory WAC/COGS, Merchant Metal WAC, Balance Engine, Trial Balance/financial-statement semantics, Golden Baseline, Production Firestore data, and Firebase backend resources.
+- Verification used isolated dummy Firebase environment values only; no Firebase/Auth/Firestore write occurred and verification modified no tracked file.
+- Phase 2 merging does **not** activate live Production Shadow execution and does not require a deployment. Production runtime remains on deployed application commit `5241d44d3251a515a81ec6004fb6ae8447a64956`.
 
 ## Current production behavior — Smart Gold Sale Assistant
 
@@ -63,7 +82,7 @@ Do not change without a separate explicit owner decision and approval:
 - Firestore Rules / Indexes / Functions / Storage / Auth.
 - Golden Baseline.
 
-The Smart Sale release changed none of these surfaces and made no Production Firestore data write during deployment or verification.
+The current Central Registry/Shadow phases changed none of these protected surfaces and made no Production Firestore data write.
 
 ## Known accepted UX limitations
 
