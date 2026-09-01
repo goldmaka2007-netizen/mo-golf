@@ -1,8 +1,9 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { Briefcase, Download } from 'lucide-react';
+import { AlertTriangle, Briefcase, Download } from 'lucide-react';
 import type { Entry } from '../../../types';
 import { useAppStore } from '../../../store';
-import { buildMonthlyFinancialPosition, financialPositionCsvRows, visibleFinancialPositionMonths } from '../../../lib/monthlyFinancialPosition';
+import { financialPositionCsvRows, visibleFinancialPositionMonths } from '../../../lib/monthlyFinancialPosition';
+import { buildCentralAccountingReadOnlyRuntimeMonthlyFinancialPosition } from '../../../lib/centralAccountingReadOnlyRuntime';
 import type { FinancialPositionDetailRow, InventoryCategorySummary, InventoryStatementRow, MerchantLiabilityStatementRow } from '../../../lib/financialStatementsEgp';
 import { exportToCsv } from '../../../utils/exportUtils';
 import { formatEgpAmount, formatWeight } from '../../../lib/formatting';
@@ -45,8 +46,18 @@ export const BalanceSheetView = React.memo(({ entries, onOpenLedger }: { entries
   const [exportDiagnostic, setExportDiagnostic] = useState<string | null>(null);
   useEffect(() => setSelectedMonth(months.at(-1)?.month ?? null), [months]);
   const selected = months.find(month => month.month === selectedMonth) ?? months.at(-1);
-  const report = useMemo(() => selected && buildMonthlyFinancialPosition({ entries, accounts: accountsDb, canonicalDefinitions: canonicalAccounts, openingCostConfig, cutoffDate: selected.cutoffDate, goldPriceEgp: goldPrice, silverPriceEgp: silverPrice }), [selected, entries, accountsDb, canonicalAccounts, openingCostConfig, goldPrice, silverPrice]);
-  if (!selected || !report) return <div dir="rtl" className="rounded-2xl bg-[#0e1018] p-4">لا توجد بيانات مسجلة لهذه السنة</div>;
+  const runtime = useMemo(() => selected ? buildCentralAccountingReadOnlyRuntimeMonthlyFinancialPosition({
+    entries,
+    accounts: accountsDb,
+    canonicalDefinitions: canonicalAccounts,
+    openingCostConfig,
+    cutoffDate: selected.cutoffDate,
+    goldPriceEgp: goldPrice,
+    silverPriceEgp: silverPrice,
+  }) : null, [selected, entries, accountsDb, canonicalAccounts, openingCostConfig, goldPrice, silverPrice]);
+  if (!selected) return <div dir="rtl" className="rounded-2xl bg-[#0e1018] p-4">لا توجد بيانات مسجلة لهذه السنة</div>;
+  const report = runtime?.financialPosition ?? null;
+  if (!report) return <div dir="rtl" className="flex gap-2 rounded-2xl border border-amber-500/30 bg-amber-500/10 p-4 text-amber-100"><AlertTriangle className="h-5 w-5 shrink-0" /><div><p className="font-bold">تعذر تشغيل المركز المالي عبر المسار المركزي الآمن.</p><p className="mt-1 text-xs text-amber-200/80">لم يتم الرجوع للمسار القديم. الحالة: {runtime?.blockers[0]?.code ?? 'central_read_only_blocked'}</p></div></div>;
   if (!report.available) return <div dir="rtl" className="rounded-2xl border border-red-500/30 bg-red-500/10 p-4 text-red-100">Book Value غير متاحة حتى يكتمل Cost Timeline صالح: {report.diagnostic.message}</div>;
   const d = report.balanceSheet;
   const m = report.metalSummary;
@@ -59,8 +70,18 @@ export const BalanceSheetView = React.memo(({ entries, onOpenLedger }: { entries
   const exportReport = () => {
     const latest = months.at(-1);
     if (!latest) return;
-    const latestReport = buildMonthlyFinancialPosition({ entries, accounts: accountsDb, canonicalDefinitions: canonicalAccounts, openingCostConfig, cutoffDate: latest.cutoffDate, goldPriceEgp: goldPrice, silverPriceEgp: silverPrice });
-    if ('diagnostic' in latestReport) { setExportDiagnostic(`تعذر التصدير: ${latestReport.diagnostic.message}`); return; }
+    const latestRuntime = buildCentralAccountingReadOnlyRuntimeMonthlyFinancialPosition({
+      entries,
+      accounts: accountsDb,
+      canonicalDefinitions: canonicalAccounts,
+      openingCostConfig,
+      cutoffDate: latest.cutoffDate,
+      goldPriceEgp: goldPrice,
+      silverPriceEgp: silverPrice,
+    });
+    const latestReport = latestRuntime.financialPosition;
+    if (!latestReport) { setExportDiagnostic(`تعذر التصدير عبر المسار المركزي الآمن: ${latestRuntime.blockers[0]?.code ?? 'central_read_only_blocked'}`); return; }
+    if (!latestReport.available) { setExportDiagnostic(`تعذر التصدير: ${latestReport.diagnostic.message}`); return; }
     const rows = financialPositionCsvRows(latestReport)!;
     setExportDiagnostic(null);
     exportToCsv([{ name: `المركز المالي حتى ${latest.cutoffDate}`, data: rows }], `financial_position_${latest.cutoffDate}`);
