@@ -1,4 +1,4 @@
-name: Phase 5B Apply and Verify
+name: Phase 5B Verify
 
 on:
   push:
@@ -6,11 +6,10 @@ on:
       - feature/central-write-cutover-phase5b
 
 permissions:
-  contents: write
+  contents: read
 
 jobs:
-  apply-verify:
-    if: github.actor != 'github-actions[bot]'
+  verify:
     runs-on: ubuntu-latest
     env:
       VITE_FIREBASE_API_KEY: dummy-api-key
@@ -28,11 +27,6 @@ jobs:
           node-version: 20
           cache: npm
       - run: npm ci
-      - name: Apply deterministic Phase 5B codemod
-        run: |
-          node .github/scripts/phase5b-codemod.mjs
-          node .github/scripts/phase5b-test-correction.mjs
-          node .github/scripts/phase5b-type-correction.mjs
       - name: Architecture writer/year-close sweep
         run: node .github/scripts/phase5b-architecture-sweep.mjs
       - name: Focused Cutover tests
@@ -53,14 +47,3 @@ jobs:
       - run: npm run check:balance-contract
       - run: npm run build
       - run: git diff --check
-      - name: Commit verified source changes
-        run: |
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add src
-          if git diff --cached --quiet; then
-            echo "No source changes to commit."
-            exit 0
-          fi
-          git commit -m "feat(accounting): apply Phase 5B Central writer Cutover"
-          git push origin HEAD:feature/central-write-cutover-phase5b
