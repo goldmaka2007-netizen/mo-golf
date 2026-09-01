@@ -41,7 +41,10 @@ if (/getMetricValue|getAccountTypeDetails|belongsToMetric|calculateFinancials|ca
 const incomeView = read('src/components/views/reports/IncomeStatementView.tsx');
 if (!/computeAccountBalances\s*\(/.test(incomeView)) violations.push('Income Statement must call computeAccountBalances');
 const equityView = read('src/components/views/reports/EquityStatementView.tsx');
-if (!/computeAccountBalances\s*\(/.test(equityView)) violations.push('Equity Statement must call computeAccountBalances');
+const centralReadOnlyRuntime = read('src/lib/centralAccountingReadOnlyRuntime.ts');
+const equityUsesCentralRuntime = /buildCentralAccountingReadOnlyRuntimeEquityStatement/.test(equityView);
+const centralRuntimeKeepsBalanceEngine = /buildCentralAccountingReadOnlyRuntimeEquityStatement[\s\S]*computeAccountBalances\s*\(/.test(centralReadOnlyRuntime);
+if (!equityUsesCentralRuntime || !centralRuntimeKeepsBalanceEngine) violations.push('Equity Statement must route computeAccountBalances through the Central read-only runtime');
 const homeView = read('src/components/views/HomeView.tsx');
 if (!/computeAccountBalances\s*\(/.test(homeView) || /calculateGoldOwnershipPosition\s*\(|buildOperationalProjection\s*\(/.test(homeView)) violations.push('Home balances must use computeAccountBalances');
 const monthlyReport = read('src/lib/monthlyReportService.ts');
