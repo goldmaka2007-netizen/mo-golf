@@ -10,7 +10,7 @@ permissions:
 
 jobs:
   apply-verify:
-    if: ${{ !startsWith(github.event.head_commit.message, 'feat(accounting): apply Phase 5B Central writer Cutover') }}
+    if: github.actor != 'github-actions[bot]'
     runs-on: ubuntu-latest
     env:
       VITE_FIREBASE_API_KEY: dummy-api-key
