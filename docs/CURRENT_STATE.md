@@ -80,7 +80,7 @@ Last reviewed: 2026-09-01
 - Owner approved continuation to the final read-only reporting consumers on 2026-09-01, and explicitly approved including the separate Statement of Changes in Equity in the same Phase 4C after a direct-React accounting bypass was identified during self-review.
 - Working branch: `feature/central-read-only-runtime-financial-statements-phase4c`, created from `main` `45a524a73c677fdfd9e90a82cbc092c4f9f619bd`.
 - Draft PR: `#24`.
-- Status: `CODE IMPLEMENTATION COMPLETE / REPOSITORY VERIFICATION PENDING / NOT MERGED / NOT DEPLOYED`.
+- Status: `CODE IMPLEMENTATION COMPLETE / RE-VERIFICATION PENDING / NOT MERGED / NOT DEPLOYED`.
 - Decision: D-026 / ADR-015.
 - Scope covers the EGP Income Statement, monthly Financial Position, and Statement of Changes in Equity. `FinancialStatementsView` remains a presentation-only wrapper around the Income and Financial Position child views.
 - Approved Income flow: `Income Statement UI → Central read-only runtime adapter → Entries on/before requested income end date → referenced inactive-account Shadow compatibility copies → exact Registry-gated Shadow → complete Registry-approved temporary Entry identity → existing buildFinancialStatementsEgp`.
@@ -92,7 +92,9 @@ Last reviewed: 2026-09-01
 - Existing Financial Position Cost Timeline unavailable states and Equity reconciliation diagnostics remain engine-level diagnostics after Central identity succeeds; they are not reclassified as Central identity blockers.
 - Relevant later entries are excluded before Shadow so an unrelated future invalid operation cannot block an earlier Income period, Financial Position cutoff, or Equity cutoff.
 - Source Account/Entry objects remain unchanged; inactive historical compatibility stays Shadow-only; no stored `Entry.operationKind` fallback was introduced.
-- Repository verification and an independent Evidence Pack are required before merge review. No deployment is authorized by this checkpoint.
+- First independent acceptance on head `8515b5662bb5c1117a6e811f2579f3e4cfac7d1e` passed routing, identity safety, parity, cutoffs, focused `103/103`, full-suite `628 PASS / 13 FAIL`, and protected-surface checks, but blocked on two technical gates: a TypeScript union-narrowing error in Financial Position CSV export and an outdated Balance Contract guard that still required direct `computeAccountBalances` in `EquityStatementView`.
+- Corrections keep accounting/runtime semantics unchanged: Financial Position export now uses explicit `available === false` narrowing; the Balance Contract now requires Equity UI → Central Equity runtime routing and verifies that `computeAccountBalances` remains inside that Central adapter rather than restoring a direct React calculation.
+- Independent re-verification is required on the exact new HEAD before merge review. No deployment is authorized by this checkpoint.
 
 ## Protected accounting/data invariants
 
@@ -111,7 +113,7 @@ Central Registry Phases 1–4C changed none of these protected surfaces and made
 
 ## Current next gate
 
-- Verify Phase 4C EGP Financial Reporting repository behavior and architecture on the exact branch HEAD, including Income Statement, Financial Position, Equity Statement, cutoff behavior, fail-closed identity, source immutability, and Phase 4A/4B regression safety.
+- Re-verify Phase 4C EGP Financial Reporting repository behavior and architecture on the exact corrected branch HEAD, including TypeScript, Balance Contract, build, Income Statement, Financial Position, Equity Statement, cutoff behavior, fail-closed identity, source immutability, and Phase 4A/4B regression safety.
 - If independently accepted, present the owner with an explicit merge approval gate for PR `#24`; do not merge automatically.
 - After approved merge, synchronize GitHub + Notion + Google Drive and re-read all three before closing Phase 4C. Deployment remains separate and is not implied.
 - After the read-only consumers are verified and merged, the next architectural stage is EntryForm/write-path Cutover.
