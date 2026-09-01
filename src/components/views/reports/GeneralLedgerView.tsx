@@ -1,10 +1,10 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { Book, ChevronDown, ChevronRight, Download, Search, X } from 'lucide-react';
+import { AlertTriangle, Book, ChevronDown, ChevronRight, Download, Search, X } from 'lucide-react';
 import { Account, Entry } from '../../../types';
 import { useAppStore } from '../../../store';
-import { buildLedgerAccountSelection, combineLedgerDimensionReports, buildLedgerCsv, buildLedgerReport, filterLedgerRows, formatBalance, formatLedgerAmount, getAccountKey, getAvailableDimensions, getFilteredTotals, getUnclassifiedLedgerAccounts, GoldDisplayMode, LedgerDimension, LedgerRow, warnUnclassifiedLedgerAccounts } from '../../../lib/ledgerReport';
-import { computePeriodAccountBalances } from '../../../lib/engine';
+import { buildLedgerAccountSelection, combineLedgerDimensionReports, buildLedgerCsv, filterLedgerRows, formatBalance, formatLedgerAmount, getAccountKey, getFilteredTotals, getUnclassifiedLedgerAccounts, GoldDisplayMode, LedgerDimension, LedgerRow, warnUnclassifiedLedgerAccounts } from '../../../lib/ledgerReport';
 import { buildAccountRegistry } from '../../../lib/accountRegistry';
+import { buildCentralAccountingReadOnlyRuntimeGeneralLedger } from '../../../lib/centralAccountingReadOnlyRuntime';
 
 const today = () => new Date().toISOString().slice(0, 10);
 const yearStart = () => `${new Date().getFullYear()}-01-01`;
@@ -36,7 +36,7 @@ export const GeneralLedgerView = React.memo(({ entries, initialAccountId }: { en
 
   if (!account) return <AccountSelection groups={groups} search={search} setSearch={setSearch} expanded={expanded} setExpanded={setExpanded} onSelect={a => setAccountKey(getAccountKey(a))} />;
   const costTimeline = costCalculationRun.status === 'valid' && costCalculationRun.timeline?.valid ? costCalculationRun.timeline : null;
-  return <LedgerDetails account={account} accounts={accounts} entries={entries} canonicalAccounts={canonicalAccounts} costTimeline={costTimeline} onBack={() => setAccountKey(null)} />;
+  return <LedgerDetails account={account} accounts={accounts} sourceAccounts={accountsDb} entries={entries} canonicalAccounts={canonicalAccounts} costTimeline={costTimeline} onBack={() => setAccountKey(null)} />;
 });
 
 const AccountSelection = ({ groups, search, setSearch, expanded, setExpanded, onSelect }: { groups: ReturnType<typeof buildLedgerAccountSelection>; search: string; setSearch: (value: string) => void; expanded: Set<string>; setExpanded: React.Dispatch<React.SetStateAction<Set<string>>>; onSelect: (account: Account) => void }) => <section className="space-y-3" dir="rtl">
@@ -48,25 +48,42 @@ const AccountSelection = ({ groups, search, setSearch, expanded, setExpanded, on
   </div>
 </section>;
 
-const LedgerDetails = ({ account, accounts, entries, canonicalAccounts, costTimeline, onBack }: { account: Account; accounts: Account[]; entries: Entry[]; canonicalAccounts: import('../../../types').CanonicalAccountDefinition[]; costTimeline: import('../../../lib/inventoryCostTypes').InventoryCostTimeline | null; onBack: () => void }) => {
-  const dimensions = useMemo(() => getAvailableDimensions(account, entries, accounts, canonicalAccounts, { enableFinancialProjection: true, costTimeline }), [account, entries, accounts, canonicalAccounts, costTimeline]);
+const LedgerDetails = ({ account, accounts, sourceAccounts, entries, canonicalAccounts, costTimeline, onBack }: { account: Account; accounts: Account[]; sourceAccounts: Account[]; entries: Entry[]; canonicalAccounts: import('../../../types').CanonicalAccountDefinition[]; costTimeline: import('../../../lib/inventoryCostTypes').InventoryCostTimeline | null; onBack: () => void }) => {
   const [dimension, setDimension] = useState<LedgerDimension>('cash');
   const [from, setFrom] = useState(yearStart); const [to, setTo] = useState(today);
   const [operation, setOperation] = useState(''); const [opposite, setOpposite] = useState(''); const [mode, setMode] = useState<GoldDisplayMode>('equivalent21'); const [detail, setDetail] = useState<LedgerRow | null>(null);
-  useEffect(() => { if (dimensions.length && !dimensions.includes(dimension)) setDimension(dimensions[0]); }, [dimensions, dimension]);
-  const periodBalances = useMemo(() => computePeriodAccountBalances(entries, accounts, from, to), [entries, accounts, from, to]);
   const summaryEndDate = today();
-  const summaryBalances = useMemo(() => computePeriodAccountBalances(entries, accounts, '0000-01-01', summaryEndDate), [entries, accounts, summaryEndDate]);
-  const report = useMemo(() => dimensions.includes(dimension) ? buildLedgerReport(entries, accounts, account, dimension, from, to, canonicalAccounts, { enableFinancialProjection: true, costTimeline, balancePeriod: periodBalances }) : null, [entries, accounts, account, dimension, dimensions, from, to, canonicalAccounts, costTimeline, periodBalances]);
-  const dimensionReports = useMemo(() => dimensions.map(item => ({ dimension: item, report: buildLedgerReport(entries, accounts, account, item, from, to, canonicalAccounts, { enableFinancialProjection: true, costTimeline, balancePeriod: periodBalances }) })), [dimensions, entries, accounts, account, from, to, canonicalAccounts, costTimeline, periodBalances]);
+  const runtimeCutoff = to > summaryEndDate ? to : summaryEndDate;
+  const runtimeEntries = useMemo(() => entries.filter(entry => entry.date <= runtimeCutoff), [entries, runtimeCutoff]);
+  const runtime = useMemo(() => buildCentralAccountingReadOnlyRuntimeGeneralLedger({
+    sourceAccounts,
+    reportAccounts: accounts,
+    entries: runtimeEntries,
+    account,
+    startDate: from,
+    endDate: to,
+    summaryEndDate,
+    manualAccountDefinitions: canonicalAccounts,
+    timeline: costTimeline,
+  }), [sourceAccounts, accounts, runtimeEntries, account, from, to, summaryEndDate, canonicalAccounts, costTimeline]);
+  const dimensions = runtime.dimensions;
+  useEffect(() => { if (dimensions.length && !dimensions.includes(dimension)) setDimension(dimensions[0]); }, [dimensions, dimension]);
+  const report = useMemo(() => runtime.periodReports.find(item => item.dimension === dimension)?.report ?? null, [runtime.periodReports, dimension]);
+  const dimensionReports = runtime.periodReports;
   const combinedRows = useMemo(() => combineLedgerDimensionReports(dimensionReports).filter(row => (!operation || row.operationType === operation) && (!opposite || row.oppositeAccount === opposite)), [dimensionReports, operation, opposite]);
-  const summary = useMemo(() => dimensions.map(item => ({ dimension: item, report: buildLedgerReport(entries, accounts, account, item, '0000-01-01', summaryEndDate, canonicalAccounts, { enableFinancialProjection: true, costTimeline, balancePeriod: summaryBalances }) })), [dimensions, entries, accounts, account, canonicalAccounts, costTimeline, summaryBalances, summaryEndDate]);
+  const summary = runtime.summaryReports;
   const rows = useMemo(() => report ? filterLedgerRows(report.rows, operation, opposite) : [], [report, operation, opposite]);
   const totals = useMemo(() => getFilteredTotals(rows), [rows]);
   const types = useMemo(() => [...new Set(report?.rows.map(row => row.operationType) || [])], [report]);
   const opposites = useMemo(() => [...new Set(report?.rows.map(row => row.oppositeAccount) || [])], [report]);
   const period = (start: Date, end: Date) => { setFrom(start.toISOString().slice(0, 10)); setTo(end.toISOString().slice(0, 10)); };
   const exportCsv = () => { if (!report) return; const csv = buildLedgerCsv({ accountName: account.name, dimension, startDate: from, endDate: to, report, rows, goldDisplayMode: mode }); const url = URL.createObjectURL(new Blob([csv], { type: 'text/csv;charset=utf-8' })); const link = document.createElement('a'); link.href = url; link.download = `ledger_${account.name.replace(/[\\/:*?"<>|]/g, '-')}_${labels[dimension]}_${from}_${to}.csv`; link.click(); URL.revokeObjectURL(url); };
+
+  if (runtime.status === 'blocked') return <section className="space-y-3 pb-4" dir="rtl">
+    <button type="button" onClick={onBack} className="flex items-center gap-1 text-sm font-bold text-[#c9a84c]"><ChevronRight className="h-5 w-5" /> رجوع للحسابات</button><h3 className="text-lg font-black text-[#f5f1e8]">{account.name}</h3>
+    <div className="flex gap-2 rounded-xl border border-amber-500/30 bg-amber-500/10 p-3 text-sm text-amber-100"><AlertTriangle className="h-5 w-5 shrink-0" /><div><p className="font-bold">تعذر تشغيل دفتر الأستاذ عبر المسار المركزي الآمن.</p><p className="mt-1 text-xs text-amber-200/80">لم يتم الرجوع للمسار القديم. الحالة: {runtime.blockers[0]?.code ?? 'central_read_only_blocked'}</p></div></div>
+  </section>;
+
   return <section className="space-y-3 pb-4" dir="rtl">
     <button type="button" onClick={onBack} className="flex items-center gap-1 text-sm font-bold text-[#c9a84c]"><ChevronRight className="h-5 w-5" /> رجوع للحسابات</button><h3 className="text-lg font-black text-[#f5f1e8]">{account.name}</h3>
     <section className="grid grid-cols-1 gap-2 rounded-2xl border border-[#1a1e2a] bg-[#0e1018] p-3 sm:grid-cols-3">{summary.map(item => <div key={item.dimension}><p className="text-[10px] text-[#8a8172]">{labels[item.dimension]}</p><p className="text-sm font-bold text-[#f5f1e8]">{formatBalance(item.report.closingBalance, item.dimension, item.report.normalBalance)}</p></div>)}</section>
