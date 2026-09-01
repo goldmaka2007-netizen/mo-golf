@@ -2,6 +2,7 @@ import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
 import type { Account, Entry, InventoryCheck } from '../../types';
 import { buildInventoryAdjustmentDraftEntry } from '../inventoryCheckSettlement';
+import { sameCentralOperationPayload } from '../centralAccountingWriteService';
 
 const readSource = (relativePath: string): string => (
   readFileSync(new URL(`../../${relativePath}`, import.meta.url), 'utf8')
@@ -103,6 +104,17 @@ describe('Central Accounting Write Cutover Phase 5B', () => {
     expect(entryForm).toContain('seq: formData.seq');
     expect(service).toContain('sameCentralOperationPayload');
     expect(service).toContain('Operation ID conflict');
+  });
+
+  it('fails same-ID idempotency comparison when either stable account ID changes', () => {
+    const base = {
+      id: 'op-stable', seq: 1, tx: 'بيع ذهب', debit: 'الخزنة', credit: 'خاتم عربي',
+      debitAccountId: 'cash-1', creditAccountId: 'gold-1', date: '2026-09-01', cash: '1000',
+      weight: '1', count: '0', arabicWeight: '1', invoiceNumber: 'S1', userId: 'u',
+    } as Entry;
+    expect(sameCentralOperationPayload(base, { ...base })).toBe(true);
+    expect(sameCentralOperationPayload(base, { ...base, debitAccountId: 'cash-2' })).toBe(false);
+    expect(sameCentralOperationPayload(base, { ...base, creditAccountId: 'gold-2' })).toBe(false);
   });
 
   it('removes hard-delete controls from the saved Entry correction UI', () => {

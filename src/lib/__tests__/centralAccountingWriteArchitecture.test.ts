@@ -26,14 +26,14 @@ const sourceFiles = (): string[] => {
   return files;
 };
 
-const directEntryWriterPatterns = [
-  /addDoc\s*\(\s*collection\([^\n)]*['"]entries['"]/s,
-  /setDoc\s*\(\s*doc\([^\n)]*['"]entries['"]/s,
-  /updateDoc\s*\(\s*doc\([^\n)]*['"]entries['"]/s,
-  /deleteDoc\s*\(\s*doc\([^\n)]*['"]entries['"]/s,
-  /(?:batch|transaction)\.(?:delete|update|set)\s*\(\s*doc\([^\n)]*['"]entries['"]/s,
-  /doc\s*\(\s*collection\([^\n)]*['"]entries['"][\s\S]{0,2000}?(?:batch|transaction)\.(?:set|update|delete)\s*\(/s,
-];
+const escapedRegex = (value: string): string => value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+
+const entryCollectionRefNames = (source: string): string[] => {
+  const names = new Set<string>();
+  const pattern = /(?:const|let|var)\s+([A-Za-z_$][\w$]*)\s*=\s*collection\s*\(\s*db\s*,\s*['"]entries['"]\s*\)/g;
+  for (const match of source.matchAll(pattern)) names.add(match[1]);
+  return [...names];
+};
 
 const entryDocumentRefNames = (source: string): string[] => {
   const names = new Set<string>();
@@ -44,47 +44,77 @@ const entryDocumentRefNames = (source: string): string[] => {
   for (const pattern of patterns) {
     for (const match of source.matchAll(pattern)) names.add(match[1]);
   }
+  for (const collectionName of entryCollectionRefNames(source)) {
+    const collectionRef = escapedRegex(collectionName);
+    const pattern = new RegExp(`(?:const|let|var)\\s+([A-Za-z_$][\\w$]*)\\s*=\\s*doc\\s*\\(\\s*${collectionRef}\\b`, 'g');
+    for (const match of source.matchAll(pattern)) names.add(match[1]);
+  }
   return [...names];
 };
-
-const escapedRegex = (value: string): string => value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 
 const writesThroughEntryRef = (source: string, methods: string): boolean => (
   entryDocumentRefNames(source).some(refName => {
     const ref = escapedRegex(refName);
     return new RegExp(`(?:setDoc|updateDoc|deleteDoc)\\s*\\(\\s*${ref}\\b`).test(source)
-      || new RegExp(`(?:batch|transaction)\\.${methods}\\s*\\(\\s*${ref}\\b`).test(source);
+      || new RegExp(`[A-Za-z_$][\\w$]*\\.${methods}\\s*\\(\\s*${ref}\\b`).test(source);
   })
+);
+
+const directEntryWriterPatterns = [
+  /addDoc\s*\(\s*collection\([^\n)]*['"]entries['"]/s,
+  /setDoc\s*\(\s*doc\([^\n)]*['"]entries['"]/s,
+  /updateDoc\s*\(\s*doc\([^\n)]*['"]entries['"]/s,
+  /deleteDoc\s*\(\s*doc\([^\n)]*['"]entries['"]/s,
+  /[A-Za-z_$][\w$]*\.(?:delete|update|set)\s*\(\s*doc\([^\n)]*['"]entries['"]/s,
+  /doc\s*\(\s*collection\([^\n)]*['"]entries['"][\s\S]{0,2000}?[A-Za-z_$][\w$]*\.(?:set|update|delete)\s*\(/s,
+];
+
+const hasEntryWriter = (source: string): boolean => (
+  directEntryWriterPatterns.some(pattern => pattern.test(source))
+  || writesThroughEntryRef(source, '(?:set|update|delete)')
+);
+
+const hasEntryHardDelete = (source: string): boolean => (
+  /deleteDoc\s*\(\s*doc\([^\n)]*['"]entries['"]/s.test(source)
+  || /[A-Za-z_$][\w$]*\.delete\s*\(\s*doc\([^\n)]*['"]entries['"]/s.test(source)
+  || writesThroughEntryRef(source, 'delete')
 );
 
 describe('Central Accounting write architecture guard', () => {
   it('has no runtime accounting Entry writer outside the Central write service', () => {
     const bypasses = sourceFiles()
-      .map(full => ({
-        path: relative(srcRoot, full).replaceAll('\\', '/'),
-        source: readFileSync(full, 'utf8'),
-      }))
+      .map(full => ({ path: relative(srcRoot, full).replaceAll('\\', '/'), source: readFileSync(full, 'utf8') }))
       .filter(file => file.path !== allowedWriter)
-      .filter(file => directEntryWriterPatterns.some(pattern => pattern.test(file.source))
-        || writesThroughEntryRef(file.source, '(?:set|update|delete)'))
+      .filter(file => hasEntryWriter(file.source))
       .map(file => file.path)
       .sort();
-
     expect(bypasses).toEqual([]);
   });
 
   it('does not expose a hard-delete path for accounting Entries', () => {
     const hardDeletes = sourceFiles()
-      .map(full => ({
-        path: relative(srcRoot, full).replaceAll('\\', '/'),
-        source: readFileSync(full, 'utf8'),
-      }))
-      .filter(file => /deleteDoc\s*\(\s*doc\([^\n)]*['"]entries['"]/s.test(file.source)
-        || /(?:batch|transaction)\.delete\s*\(\s*doc\([^\n)]*['"]entries['"]/s.test(file.source)
-        || writesThroughEntryRef(file.source, 'delete'))
+      .map(full => ({ path: relative(srcRoot, full).replaceAll('\\', '/'), source: readFileSync(full, 'utf8') }))
+      .filter(file => hasEntryHardDelete(file.source))
       .map(file => file.path)
       .sort();
-
     expect(hardDeletes).toEqual([]);
+  });
+
+  it('detects collection aliases and arbitrary transaction variable names', () => {
+    expect(hasEntryWriter(`
+      const entriesCol = collection(db, 'entries');
+      const entryRef = doc(entriesCol, operationId);
+      tx.set(entryRef, payload);
+    `)).toBe(true);
+    expect(hasEntryWriter(`
+      const entriesCollection = collection(db, "entries");
+      const ref = doc(entriesCollection, operationId);
+      customTransaction.update(ref, payload);
+    `)).toBe(true);
+    expect(hasEntryHardDelete(`
+      const entriesCol = collection(db, 'entries');
+      const entryRef = doc(entriesCol, operationId);
+      tx.delete(entryRef);
+    `)).toBe(true);
   });
 });
