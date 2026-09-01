@@ -4,6 +4,13 @@ import {
   buildCentralAccountingShadowReport,
   type CentralAccountingShadowReport,
 } from './centralAccountingShadow';
+import { computePeriodAccountBalances } from './engine';
+import {
+  buildLedgerReport,
+  getAvailableDimensions,
+  type LedgerDimension,
+  type LedgerReport,
+} from './ledgerReport';
 import { buildUnifiedTrialBalance, type UnifiedTrialBalanceReport } from './unifiedTrialBalance';
 
 export const CENTRAL_ACCOUNTING_READ_ONLY_RUNTIME_VERSION = 'central-accounting-read-only-runtime-v1' as const;
@@ -17,22 +24,9 @@ export interface CentralReadOnlyRuntimeBlocker {
   message: string;
 }
 
-export interface CentralTrialBalanceRuntimeInput {
-  accounts: Account[];
-  entries: Entry[];
-  startDate: string;
-  endDate: string;
-  manualAccountDefinitions?: CanonicalAccountDefinition[];
-  timeline?: InventoryCostTimeline | null;
-}
-
-export interface CentralTrialBalanceRuntimeReport {
-  version: typeof CENTRAL_ACCOUNTING_READ_ONLY_RUNTIME_VERSION;
-  mode: 'read_only_runtime_trial_balance';
-  status: 'ready' | 'blocked';
+interface CentralRuntimeIdentity {
   shadow: CentralAccountingShadowReport;
-  blockers: CentralReadOnlyRuntimeBlocker[];
-  trialBalance: UnifiedTrialBalanceReport | null;
+  normalizedEntries: Entry[] | null;
 }
 
 const buildHistoricalShadowAccounts = (accounts: Account[], entries: Entry[]): Account[] => {
@@ -64,23 +58,55 @@ const buildRegistryApprovedRuntimeEntries = (
   return normalized;
 };
 
-/**
- * Phase 4A read-only runtime adapter for the Unified Trial Balance.
- *
- * Phase 3 already proved offline that exact Registry-approved Shadow identity
- * leaves the existing downstream Ledger, Trial Balance, and Financial Statement
- * outputs unchanged. Runtime therefore performs only the required Central
- * Registry/Shadow identity gate, avoiding the cost of recalculating every Phase 3
- * evidence output on each UI refresh.
- *
- * The current Registry intentionally excludes inactive source accounts from its
- * normal definitions. For historical Entries that still reference such accounts,
- * this adapter supplies temporary in-memory account copies with isActive=true to
- * Shadow only, so their stable IDs and stored metadata remain resolvable. The
- * source account records stay unchanged and the final Trial Balance engine still
- * receives only the original active accounts, so inactive accounts are not
- * reactivated or reintroduced into report presentation.
- */
+const buildCentralRuntimeIdentity = (
+  accounts: Account[],
+  entries: Entry[],
+  manualAccountDefinitions: CanonicalAccountDefinition[],
+): CentralRuntimeIdentity => {
+  const shadow = buildCentralAccountingShadowReport({
+    accounts: buildHistoricalShadowAccounts(accounts, entries),
+    entries,
+    manualAccountDefinitions,
+  });
+
+  if (shadow.status !== 'compared' || !shadow.parity || !shadow.exactParity) {
+    return { shadow, normalizedEntries: null };
+  }
+  return {
+    shadow,
+    normalizedEntries: buildRegistryApprovedRuntimeEntries(entries, shadow),
+  };
+};
+
+const blocked = (
+  shadow: CentralAccountingShadowReport,
+  message: string,
+): CentralReadOnlyRuntimeBlocker[] => [{
+  code: shadow.status === 'compared' && shadow.exactParity
+    ? 'runtime_identity_incomplete'
+    : 'central_shadow_not_exact',
+  message,
+}];
+
+export interface CentralTrialBalanceRuntimeInput {
+  accounts: Account[];
+  entries: Entry[];
+  startDate: string;
+  endDate: string;
+  manualAccountDefinitions?: CanonicalAccountDefinition[];
+  timeline?: InventoryCostTimeline | null;
+}
+
+export interface CentralTrialBalanceRuntimeReport {
+  version: typeof CENTRAL_ACCOUNTING_READ_ONLY_RUNTIME_VERSION;
+  mode: 'read_only_runtime_trial_balance';
+  status: 'ready' | 'blocked';
+  shadow: CentralAccountingShadowReport;
+  blockers: CentralReadOnlyRuntimeBlocker[];
+  trialBalance: UnifiedTrialBalanceReport | null;
+}
+
+/** Phase 4A read-only runtime adapter for the Unified Trial Balance. */
 export const buildCentralAccountingReadOnlyRuntimeTrialBalance = ({
   accounts,
   entries,
@@ -89,38 +115,14 @@ export const buildCentralAccountingReadOnlyRuntimeTrialBalance = ({
   manualAccountDefinitions = [],
   timeline = null,
 }: CentralTrialBalanceRuntimeInput): CentralTrialBalanceRuntimeReport => {
-  const shadowAccounts = buildHistoricalShadowAccounts(accounts, entries);
-  const shadow = buildCentralAccountingShadowReport({
-    accounts: shadowAccounts,
-    entries,
-    manualAccountDefinitions,
-  });
-
-  if (shadow.status !== 'compared' || !shadow.parity || !shadow.exactParity) {
+  const identity = buildCentralRuntimeIdentity(accounts, entries, manualAccountDefinitions);
+  if (!identity.normalizedEntries) {
     return {
       version: CENTRAL_ACCOUNTING_READ_ONLY_RUNTIME_VERSION,
       mode: 'read_only_runtime_trial_balance',
       status: 'blocked',
-      shadow,
-      blockers: [{
-        code: 'central_shadow_not_exact',
-        message: 'Central Registry-gated Shadow must be complete and exact before Trial Balance runtime execution.',
-      }],
-      trialBalance: null,
-    };
-  }
-
-  const normalizedEntries = buildRegistryApprovedRuntimeEntries(entries, shadow);
-  if (!normalizedEntries) {
-    return {
-      version: CENTRAL_ACCOUNTING_READ_ONLY_RUNTIME_VERSION,
-      mode: 'read_only_runtime_trial_balance',
-      status: 'blocked',
-      shadow,
-      blockers: [{
-        code: 'runtime_identity_incomplete',
-        message: 'Complete Registry-approved Shadow parity identity is required before Trial Balance runtime execution.',
-      }],
+      shadow: identity.shadow,
+      blockers: blocked(identity.shadow, 'Complete exact Central Shadow identity is required before Trial Balance runtime execution.'),
       trialBalance: null,
     };
   }
@@ -130,11 +132,123 @@ export const buildCentralAccountingReadOnlyRuntimeTrialBalance = ({
     version: CENTRAL_ACCOUNTING_READ_ONLY_RUNTIME_VERSION,
     mode: 'read_only_runtime_trial_balance',
     status: 'ready',
-    shadow,
+    shadow: identity.shadow,
     blockers: [],
-    trialBalance: buildUnifiedTrialBalance(normalizedEntries, activeAccounts, startDate, endDate, {
+    trialBalance: buildUnifiedTrialBalance(identity.normalizedEntries, activeAccounts, startDate, endDate, {
       canonicalDefinitions: manualAccountDefinitions,
       timeline,
     }),
+  };
+};
+
+export interface CentralGeneralLedgerRuntimeInput {
+  sourceAccounts: Account[];
+  reportAccounts: Account[];
+  entries: Entry[];
+  account: Account;
+  startDate: string;
+  endDate: string;
+  summaryEndDate: string;
+  manualAccountDefinitions?: CanonicalAccountDefinition[];
+  timeline?: InventoryCostTimeline | null;
+}
+
+export interface CentralGeneralLedgerDimensionReport {
+  dimension: LedgerDimension;
+  report: LedgerReport;
+}
+
+export interface CentralGeneralLedgerRuntimeReport {
+  version: typeof CENTRAL_ACCOUNTING_READ_ONLY_RUNTIME_VERSION;
+  mode: 'read_only_runtime_general_ledger';
+  status: 'ready' | 'blocked';
+  shadow: CentralAccountingShadowReport;
+  blockers: CentralReadOnlyRuntimeBlocker[];
+  dimensions: LedgerDimension[];
+  periodReports: CentralGeneralLedgerDimensionReport[];
+  summaryReports: CentralGeneralLedgerDimensionReport[];
+}
+
+/**
+ * Phase 4B read-only runtime adapter for the General Ledger.
+ *
+ * One exact Registry-gated Shadow run supplies temporary operation identity to all
+ * Ledger dimensions. Existing getAvailableDimensions, Balance Engine period
+ * balances, and buildLedgerReport remain the only report authorities. Historical
+ * inactive source accounts are activated only on temporary Shadow copies; report
+ * presentation continues to use the caller's existing report-account set.
+ */
+export const buildCentralAccountingReadOnlyRuntimeGeneralLedger = ({
+  sourceAccounts,
+  reportAccounts,
+  entries,
+  account,
+  startDate,
+  endDate,
+  summaryEndDate,
+  manualAccountDefinitions = [],
+  timeline = null,
+}: CentralGeneralLedgerRuntimeInput): CentralGeneralLedgerRuntimeReport => {
+  const identity = buildCentralRuntimeIdentity(sourceAccounts, entries, manualAccountDefinitions);
+  if (!identity.normalizedEntries) {
+    return {
+      version: CENTRAL_ACCOUNTING_READ_ONLY_RUNTIME_VERSION,
+      mode: 'read_only_runtime_general_ledger',
+      status: 'blocked',
+      shadow: identity.shadow,
+      blockers: blocked(identity.shadow, 'Complete exact Central Shadow identity is required before General Ledger runtime execution.'),
+      dimensions: [],
+      periodReports: [],
+      summaryReports: [],
+    };
+  }
+
+  const normalizedEntries = identity.normalizedEntries;
+  const ledgerOptions = { enableFinancialProjection: true, costTimeline: timeline } as const;
+  const dimensions = getAvailableDimensions(
+    account,
+    normalizedEntries,
+    reportAccounts,
+    manualAccountDefinitions,
+    ledgerOptions,
+  );
+  const periodBalances = computePeriodAccountBalances(normalizedEntries, reportAccounts, startDate, endDate);
+  const summaryBalances = computePeriodAccountBalances(normalizedEntries, reportAccounts, '0000-01-01', summaryEndDate);
+  const periodReports = dimensions.map(dimension => ({
+    dimension,
+    report: buildLedgerReport(
+      normalizedEntries,
+      reportAccounts,
+      account,
+      dimension,
+      startDate,
+      endDate,
+      manualAccountDefinitions,
+      { ...ledgerOptions, balancePeriod: periodBalances },
+    ),
+  }));
+  const summaryReports = dimensions.map(dimension => ({
+    dimension,
+    report: buildLedgerReport(
+      normalizedEntries,
+      reportAccounts,
+      account,
+      dimension,
+      '0000-01-01',
+      summaryEndDate,
+      manualAccountDefinitions,
+      { ...ledgerOptions, balancePeriod: summaryBalances },
+    ),
+  }));
+
+  return {
+    version: CENTRAL_ACCOUNTING_READ_ONLY_RUNTIME_VERSION,
+    mode: 'read_only_runtime_general_ledger',
+    status: 'ready',
+    shadow: identity.shadow,
+    blockers: [],
+    dimensions,
+    periodReports,
+    summaryReports,
   };
 };
