@@ -15,7 +15,8 @@ import { isQuantityAlignedToStep } from './weightedAverageCost';
 import { buildOpeningCostConfig } from './openingCostConfig';
 import { rebuildRuntimeInventoryCostTimeline } from './costRecalculation';
 
-export type CentralWriteSource = 'user' | 'system';
+export type CentralWriteSource = 'user' | 'system' | 'setup';
+export type CentralWriteMode = 'create' | 'update';
 
 export type CentralWriteBlockerCode =
   | 'registry_not_cutover_ready'
@@ -27,6 +28,8 @@ export type CentralWriteBlockerCode =
   | 'account_ambiguous'
   | 'account_not_writable'
   | 'account_missing_stable_id'
+  | 'create_id_conflict'
+  | 'update_target_missing'
   | 'accounting_policy'
   | 'numbering_policy'
   | 'posting_invalid'
@@ -48,6 +51,7 @@ export interface CentralWritePreflightInput {
   manualAccountDefinitions?: CanonicalAccountDefinition[];
   operationCatalog?: readonly CanonicalOperationDefinition[];
   source: CentralWriteSource;
+  mode?: CentralWriteMode;
 }
 
 export interface CentralWritePreflightResult {
@@ -58,11 +62,6 @@ export interface CentralWritePreflightResult {
   preparedEntry?: Entry;
   posting?: CanonicalPostingResult;
 }
-
-const writableAvailabilityForUser = new Set<CanonicalOperationDefinition['availability']>([
-  'current_runtime',
-  'setup_only',
-]);
 
 const coverageSummary = (coverage: CentralAccountingCoverageReport): string => {
   const parts = [
@@ -104,12 +103,59 @@ const resolveWritableAccount = (
   return resolution.account;
 };
 
+const operationIsWritable = (
+  operation: CanonicalOperationDefinition,
+  source: CentralWriteSource,
+): boolean => {
+  if (source === 'user') {
+    return operation.userSelectable && operation.availability === 'current_runtime';
+  }
+  if (source === 'setup') {
+    return operation.userSelectable && operation.availability === 'setup_only';
+  }
+  return operation.systemGenerated && operation.availability === 'current_runtime';
+};
+
+const buildCostCandidateEntries = (
+  preparedEntry: Entry,
+  entries: Entry[],
+  mode: CentralWriteMode,
+  blockers: CentralWriteBlocker[],
+): Entry[] | null => {
+  if (mode === 'create') {
+    if (preparedEntry.id && entries.some(existing => existing.id === preparedEntry.id)) {
+      blockers.push({
+        code: 'create_id_conflict',
+        message: `Create candidate id already exists: ${preparedEntry.id}`,
+      });
+      return null;
+    }
+    return [...entries, { ...preparedEntry, id: preparedEntry.id || '__central_write_preflight__' }];
+  }
+
+  if (!preparedEntry.id) {
+    blockers.push({ code: 'update_target_missing', message: 'Update preflight requires the existing Entry id.' });
+    return null;
+  }
+  const matchingIndexes = entries
+    .map((existing, index) => existing.id === preparedEntry.id ? index : -1)
+    .filter(index => index >= 0);
+  if (matchingIndexes.length !== 1) {
+    blockers.push({
+      code: 'update_target_missing',
+      message: `Update target must resolve to exactly one existing Entry: ${preparedEntry.id}`,
+    });
+    return null;
+  }
+  return entries.map((existing, index) => index === matchingIndexes[0] ? preparedEntry : existing);
+};
+
 /**
  * Phase 5A pure write-path preflight.
  *
  * This function performs no persistence and is intentionally not wired to any
- * current writer. It proves whether a candidate Entry can be prepared using
- * Central Registry identity while preserving the existing Posting Matrix,
+ * current writer. It proves whether a create/update candidate can be prepared
+ * using Central Registry identity while preserving the existing Posting Matrix,
  * accounting policy, numbering, gold-equivalent, quantity-step, and runtime
  * inventory-cost validators.
  */
@@ -121,6 +167,7 @@ export const buildCentralAccountingWritePreflight = ({
   manualAccountDefinitions = [],
   operationCatalog,
   source,
+  mode = 'create',
 }: CentralWritePreflightInput): CentralWritePreflightResult => {
   const registry = buildCentralAccountingRegistry({
     accounts,
@@ -151,13 +198,7 @@ export const buildCentralAccountingWritePreflight = ({
         message: `Stored operationKind ${entry.operationKind} contradicts Central operation ${operation.operationKind}.`,
       });
     }
-    const userWritable = source === 'user'
-      && operation.userSelectable
-      && writableAvailabilityForUser.has(operation.availability);
-    const systemWritable = source === 'system'
-      && operation.systemGenerated
-      && operation.availability === 'current_runtime';
-    if (!userWritable && !systemWritable) {
+    if (!operationIsWritable(operation, source)) {
       blockers.push({
         code: 'operation_not_writable',
         message: `Operation ${operation.id} is not writable from source ${source} (availability=${operation.availability}).`,
@@ -227,21 +268,20 @@ export const buildCentralAccountingWritePreflight = ({
     });
   }
 
-  const pendingEntry: Entry = {
-    ...preparedEntry,
-    id: preparedEntry.id || '__central_write_preflight__',
-  };
-  const cost = rebuildRuntimeInventoryCostTimeline(
-    [...entries, pendingEntry],
-    accounts,
-    buildOpeningCostConfig(openingCostConfig, accounts),
-  );
-  if (!cost.valid) {
-    const diagnostic = cost.diagnostics[0];
-    blockers.push({
-      code: 'cost_invalid',
-      message: `${diagnostic?.code || 'unknown'}: ${diagnostic?.message || 'Runtime inventory cost validation failed.'}`,
-    });
+  const costEntries = buildCostCandidateEntries(preparedEntry, entries, mode, blockers);
+  if (costEntries) {
+    const cost = rebuildRuntimeInventoryCostTimeline(
+      costEntries,
+      accounts,
+      buildOpeningCostConfig(openingCostConfig, accounts),
+    );
+    if (!cost.valid) {
+      const diagnostic = cost.diagnostics[0];
+      blockers.push({
+        code: 'cost_invalid',
+        message: `${diagnostic?.code || 'unknown'}: ${diagnostic?.message || 'Runtime inventory cost validation failed.'}`,
+      });
+    }
   }
 
   return {
