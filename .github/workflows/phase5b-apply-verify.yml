@@ -29,7 +29,9 @@ jobs:
           cache: npm
       - run: npm ci
       - name: Apply deterministic Phase 5B codemod
-        run: node .github/scripts/phase5b-codemod.mjs
+        run: |
+          node .github/scripts/phase5b-codemod.mjs
+          node .github/scripts/phase5b-test-correction.mjs
       - name: Focused Cutover tests
         run: >-
           npx vitest run
