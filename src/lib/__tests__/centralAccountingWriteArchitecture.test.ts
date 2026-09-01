@@ -1,6 +1,7 @@
 import { readdirSync, readFileSync, statSync } from 'node:fs';
 import { dirname, relative, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import * as ts from 'typescript';
 import { describe, expect, it } from 'vitest';
 
 const currentDir = dirname(fileURLToPath(import.meta.url));
@@ -26,66 +27,168 @@ const sourceFiles = (): string[] => {
   return files;
 };
 
-const escapedRegex = (value: string): string => value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+type FirestoreCall = 'collection' | 'doc' | 'addDoc' | 'setDoc' | 'updateDoc' | 'deleteDoc';
 
-const entryCollectionRefNames = (source: string): string[] => {
-  const names = new Set<string>();
-  const pattern = /(?:const|let|var)\s+([A-Za-z_$][\w$]*)\s*=\s*collection\s*\(\s*db\s*,\s*['"]entries['"]\s*\)/g;
-  for (const match of source.matchAll(pattern)) names.add(match[1]);
-  return [...names];
-};
+interface EntryWriteAnalysis {
+  writes: string[];
+  hardDeletes: string[];
+}
 
-const entryDocumentRefNames = (source: string): string[] => {
-  const names = new Set<string>();
-  const patterns = [
-    /(?:const|let|var)\s+([A-Za-z_$][\w$]*)\s*=\s*doc\s*\(\s*db\s*,\s*['"]entries['"]/g,
-    /(?:const|let|var)\s+([A-Za-z_$][\w$]*)\s*=\s*doc\s*\(\s*collection\([^\n)]*['"]entries['"][^)]*\)\s*\)/g,
-  ];
-  for (const pattern of patterns) {
-    for (const match of source.matchAll(pattern)) names.add(match[1]);
+const FIRESTORE_CALLS = new Set<FirestoreCall>([
+  'collection', 'doc', 'addDoc', 'setDoc', 'updateDoc', 'deleteDoc',
+]);
+
+const analyzeEntryWrites = (source: string): EntryWriteAnalysis => {
+  const sourceFile = ts.createSourceFile('guard-input.tsx', source, ts.ScriptTarget.Latest, true, ts.ScriptKind.TSX);
+  const callAliases = new Map<string, FirestoreCall>(
+    [...FIRESTORE_CALLS].map(name => [name, name]),
+  );
+  const firestoreNamespaces = new Set<string>();
+  const bindings: Array<{ name: string; value: ts.Expression }> = [];
+
+  const collect = (node: ts.Node): void => {
+    if (ts.isImportDeclaration(node)
+      && ts.isStringLiteral(node.moduleSpecifier)
+      && node.moduleSpecifier.text === 'firebase/firestore'
+      && node.importClause?.namedBindings
+      && ts.isNamedImports(node.importClause.namedBindings)) {
+      for (const element of node.importClause.namedBindings.elements) {
+        const imported = (element.propertyName || element.name).text as FirestoreCall;
+        if (FIRESTORE_CALLS.has(imported)) callAliases.set(element.name.text, imported);
+      }
+    }
+    if (ts.isImportDeclaration(node)
+      && ts.isStringLiteral(node.moduleSpecifier)
+      && node.moduleSpecifier.text === 'firebase/firestore'
+      && node.importClause?.namedBindings
+      && ts.isNamespaceImport(node.importClause.namedBindings)) {
+      firestoreNamespaces.add(node.importClause.namedBindings.name.text);
+    }
+    if (ts.isVariableDeclaration(node) && ts.isIdentifier(node.name) && node.initializer) {
+      bindings.push({ name: node.name.text, value: node.initializer });
+    }
+    if (ts.isBinaryExpression(node)
+      && node.operatorToken.kind === ts.SyntaxKind.EqualsToken
+      && ts.isIdentifier(node.left)) {
+      bindings.push({ name: node.left.text, value: node.right });
+    }
+    ts.forEachChild(node, collect);
+  };
+  collect(sourceFile);
+
+  const unwrap = (expression: ts.Expression): ts.Expression => {
+    let current = expression;
+    while (ts.isParenthesizedExpression(current)
+      || ts.isAsExpression(current)
+      || ts.isTypeAssertionExpression(current)
+      || ts.isNonNullExpression(current)
+      || ts.isSatisfiesExpression(current)) {
+      current = current.expression;
+    }
+    return current;
+  };
+
+  const callKind = (expression: ts.LeftHandSideExpression): FirestoreCall | undefined => {
+    const target = unwrap(expression);
+    if (ts.isIdentifier(target)) return callAliases.get(target.text);
+    if (ts.isPropertyAccessExpression(target)
+      && ts.isIdentifier(target.expression)
+      && firestoreNamespaces.has(target.expression.text)
+      && FIRESTORE_CALLS.has(target.name.text as FirestoreCall)) {
+      return target.name.text as FirestoreCall;
+    }
+    return undefined;
+  };
+
+  let aliasesChanged = true;
+  while (aliasesChanged) {
+    aliasesChanged = false;
+    for (const binding of bindings) {
+      const value = unwrap(binding.value);
+      if (!ts.isIdentifier(value) && !ts.isPropertyAccessExpression(value)) continue;
+      const kind = callKind(value);
+      if (kind && callAliases.get(binding.name) !== kind) {
+        callAliases.set(binding.name, kind);
+        aliasesChanged = true;
+      }
+    }
   }
-  for (const collectionName of entryCollectionRefNames(source)) {
-    const collectionRef = escapedRegex(collectionName);
-    const pattern = new RegExp(`(?:const|let|var)\\s+([A-Za-z_$][\\w$]*)\\s*=\\s*doc\\s*\\(\\s*${collectionRef}\\b`, 'g');
-    for (const match of source.matchAll(pattern)) names.add(match[1]);
+
+  const entryCollections = new Set<string>();
+  const entryDocuments = new Set<string>();
+  const isEntriesLiteral = (expression: ts.Expression): boolean => {
+    const value = unwrap(expression);
+    return ts.isStringLiteralLike(value) && value.text === 'entries';
+  };
+
+  const isEntryCollection = (expression: ts.Expression): boolean => {
+    const value = unwrap(expression);
+    if (ts.isIdentifier(value)) return entryCollections.has(value.text);
+    return ts.isCallExpression(value)
+      && callKind(value.expression) === 'collection'
+      && value.arguments.some(isEntriesLiteral);
+  };
+
+  const isEntryDocument = (expression: ts.Expression): boolean => {
+    const value = unwrap(expression);
+    if (ts.isIdentifier(value)) return entryDocuments.has(value.text);
+    return ts.isCallExpression(value)
+      && callKind(value.expression) === 'doc'
+      && (value.arguments.some(isEntriesLiteral)
+        || (value.arguments[0] !== undefined && isEntryCollection(value.arguments[0])));
+  };
+
+  let refsChanged = true;
+  while (refsChanged) {
+    refsChanged = false;
+    for (const binding of bindings) {
+      if (!entryCollections.has(binding.name) && isEntryCollection(binding.value)) {
+        entryCollections.add(binding.name);
+        refsChanged = true;
+      }
+      if (!entryDocuments.has(binding.name) && isEntryDocument(binding.value)) {
+        entryDocuments.add(binding.name);
+        refsChanged = true;
+      }
+    }
   }
-  return [...names];
+
+  const analysis: EntryWriteAnalysis = { writes: [], hardDeletes: [] };
+  const inspect = (node: ts.Node): void => {
+    if (ts.isCallExpression(node)) {
+      const functionalKind = callKind(node.expression);
+      const firstArgument = node.arguments[0];
+      const functionalWrite = functionalKind === 'addDoc'
+        ? firstArgument !== undefined && isEntryCollection(firstArgument)
+        : (functionalKind === 'setDoc' || functionalKind === 'updateDoc' || functionalKind === 'deleteDoc')
+          && firstArgument !== undefined && isEntryDocument(firstArgument);
+
+      const target = unwrap(node.expression);
+      const method = ts.isPropertyAccessExpression(target) ? target.name.text : '';
+      const methodWrite = (method === 'set' || method === 'update' || method === 'delete')
+        && firstArgument !== undefined
+        && isEntryDocument(firstArgument);
+
+      if (functionalWrite || methodWrite) {
+        const description = node.getText(sourceFile);
+        analysis.writes.push(description);
+        if (functionalKind === 'deleteDoc' || method === 'delete') analysis.hardDeletes.push(description);
+      }
+    }
+    ts.forEachChild(node, inspect);
+  };
+  inspect(sourceFile);
+  return analysis;
 };
-
-const writesThroughEntryRef = (source: string, methods: string): boolean => (
-  entryDocumentRefNames(source).some(refName => {
-    const ref = escapedRegex(refName);
-    return new RegExp(`(?:setDoc|updateDoc|deleteDoc)\\s*\\(\\s*${ref}\\b`).test(source)
-      || new RegExp(`[A-Za-z_$][\\w$]*\\.${methods}\\s*\\(\\s*${ref}\\b`).test(source);
-  })
-);
-
-const directEntryWriterPatterns = [
-  /addDoc\s*\(\s*collection\([^\n)]*['"]entries['"]/s,
-  /setDoc\s*\(\s*doc\([^\n)]*['"]entries['"]/s,
-  /updateDoc\s*\(\s*doc\([^\n)]*['"]entries['"]/s,
-  /deleteDoc\s*\(\s*doc\([^\n)]*['"]entries['"]/s,
-  /[A-Za-z_$][\w$]*\.(?:delete|update|set)\s*\(\s*doc\([^\n)]*['"]entries['"]/s,
-  /doc\s*\(\s*collection\([^\n)]*['"]entries['"][\s\S]{0,2000}?[A-Za-z_$][\w$]*\.(?:set|update|delete)\s*\(/s,
-];
-
-const hasEntryWriter = (source: string): boolean => (
-  directEntryWriterPatterns.some(pattern => pattern.test(source))
-  || writesThroughEntryRef(source, '(?:set|update|delete)')
-);
-
-const hasEntryHardDelete = (source: string): boolean => (
-  /deleteDoc\s*\(\s*doc\([^\n)]*['"]entries['"]/s.test(source)
-  || /[A-Za-z_$][\w$]*\.delete\s*\(\s*doc\([^\n)]*['"]entries['"]/s.test(source)
-  || writesThroughEntryRef(source, 'delete')
-);
 
 describe('Central Accounting write architecture guard', () => {
   it('has no runtime accounting Entry writer outside the Central write service', () => {
     const bypasses = sourceFiles()
-      .map(full => ({ path: relative(srcRoot, full).replaceAll('\\', '/'), source: readFileSync(full, 'utf8') }))
-      .filter(file => file.path !== allowedWriter)
-      .filter(file => hasEntryWriter(file.source))
+      .map(full => ({
+        path: relative(srcRoot, full).replaceAll('\\', '/'),
+        analysis: analyzeEntryWrites(readFileSync(full, 'utf8')),
+      }))
+      .filter(file => file.path !== allowedWriter && file.analysis.writes.length > 0)
       .map(file => file.path)
       .sort();
     expect(bypasses).toEqual([]);
@@ -93,28 +196,50 @@ describe('Central Accounting write architecture guard', () => {
 
   it('does not expose a hard-delete path for accounting Entries', () => {
     const hardDeletes = sourceFiles()
-      .map(full => ({ path: relative(srcRoot, full).replaceAll('\\', '/'), source: readFileSync(full, 'utf8') }))
-      .filter(file => hasEntryHardDelete(file.source))
+      .map(full => ({
+        path: relative(srcRoot, full).replaceAll('\\', '/'),
+        analysis: analyzeEntryWrites(readFileSync(full, 'utf8')),
+      }))
+      .filter(file => file.analysis.hardDeletes.length > 0)
       .map(file => file.path)
       .sort();
     expect(hardDeletes).toEqual([]);
   });
 
-  it('detects collection aliases and arbitrary transaction variable names', () => {
-    expect(hasEntryWriter(`
-      const entriesCol = collection(db, 'entries');
-      const entryRef = doc(entriesCol, operationId);
-      tx.set(entryRef, payload);
-    `)).toBe(true);
-    expect(hasEntryWriter(`
-      const entriesCollection = collection(db, "entries");
-      const ref = doc(entriesCollection, operationId);
-      customTransaction.update(ref, payload);
-    `)).toBe(true);
-    expect(hasEntryHardDelete(`
-      const entriesCol = collection(db, 'entries');
-      const entryRef = doc(entriesCol, operationId);
-      tx.delete(entryRef);
-    `)).toBe(true);
+  it('detects collection/document aliases and arbitrary transaction or batch names', () => {
+    const analysis = analyzeEntryWrites(`
+      import { collection as coll, doc as document } from 'firebase/firestore';
+      const entriesCol = coll(db, 'entries');
+      const aliasedCollection = entriesCol;
+      const entryRef = document(aliasedCollection, operationId);
+      const aliasedDocument = entryRef;
+      tx.set(aliasedDocument, payload);
+      customTransaction.update(entryRef, payload);
+      anyBatch.delete(entryRef);
+    `);
+    expect(analysis.writes).toHaveLength(3);
+    expect(analysis.hardDeletes).toHaveLength(1);
+  });
+
+  it('detects functional writers, nested refs, and imported writer aliases', () => {
+    const analysis = analyzeEntryWrites(`
+      import { collection, doc, addDoc as add, setDoc as persist, deleteDoc as remove } from 'firebase/firestore';
+      const entriesRef = collection(db, 'entries');
+      add(entriesRef, payload);
+      persist(doc(entriesRef, operationId), payload);
+      remove(doc(db, 'entries', operationId));
+      import * as firestore from 'firebase/firestore';
+      const namespacePersist = firestore.updateDoc;
+      namespacePersist(firestore.doc(db, 'entries', operationId), payload);
+    `);
+    expect(analysis.writes).toHaveLength(4);
+    expect(analysis.hardDeletes).toHaveLength(1);
+  });
+
+  it('does not mistake read-only Entry collection access for a writer', () => {
+    expect(analyzeEntryWrites(`
+      const entriesRef = collection(db, 'entries');
+      const snapshot = await getDocs(entriesRef);
+    `).writes).toEqual([]);
   });
 });

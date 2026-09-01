@@ -1,8 +1,10 @@
 import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
 import type { Account, Entry, InventoryCheck } from '../../types';
+import { buildAccountRegistry } from '../accountRegistry';
+import { buildCentralAccountingWritePreflight } from '../centralAccountingWritePreflight';
 import { buildInventoryAdjustmentDraftEntry } from '../inventoryCheckSettlement';
-import { sameCentralOperationPayload } from '../centralAccountingWriteService';
+import { createCentralAccountingEntry, sameCentralOperationPayload } from '../centralAccountingWriteService';
 
 const readSource = (relativePath: string): string => (
   readFileSync(new URL(`../../${relativePath}`, import.meta.url), 'utf8')
@@ -106,15 +108,111 @@ describe('Central Accounting Write Cutover Phase 5B', () => {
     expect(service).toContain('Operation ID conflict');
   });
 
-  it('fails same-ID idempotency comparison when either stable account ID changes', () => {
+  it('accepts an exact same-ID business payload despite persistence metadata', () => {
     const base = {
       id: 'op-stable', seq: 1, tx: 'بيع ذهب', debit: 'الخزنة', credit: 'خاتم عربي',
       debitAccountId: 'cash-1', creditAccountId: 'gold-1', date: '2026-09-01', cash: '1000',
-      weight: '1', count: '0', arabicWeight: '1', invoiceNumber: 'S1', userId: 'u',
+      weight: '1', count: '0', arabicWeight: '1', karat: 21, invoiceNumber: 'S1',
+      operationKind: 'sale', canonicalOperationId: 'gold.sale', canonicalOperationVersion: 1,
+      inventoryCheckId: 'check-1', userId: 'u',
     } as Entry;
     expect(sameCentralOperationPayload(base, { ...base })).toBe(true);
-    expect(sameCentralOperationPayload(base, { ...base, debitAccountId: 'cash-2' })).toBe(false);
-    expect(sameCentralOperationPayload(base, { ...base, creditAccountId: 'gold-2' })).toBe(false);
+    expect(sameCentralOperationPayload(base, {
+      ...base,
+      createdAt: { toMillis: () => 1 } as unknown as Entry['createdAt'],
+      userId: 'another-persistence-actor',
+    })).toBe(true);
+  });
+
+  it.each([
+    ['debitAccountId', 'cash-2'],
+    ['creditAccountId', 'gold-2'],
+    ['tx', 'شراء ذهب'],
+    ['operationKind', 'purchase'],
+    ['canonicalOperationId', 'gold.purchase'],
+    ['canonicalOperationVersion', 2],
+    ['cash', '1001'],
+    ['weight', '2'],
+    ['count', '1'],
+    ['karat', 18],
+    ['invoiceNumber', 'S2'],
+    ['inventoryCheckId', 'check-2'],
+  ] as const)('fails same-ID idempotency when authoritative %s changes', (field, value) => {
+    const base = {
+      id: 'op-stable', seq: 1, tx: 'بيع ذهب', debit: 'الخزنة', credit: 'خاتم عربي',
+      debitAccountId: 'cash-1', creditAccountId: 'gold-1', date: '2026-09-01', cash: '1000',
+      weight: '1', count: '0', arabicWeight: '1', karat: 21, invoiceNumber: 'S1',
+      operationKind: 'sale', canonicalOperationId: 'gold.sale', canonicalOperationVersion: 1,
+      inventoryCheckId: 'check-1', userId: 'u',
+    } as Entry;
+    expect(sameCentralOperationPayload(base, { ...base, [field]: value })).toBe(false);
+  });
+
+  it('normalizes a raw retry through Central preflight before accepting the persisted enriched payload', async () => {
+    const retryCash: Account = {
+      id: 'retry-cash', name: 'الخزنة', mainType: 'اصول', subType: '', balanceNature: 'جنية مصري',
+      type: 'cash', userId: 'test', isActive: true,
+    };
+    const retryExpense: Account = {
+      id: 'retry-expense', name: 'مصروف تشغيل', mainType: 'مصروفات', subType: 'م ت',
+      canonicalMainType: 'expense', canonicalSubType: 'expense', balanceNature: 'جنية مصري',
+      type: 'other', userId: 'test', isActive: true,
+    };
+    const alternateExpense: Account = {
+      ...retryExpense,
+      id: 'retry-expense-alternate',
+      name: 'مصروف تشغيل بديل',
+    };
+    const retryAccounts = [retryCash, retryExpense, alternateExpense];
+    const manualAccountDefinitions = buildAccountRegistry(retryAccounts, []).accounts.map(definition => ({
+      ...definition,
+      reviewStatus: 'reviewed' as const,
+      approvalStatus: 'approved' as const,
+    }));
+    const rawDraft: Entry = {
+      id: 'stable-retry-id', seq: 77, tx: 'م ت', debit: retryExpense.name, credit: retryCash.name,
+      date: '2026-09-01', cash: '100', weight: '0', count: '0', arabicWeight: '0', notes: '',
+      invoiceNumber: 'TX77', userId: 'test',
+    };
+    const initialPreflight = buildCentralAccountingWritePreflight({
+      entry: rawDraft,
+      entries: [],
+      accounts: retryAccounts,
+      openingCostConfig: [],
+      manualAccountDefinitions,
+      source: 'user',
+    });
+    expect(initialPreflight.ready).toBe(true);
+    expect(initialPreflight.preparedEntry).toMatchObject({
+      debitAccountId: retryExpense.id,
+      creditAccountId: retryCash.id,
+      canonicalOperationId: 'expense.operating',
+    });
+
+    const retry = await createCentralAccountingEntry({
+      entry: rawDraft,
+      context: {
+        entries: [initialPreflight.preparedEntry!],
+        accounts: retryAccounts,
+        openingCostConfig: [],
+        manualAccountDefinitions,
+      },
+      actor: { userId: 'test' },
+    });
+    expect(retry).toMatchObject({ ok: true, entryId: 'stable-retry-id' });
+
+    const conflict = await createCentralAccountingEntry({
+      entry: { ...rawDraft, debitAccountId: alternateExpense.id },
+      context: {
+        entries: [initialPreflight.preparedEntry!],
+        accounts: retryAccounts,
+        openingCostConfig: [],
+        manualAccountDefinitions,
+      },
+      actor: { userId: 'test' },
+    });
+    expect(conflict).toMatchObject({ ok: false });
+    expect(conflict.ok === false && conflict.message).toContain('Operation ID');
   });
 
   it('removes hard-delete controls from the saved Entry correction UI', () => {

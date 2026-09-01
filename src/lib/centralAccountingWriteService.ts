@@ -63,15 +63,21 @@ const comparable = (value: unknown): string => {
   }
 };
 
-const IDEMPOTENT_BUSINESS_FIELDS: Array<keyof Entry> = [
-  'seq', 'tx', 'subTx', 'debit', 'credit', 'debitAccountId', 'creditAccountId', 'date',
-  'cash', 'weight', 'count', 'arabicWeight', 'karat', 'multiplier', 'notes', 'invoiceNumber',
-  'clientName', 'clientPhone', 'marketPrice', 'inventoryCheckId',
-];
+const IDEMPOTENT_NON_BUSINESS_FIELDS = new Set([
+  'createdAt',
+  'modifiedAt',
+  'modifiedBy',
+  'modificationReason',
+  'userId',
+]);
 
 export const sameCentralOperationPayload = (before: Entry, after: Entry): boolean => (
   before.id === after.id
-  && IDEMPOTENT_BUSINESS_FIELDS.every(field => comparable(before[field]) === comparable(after[field]))
+  && [...new Set([...Object.keys(before), ...Object.keys(after)])]
+    .filter(field => field !== 'id' && !IDEMPOTENT_NON_BUSINESS_FIELDS.has(field))
+    .every(field => comparable(
+      (before as unknown as Record<string, unknown>)[field],
+    ) === comparable((after as unknown as Record<string, unknown>)[field]))
 );
 
 const changedFieldNames = (before: Entry, after: Entry): string[] => {
@@ -112,12 +118,31 @@ export const createCentralAccountingEntry = async (args: {
 }): Promise<CentralAccountingPersistenceResult> => {
   if (!args.entry.id) return { ok: false, message: 'Operation ID مطلوب قبل حفظ أي قيد جديد.' };
 
-  const replay = args.context.entries.find(entry => entry.id === args.entry.id);
-  if (replay) {
-    if (!sameCentralOperationPayload(replay, args.entry)) {
+  const replays = args.context.entries.filter(entry => entry.id === args.entry.id);
+  if (replays.length > 0) {
+    if (replays.length !== 1) {
+      return { ok: false, message: 'Operation ID موجود أكثر من مرة في السياق. تم رفض الحفظ.' };
+    }
+    const replayPreflight = preparePersistence({
+      entry: args.entry,
+      context: {
+        ...args.context,
+        entries: args.context.entries.filter(entry => entry.id !== args.entry.id),
+      },
+      source: args.source ?? 'user',
+      mode: 'create',
+    });
+    if (!replayPreflight.ready || !replayPreflight.preparedEntry) {
+      return {
+        ok: false,
+        message: blockerMessage(replayPreflight.blockers),
+        blockers: replayPreflight.blockers,
+      };
+    }
+    if (!sameCentralOperationPayload(replays[0], replayPreflight.preparedEntry)) {
       return { ok: false, message: 'Operation ID مستخدم بالفعل لعملية مختلفة. تم رفض الحفظ لمنع التكرار.' };
     }
-    return { ok: true, entryId: replay.id!, entry: replay };
+    return { ok: true, entryId: replays[0].id!, entry: replays[0] };
   }
 
   const preflight = preparePersistence({
@@ -251,12 +276,31 @@ export const createCentralInventoryAdjustment = async (args: {
     ...args.entry,
     id: args.entry.id || `inventory-adjustment-${args.checkId}`,
   };
-  const replay = args.context.entries.find(entry => entry.id === entryWithId.id);
-  if (replay) {
-    if (!sameCentralOperationPayload(replay, entryWithId)) {
+  const replays = args.context.entries.filter(entry => entry.id === entryWithId.id);
+  if (replays.length > 0) {
+    if (replays.length !== 1) {
+      return { ok: false, message: 'Operation ID موجود أكثر من مرة في سياق الجرد. تم رفض الترحيل.' };
+    }
+    const replayPreflight = preparePersistence({
+      entry: entryWithId,
+      context: {
+        ...args.context,
+        entries: args.context.entries.filter(entry => entry.id !== entryWithId.id),
+      },
+      source: 'system',
+      mode: 'create',
+    });
+    if (!replayPreflight.ready || !replayPreflight.preparedEntry) {
+      return {
+        ok: false,
+        message: blockerMessage(replayPreflight.blockers),
+        blockers: replayPreflight.blockers,
+      };
+    }
+    if (!sameCentralOperationPayload(replays[0], replayPreflight.preparedEntry)) {
       return { ok: false, message: 'Operation ID مستخدم بالفعل لتسوية مختلفة. تم رفض الترحيل.' };
     }
-    return { ok: true, entryId: replay.id!, entry: replay };
+    return { ok: true, entryId: replays[0].id!, entry: replays[0] };
   }
 
   const preflight = preparePersistence({

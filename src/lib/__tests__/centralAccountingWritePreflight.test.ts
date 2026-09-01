@@ -262,6 +262,30 @@ describe('Central Accounting Write Preflight Phase 5A', () => {
     expect(result.preparedEntry?.operationKind).toBe('expense');
   });
 
+  it.each([
+    { canonicalOperationId: 'sale.gold' },
+    { canonicalOperationVersion: 999 },
+  ])('fails closed when supplied canonical operation identity contradicts the Registry: %o', patch => {
+    const result = buildCentralAccountingWritePreflight({
+      entry: entry(patch),
+      entries: [],
+      accounts,
+      openingCostConfig: [],
+      manualAccountDefinitions: approvedDefinitions(accounts),
+      operationCatalog: cutoverCatalog,
+      source: 'user',
+    });
+
+    expect(result.ready).toBe(false);
+    expect(result.blockers).toEqual(expect.arrayContaining([
+      expect.objectContaining({ code: 'operation_identity_conflict' }),
+    ]));
+    expect(result.preparedEntry).toMatchObject({
+      canonicalOperationId: 'expense.operating',
+      canonicalOperationVersion: 1,
+    });
+  });
+
   it('does not allow a system-generated operation to be submitted from the user path', () => {
     const gold = account({
       id: 'gold', name: 'ذهب 21', type: 'gold_product', metal: 'gold', karat: '21',
