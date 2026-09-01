@@ -226,6 +226,72 @@ describe('Central Accounting Write Preflight Phase 5A', () => {
     ]));
   });
 
+  it('blocks a duplicate invoice number on create after whitespace normalization', () => {
+    const existing = entry({ id: 'existing-invoice', invoiceNumber: ' TX1 ' });
+    const result = buildCentralAccountingWritePreflight({
+      entry: entry({ id: 'new-invoice', invoiceNumber: 'TX1' }),
+      entries: [existing],
+      accounts,
+      openingCostConfig: [],
+      manualAccountDefinitions: approvedDefinitions(accounts, [existing]),
+      operationCatalog: cutoverCatalog,
+      source: 'user',
+    });
+
+    expect(result.ready).toBe(false);
+    expect(result.blockers).toEqual(expect.arrayContaining([
+      expect.objectContaining({ code: 'invoice_number_conflict' }),
+    ]));
+  });
+
+  it('allows an update to keep its own normalized invoice number', () => {
+    const existing = entry({
+      id: 'own-invoice', invoiceNumber: ' TX1 ', operationKind: 'expense',
+      debitAccountId: expense.id, creditAccountId: cash.id,
+    });
+    const result = buildCentralAccountingWritePreflight({
+      entry: { ...existing, invoiceNumber: 'TX1', notes: 'correction' },
+      entries: [existing],
+      accounts,
+      openingCostConfig: [],
+      manualAccountDefinitions: approvedDefinitions(accounts, [existing]),
+      operationCatalog: cutoverCatalog,
+      source: 'user',
+      mode: 'update',
+    });
+
+    expect(result.ready).toBe(true);
+    expect(result.blockers).not.toEqual(expect.arrayContaining([
+      expect.objectContaining({ code: 'invoice_number_conflict' }),
+    ]));
+  });
+
+  it('blocks an update that changes to another Entry invoice number', () => {
+    const existing = entry({
+      id: 'first-invoice', invoiceNumber: 'TX1', operationKind: 'expense',
+      debitAccountId: expense.id, creditAccountId: cash.id,
+    });
+    const other = entry({
+      id: 'other-invoice', seq: 2, invoiceNumber: ' TX2 ', operationKind: 'expense',
+      debitAccountId: expense.id, creditAccountId: cash.id,
+    });
+    const result = buildCentralAccountingWritePreflight({
+      entry: { ...existing, invoiceNumber: 'TX2' },
+      entries: [existing, other],
+      accounts,
+      openingCostConfig: [],
+      manualAccountDefinitions: approvedDefinitions(accounts, [existing, other]),
+      operationCatalog: cutoverCatalog,
+      source: 'user',
+      mode: 'update',
+    });
+
+    expect(result.ready).toBe(false);
+    expect(result.blockers).toEqual(expect.arrayContaining([
+      expect.objectContaining({ code: 'invoice_number_conflict' }),
+    ]));
+  });
+
   it('fails closed for an unknown operation instead of consulting legacy operation rules', () => {
     const result = buildCentralAccountingWritePreflight({
       entry: entry({ tx: 'عملية غير معروفة' }),

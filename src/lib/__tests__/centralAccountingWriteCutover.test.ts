@@ -104,6 +104,8 @@ describe('Central Accounting Write Cutover Phase 5B', () => {
     expect(entryForm).toContain('id: crypto.randomUUID()');
     expect(entryForm).toContain('id: formData.id');
     expect(entryForm).toContain('seq: formData.seq');
+    expect(entryForm).toContain('setFormData(prev => ({ ...prev, ...dataToCheck }))');
+    expect(entryForm).toContain('...createInitialFormState()');
     expect(service).toContain('sameCentralOperationPayload');
     expect(service).toContain('Operation ID conflict');
   });
