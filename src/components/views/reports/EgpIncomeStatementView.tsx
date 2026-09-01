@@ -2,7 +2,8 @@ import React, { useMemo, useState } from 'react';
 import { AlertTriangle, Download, TrendingUp } from 'lucide-react';
 import type { Entry } from '../../../types';
 import { useAppStore } from '../../../store';
-import { buildFinancialStatementsEgp, type FinancialStatementCategory, type QuantifiedFinancialStatementLine } from '../../../lib/financialStatementsEgp';
+import type { FinancialStatementCategory, QuantifiedFinancialStatementLine } from '../../../lib/financialStatementsEgp';
+import { buildCentralAccountingReadOnlyRuntimeFinancialStatements } from '../../../lib/centralAccountingReadOnlyRuntime';
 import { exportToCsv } from '../../../utils/exportUtils';
 import { cn } from '../../../lib/utils';
 import { formatEgpAmount, formatQuantity, formatWeight } from '../../../lib/formatting';
@@ -27,9 +28,24 @@ export const IncomeStatementView = React.memo(({ entries, onOpenLedger }: { entr
   const [month, setMonth] = useState('all');
   const [openRevenue, setOpenRevenue] = useState<FinancialStatementCategory['id'] | null>(null);
   const [openCogs, setOpenCogs] = useState<FinancialStatementCategory['id'] | null>(null);
-  const periodEntries = month === 'all' ? entries : entries.filter(entry => entry.date.startsWith(month));
-  const dates = periodEntries.map(entry => entry.date).sort();
-  const report = useMemo(() => buildFinancialStatementsEgp(entries, accountsDb, { canonicalDefinitions: canonicalAccounts, timeline: costCalculationRun.timeline, incomeStartDate: dates[0], incomeEndDate: dates.at(-1) }), [entries, accountsDb, canonicalAccounts, costCalculationRun.timeline, dates]);
+  const periodEntries = useMemo(() => month === 'all' ? entries : entries.filter(entry => entry.date.startsWith(month)), [entries, month]);
+  const dates = useMemo(() => periodEntries.map(entry => entry.date).sort(), [periodEntries]);
+  const incomeStartDate = dates[0];
+  const incomeEndDate = dates.at(-1);
+  const runtime = useMemo(() => buildCentralAccountingReadOnlyRuntimeFinancialStatements({
+    accounts: accountsDb,
+    entries,
+    options: {
+      canonicalDefinitions: canonicalAccounts,
+      timeline: costCalculationRun.timeline,
+      incomeStartDate,
+      incomeEndDate,
+    },
+  }), [entries, accountsDb, canonicalAccounts, costCalculationRun.timeline, incomeStartDate, incomeEndDate]);
+  const report = runtime.financialStatements;
+
+  if (!report) return <div className="space-y-3 pb-28" dir="rtl"><div className="rounded-2xl border border-[#1a1e2a] bg-[#0e1018] p-4"><h3 className="flex items-center gap-2 text-lg font-black text-[#f5f1e8]"><TrendingUp className="h-5 w-5 shrink-0 text-[#c9a84c]" />{text.title}</h3></div><div className="flex gap-2 rounded-2xl border border-amber-500/30 bg-amber-500/10 p-3 text-sm text-amber-100"><AlertTriangle className="h-5 w-5 shrink-0" /><div><p className="font-bold">تعذر تشغيل قائمة الدخل عبر المسار المركزي الآمن.</p><p className="mt-1 text-xs text-amber-200/80">لم يتم الرجوع للمسار القديم. الحالة: {runtime.blockers[0]?.code ?? 'central_read_only_blocked'}</p></div></div></div>;
+
   const data = report.incomeStatement;
   const exportReport = () => exportToCsv([{ name: text.title, data: [...data.revenueCategories, ...data.cogsCategories].flatMap(category => [...category.lines.map(line => ({ '\u0627\u0644\u0641\u0626\u0629': category.label, '\u0627\u0644\u0628\u064a\u0627\u0646': line.label, '\u0627\u0644\u0645\u0628\u0644\u063a (\u062c.\u0645)': line.amount, '\u0627\u0644\u0648\u0632\u0646': line.weight, '\u0627\u0644\u0643\u0645\u064a\u0629': line.quantity, '\u0633\u0639\u0631 \u0627\u0644\u0648\u062d\u062f\u0629': line.unitPrice })), { '\u0627\u0644\u0641\u0626\u0629': category.label, '\u0627\u0644\u0628\u064a\u0627\u0646': `\u0625\u062c\u0645\u0627\u0644\u064a ${category.label}`, '\u0627\u0644\u0645\u0628\u0644\u063a (\u062c.\u0645)': category.amount, '\u0627\u0644\u0648\u0632\u0646': category.weight, '\u0627\u0644\u0643\u0645\u064a\u0629': category.quantity, '\u0633\u0639\u0631 \u0627\u0644\u0648\u062d\u062f\u0629': category.unitPrice }]) }], `income_statement_${month}`);
   return <div className="space-y-4 pb-28" dir="rtl"><div className="flex flex-col gap-3 rounded-2xl border border-[#1a1e2a] bg-[#0e1018] p-4 sm:flex-row sm:items-center sm:justify-between"><div className="min-w-0"><h3 className="flex items-center gap-2 text-lg font-black text-[#f5f1e8]"><TrendingUp className="h-5 w-5 shrink-0 text-[#c9a84c]" />{text.title}</h3><p className="mt-1 text-xs text-[#8a8172]">{text.subtitle}</p></div><button onClick={exportReport} className="flex min-h-11 items-center justify-center gap-2 rounded-xl border border-[#c9a84c33] px-4 py-2 text-xs font-black text-[#c9a84c]"><Download className="h-4 w-4" />{text.export}</button></div><div className="flex gap-2 overflow-x-auto pb-1"><button onClick={() => setMonth('all')} className={cn('min-h-11 whitespace-nowrap rounded-xl px-4 py-2 text-xs font-black', month === 'all' ? 'bg-[#c9a84c] text-[#080a0f]' : 'bg-[#0e1018] text-[#8a8172]')}>{text.all}</button>{months.map(item => <button key={item} onClick={() => setMonth(item)} className={cn('min-h-11 whitespace-nowrap rounded-xl px-4 py-2 text-xs font-black', month === item ? 'bg-[#c9a84c] text-[#080a0f]' : 'bg-[#0e1018] text-[#8a8172]')}>{item}</button>)}</div>{!report.costBasisAvailable && <div className="flex gap-2 rounded-2xl border border-amber-500/30 bg-amber-500/10 p-3 text-xs text-amber-100"><AlertTriangle className="h-4 w-4 shrink-0" />{text.unavailable}</div>}<section className="space-y-3 rounded-2xl border border-[#1a1e2a] bg-[#0e1018] p-3 sm:p-4"><h4 className="font-black text-[#6a9e6a]">{text.revenue}</h4>{data.revenueCategories.map(category => <CategoryBlock key={category.id} category={category} open={openRevenue === category.id} onToggle={() => setOpenRevenue(current => toggleAccordionKey(current, category.id))} onOpenLedger={onOpenLedger} />)}<CashRow label={text.revenueTotal} amount={data.revenueTotal} total /><h4 className="pt-2 font-black text-[#d08a6a]">{text.cogs}</h4>{data.cogsCategories.map(category => <CategoryBlock key={category.id} category={category} open={openCogs === category.id} onToggle={() => setOpenCogs(current => toggleAccordionKey(current, category.id))} onOpenLedger={onOpenLedger} />)}<CashRow label={text.cogsTotal} amount={data.cogs} total /><CashRow label={text.gross} amount={data.grossProfit} total /><h4 className="pt-2 font-black text-[#d08a6a]">{text.operating}</h4>{data.operatingExpenses.map(line => <CashRow key={line.id} label={line.label} amount={line.amount} />)}{!data.operatingExpenses.length && <div className="rounded-xl bg-[#080a0f] p-3 text-xs text-[#8a8172]">{text.noExpenses}</div>}<CashRow label={text.operatingTotal} amount={data.operatingExpensesTotal} total /><CashRow label={text.net} amount={data.netProfit} total /></section></div>;
