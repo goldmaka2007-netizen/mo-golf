@@ -29,6 +29,14 @@ const expense = account({
   canonicalMainType: 'expense',
   canonicalSubType: 'expense',
 });
+const capital = account({
+  id: 'capital',
+  name: 'رأس المال',
+  mainType: 'حقوق ملكية',
+  subType: 'رأس مال',
+  canonicalMainType: 'equity',
+  canonicalSubType: 'capital',
+});
 const accounts = [cash, expense];
 
 const entry = (patch: Partial<Entry> = {}): Entry => ({
@@ -108,6 +116,88 @@ describe('Central Accounting Write Preflight Phase 5A', () => {
     expect(candidate.operationKind).toBeUndefined();
     expect(candidate.debitAccountId).toBeUndefined();
     expect(candidate.creditAccountId).toBeUndefined();
+  });
+
+  it('separates setup-only operations from normal user writes', () => {
+    const setupAccounts = [cash, capital];
+    const candidate = entry({
+      tx: 'قيد افتتاحي',
+      subTx: 'نقدي',
+      debit: cash.name,
+      credit: capital.name,
+      cash: '1000',
+      invoiceNumber: 'OPEN-1',
+    });
+    const definitions = approvedDefinitions(setupAccounts);
+
+    const normalUser = buildCentralAccountingWritePreflight({
+      entry: candidate,
+      entries: [],
+      accounts: setupAccounts,
+      openingCostConfig: [],
+      manualAccountDefinitions: definitions,
+      operationCatalog: cutoverCatalog,
+      source: 'user',
+    });
+    expect(normalUser.ready).toBe(false);
+    expect(normalUser.blockers).toEqual(expect.arrayContaining([
+      expect.objectContaining({ code: 'operation_not_writable' }),
+    ]));
+
+    const setup = buildCentralAccountingWritePreflight({
+      entry: candidate,
+      entries: [],
+      accounts: setupAccounts,
+      openingCostConfig: [],
+      manualAccountDefinitions: definitions,
+      operationCatalog: cutoverCatalog,
+      source: 'setup',
+    });
+    expect(setup.ready).toBe(true);
+    expect(setup.operation).toMatchObject({ id: 'opening.entry', availability: 'setup_only' });
+  });
+
+  it('models update cost validation by replacing exactly one existing row instead of appending a duplicate', () => {
+    const existing = entry({
+      id: 'existing-entry',
+      operationKind: 'expense',
+      debitAccountId: expense.id,
+      creditAccountId: cash.id,
+    });
+    const beforeRows = JSON.stringify([existing]);
+    const candidate = { ...existing, cash: '125', notes: 'updated' };
+    const result = buildCentralAccountingWritePreflight({
+      entry: candidate,
+      entries: [existing],
+      accounts,
+      openingCostConfig: [],
+      manualAccountDefinitions: approvedDefinitions(accounts, [existing]),
+      operationCatalog: cutoverCatalog,
+      source: 'user',
+      mode: 'update',
+    });
+
+    expect(result.ready).toBe(true);
+    expect(result.preparedEntry).toMatchObject({ id: 'existing-entry', cash: '125', notes: 'updated' });
+    expect(JSON.stringify([existing])).toBe(beforeRows);
+  });
+
+  it('fails closed when an update target cannot be resolved exactly once', () => {
+    const result = buildCentralAccountingWritePreflight({
+      entry: entry({ id: 'missing-entry' }),
+      entries: [],
+      accounts,
+      openingCostConfig: [],
+      manualAccountDefinitions: approvedDefinitions(accounts),
+      operationCatalog: cutoverCatalog,
+      source: 'user',
+      mode: 'update',
+    });
+
+    expect(result.ready).toBe(false);
+    expect(result.blockers).toEqual(expect.arrayContaining([
+      expect.objectContaining({ code: 'update_target_missing' }),
+    ]));
   });
 
   it('fails closed for an unknown operation instead of consulting legacy operation rules', () => {
