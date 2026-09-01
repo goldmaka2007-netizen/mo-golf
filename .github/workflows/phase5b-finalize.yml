@@ -29,7 +29,9 @@ jobs:
           cache: npm
       - run: npm ci
       - name: Apply final Phase 5B Cutover corrections
-        run: node .github/scripts/phase5b-finalize-codemod.mjs
+        run: |
+          node .github/scripts/phase5b-finalize-codemod.mjs
+          node .github/scripts/phase5b-finalize-syntax-correction.mjs
       - name: Architecture writer/year-close sweep
         run: node .github/scripts/phase5b-architecture-sweep.mjs
       - name: Focused Cutover tests
