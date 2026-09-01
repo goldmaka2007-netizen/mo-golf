@@ -24,6 +24,17 @@ describe('Phase 4C Financial Statements Central runtime routing', () => {
     expect(source).not.toMatch(/setDoc\(|addDoc\(|deleteDoc\(|writeBatch\(/);
   });
 
+  it('routes Equity Statement and its Balance Engine diagnostic through the Central adapter', () => {
+    const source = readFileSync(new URL('../reports/EquityStatementView.tsx', import.meta.url), 'utf8');
+
+    expect(source).toMatch(/buildCentralAccountingReadOnlyRuntimeEquityStatement/);
+    expect(source).not.toMatch(/buildEquityStatementEgp\(/);
+    expect(source).not.toMatch(/computeAccountBalances\(/);
+    expect(source).toContain('لم يتم الرجوع للمسار القديم');
+    expect(source).not.toMatch(/RAW_DATA|OPERATION_RULES|CATS/);
+    expect(source).not.toMatch(/setDoc\(|addDoc\(|deleteDoc\(|writeBatch\(/);
+  });
+
   it('keeps the comprehensive Financial Statements wrapper delegated to the same two Central-wired child views', () => {
     const source = readFileSync(new URL('../reports/FinancialStatementsView.tsx', import.meta.url), 'utf8');
 
