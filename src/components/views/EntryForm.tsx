@@ -199,7 +199,9 @@ export const EntryForm = React.memo(({ onStepChange }: EntryFormProps) => {
     return Array.from(operationTypes);
   }, [transactionRules]);
 
-  const initialFormState = {
+  const createInitialFormState = () => ({
+    id: crypto.randomUUID(),
+    seq: Date.now(),
     tx: '',
     debit: '',
     credit: '',
@@ -218,9 +220,9 @@ export const EntryForm = React.memo(({ onStepChange }: EntryFormProps) => {
     debitAccountId: undefined as string | undefined,
     creditAccountId: undefined as string | undefined,
     priceSnapshotLocked: false,
-  };
+  });
 
-  const [formData, setFormData] = useState(initialFormState);
+  const [formData, setFormData] = useState(createInitialFormState);
   const lastSavedInvoiceRef = React.useRef('');
   const debitSearchRef = React.useRef<HTMLInputElement>(null);
   const creditSearchRef = React.useRef<HTMLInputElement>(null);
@@ -399,7 +401,8 @@ export const EntryForm = React.memo(({ onStepChange }: EntryFormProps) => {
       clientName: formData.clientName || '',
       clientPhone: formData.clientPhone || '',
       userId: user?.uid || '',
-      seq: Date.now(),
+      id: formData.id,
+      seq: formData.seq,
     };
 
     setIsSaving(true);
@@ -435,7 +438,7 @@ export const EntryForm = React.memo(({ onStepChange }: EntryFormProps) => {
   const resetForm = () => {
     setAssistantSession(null);
     setFormData(prev => ({
-      ...initialFormState,
+      ...createInitialFormState(),
       date: prev.date
     }));
     setStep(1);
@@ -449,7 +452,7 @@ export const EntryForm = React.memo(({ onStepChange }: EntryFormProps) => {
   const startSameTypeOperation = () => {
     setAssistantSession(null);
     setFormData(prev => ({
-      ...initialFormState,
+      ...createInitialFormState(),
       date: prev.date,
       tx: prev.tx,
       invoiceNumber: generateInvoiceNumber(prev.tx),

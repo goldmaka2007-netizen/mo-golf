@@ -80,6 +80,7 @@ describe('Central Accounting Write Cutover Phase 5B', () => {
     const entryForm = readSource('components/views/EntryForm.tsx');
     const app = readSource('App.tsx');
     const inventory = readSource('components/views/InventoryCheckView.tsx');
+    const settings = readSource('components/views/SettingsView.tsx');
     const service = readSource('lib/centralAccountingWriteService.ts');
 
     expect(entryForm).toContain('createCentralAccountingEntry');
@@ -89,7 +90,19 @@ describe('Central Accounting Write Cutover Phase 5B', () => {
     expect(app).not.toMatch(/updateDoc\(doc\(db, ['"]entries['"]/);
     expect(inventory).toContain('createCentralInventoryAdjustment');
     expect(inventory).not.toContain('transaction.set(entryRef');
-    expect(service).toContain("doc(collection(db, 'entries'))");
+    expect(settings).not.toMatch(/addDoc\(collection\(db, ['"]entries['"]\)/);
+    expect(settings).not.toMatch(/batch\.(?:delete|update)\(doc\(db, ['"]entries['"]/);
+    expect(service).toContain("doc(db, 'entries', args.entry.id)");
+  });
+
+  it('uses a stable draft Operation ID and sequence for idempotent create retries', () => {
+    const entryForm = readSource('components/views/EntryForm.tsx');
+    const service = readSource('lib/centralAccountingWriteService.ts');
+    expect(entryForm).toContain('id: crypto.randomUUID()');
+    expect(entryForm).toContain('id: formData.id');
+    expect(entryForm).toContain('seq: formData.seq');
+    expect(service).toContain('sameCentralOperationPayload');
+    expect(service).toContain('Operation ID conflict');
   });
 
   it('removes hard-delete controls from the saved Entry correction UI', () => {

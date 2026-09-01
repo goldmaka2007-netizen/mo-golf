@@ -25,6 +25,7 @@ const directEntryWriterPatterns = [
   /setDoc\s*\(\s*doc\([^\n)]*['"]entries['"]/s,
   /updateDoc\s*\(\s*doc\([^\n)]*['"]entries['"]/s,
   /deleteDoc\s*\(\s*doc\([^\n)]*['"]entries['"]/s,
+  /batch\.(?:delete|update|set)\s*\(\s*doc\([^\n)]*['"]entries['"]/s,
   /doc\s*\(\s*collection\([^\n)]*['"]entries['"][\s\S]{0,2000}?(?:batch|transaction)\.(?:set|update|delete)\s*\(/s,
 ];
 
@@ -41,7 +42,7 @@ for (const full of sourceFiles) {
   if (rel !== allowedWriter && directEntryWriterPatterns.some(pattern => pattern.test(text))) {
     writerBypasses.push(rel);
   }
-  if (/deleteDoc\s*\(\s*doc\([^\n)]*['"]entries['"]/s.test(text)) hardDeletes.push(rel);
+  if (/deleteDoc\s*\(\s*doc\([^\n)]*['"]entries['"]/s.test(text) || /batch\.delete\s*\(\s*doc\([^\n)]*['"]entries['"]/s.test(text)) hardDeletes.push(rel);
 
   const lines = text.split(/\r?\n/);
   lines.forEach((line, index) => {

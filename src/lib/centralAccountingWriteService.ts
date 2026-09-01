@@ -63,6 +63,16 @@ const comparable = (value: unknown): string => {
   }
 };
 
+const IDEMPOTENT_BUSINESS_FIELDS: Array<keyof Entry> = [
+  'seq', 'tx', 'subTx', 'debit', 'credit', 'date', 'cash', 'weight', 'count', 'arabicWeight',
+  'karat', 'multiplier', 'notes', 'invoiceNumber', 'clientName', 'clientPhone', 'marketPrice', 'inventoryCheckId',
+];
+
+export const sameCentralOperationPayload = (before: Entry, after: Entry): boolean => (
+  before.id === after.id
+  && IDEMPOTENT_BUSINESS_FIELDS.every(field => comparable(before[field]) === comparable(after[field]))
+);
+
 const changedFieldNames = (before: Entry, after: Entry): string[] => {
   const ignored = new Set(['id', 'modifiedAt', 'modifiedBy', 'modificationReason']);
   return [...new Set([...Object.keys(before), ...Object.keys(after)])]
@@ -99,6 +109,16 @@ export const createCentralAccountingEntry = async (args: {
   actor: CentralWriteActor;
   source?: Extract<CentralWriteSource, 'user' | 'setup'>;
 }): Promise<CentralAccountingPersistenceResult> => {
+  if (!args.entry.id) return { ok: false, message: 'Operation ID مطلوب قبل حفظ أي قيد جديد.' };
+
+  const replay = args.context.entries.find(entry => entry.id === args.entry.id);
+  if (replay) {
+    if (!sameCentralOperationPayload(replay, args.entry)) {
+      return { ok: false, message: 'Operation ID مستخدم بالفعل لعملية مختلفة. تم رفض الحفظ لمنع التكرار.' };
+    }
+    return { ok: true, entryId: replay.id!, entry: replay };
+  }
+
   const preflight = preparePersistence({
     entry: args.entry,
     context: args.context,
@@ -109,7 +129,7 @@ export const createCentralAccountingEntry = async (args: {
     return { ok: false, message: blockerMessage(preflight.blockers), blockers: preflight.blockers };
   }
 
-  const entryRef = doc(collection(db, 'entries'));
+  const entryRef = doc(db, 'entries', args.entry.id);
   const auditRef = doc(collection(db, 'audit_logs'));
   const persistedEntry = sanitizeFirestorePayload({
     ...preflight.preparedEntry,
@@ -117,20 +137,31 @@ export const createCentralAccountingEntry = async (args: {
     createdAt: serverTimestamp(),
   } as Record<string, unknown>);
 
-  const batch = writeBatch(db);
-  batch.set(entryRef, persistedEntry);
-  batch.set(auditRef, {
-    action: 'create',
-    collection: 'entries',
-    documentId: entryRef.id,
-    userId: args.actor.userId,
-    userEmail: args.actor.userEmail || '',
-    canonicalOperationId: preflight.operation.id,
-    canonicalOperationVersion: preflight.operation.version,
-    timestamp: serverTimestamp(),
-  });
-  await batch.commit();
+  const outcome = await runTransaction(db, async transaction => {
+    const existingSnapshot = await transaction.get(entryRef);
+    if (existingSnapshot.exists()) {
+      const existing = { id: existingSnapshot.id, ...existingSnapshot.data() } as Entry;
+      if (!sameCentralOperationPayload(existing, preflight.preparedEntry!)) {
+        throw new Error('Operation ID conflict: existing persisted operation differs from retry payload.');
+      }
+      return existing;
+    }
 
+    transaction.set(entryRef, persistedEntry);
+    transaction.set(auditRef, {
+      action: 'create',
+      collection: 'entries',
+      documentId: entryRef.id,
+      userId: args.actor.userId,
+      userEmail: args.actor.userEmail || '',
+      canonicalOperationId: preflight.operation!.id,
+      canonicalOperationVersion: preflight.operation!.version,
+      timestamp: serverTimestamp(),
+    });
+    return null;
+  });
+
+  if (outcome) return { ok: true, entryId: outcome.id!, entry: outcome };
   return {
     ok: true,
     entryId: entryRef.id,
@@ -215,8 +246,20 @@ export const createCentralInventoryAdjustment = async (args: {
   context: CentralWriteContext;
   actor: CentralWriteActor;
 }): Promise<CentralAccountingPersistenceResult> => {
+  const entryWithId: Entry = {
+    ...args.entry,
+    id: args.entry.id || `inventory-adjustment-${args.checkId}`,
+  };
+  const replay = args.context.entries.find(entry => entry.id === entryWithId.id);
+  if (replay) {
+    if (!sameCentralOperationPayload(replay, entryWithId)) {
+      return { ok: false, message: 'Operation ID مستخدم بالفعل لتسوية مختلفة. تم رفض الترحيل.' };
+    }
+    return { ok: true, entryId: replay.id!, entry: replay };
+  }
+
   const preflight = preparePersistence({
-    entry: args.entry,
+    entry: entryWithId,
     context: args.context,
     source: 'system',
     mode: 'create',
@@ -226,16 +269,23 @@ export const createCentralInventoryAdjustment = async (args: {
   }
 
   const checkRef = doc(db, 'inventory_checks', args.checkId);
-  const entryRef = doc(collection(db, 'entries'));
+  const entryRef = doc(db, 'entries', entryWithId.id!);
   const auditRef = doc(collection(db, 'audit_logs'));
 
-  await runTransaction(db, async transaction => {
+  const outcome = await runTransaction(db, async transaction => {
     const checkSnapshot = await transaction.get(checkRef);
+    const entrySnapshot = await transaction.get(entryRef);
     if (!checkSnapshot.exists()) throw new Error('جرد غير موجود.');
     const check = { id: checkSnapshot.id, ...checkSnapshot.data() } as InventoryCheck;
+
     if (check.status === 'posted' || check.postedEntryId || check.isResolved) {
+      if (check.postedEntryId === entryRef.id && entrySnapshot.exists()) {
+        const existing = { id: entrySnapshot.id, ...entrySnapshot.data() } as Entry;
+        if (sameCentralOperationPayload(existing, preflight.preparedEntry!)) return existing;
+      }
       throw new Error('تم ترحيل هذا الجرد من قبل.');
     }
+    if (entrySnapshot.exists()) throw new Error('Operation ID conflict: inventory adjustment Entry already exists.');
 
     transaction.set(entryRef, sanitizeFirestorePayload({
       ...preflight.preparedEntry,
@@ -261,8 +311,10 @@ export const createCentralInventoryAdjustment = async (args: {
       canonicalOperationVersion: preflight.operation!.version,
       timestamp: serverTimestamp(),
     });
+    return null;
   });
 
+  if (outcome) return { ok: true, entryId: outcome.id!, entry: outcome };
   return {
     ok: true,
     entryId: entryRef.id,
