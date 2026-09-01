@@ -52,17 +52,25 @@ Last reviewed: 2026-09-01
 - Because the GitHub connector could not transition Draft PR `#20` to Ready for Review, verified replacement PR `#21` was created from that exact head and merged to `main` as squash commit `85a08e6f2756d39134fba199ba0c6c5267828227`.
 - Status: `IMPLEMENTATION COMPLETE / VERIFIED / MERGED / NOT DEPLOYED`.
 - Decision: D-024 / ADR-013.
-- Phase 3 remains the offline acceptance proof that Registry-approved identity does not change Ledger, Unified Trial Balance, or EGP Financial Statement outputs; the interactive runtime does not recalculate that full evidence chain on every refresh.
 - Approved runtime flow: `Trial Balance UI → Central read-only runtime adapter → historical Shadow compatibility copies for referenced inactive accounts → Central Registry-gated exact Shadow + complete parity identity → temporary Registry-normalized Entries → existing buildUnifiedTrialBalance`.
-- The Trial Balance UI no longer directly invokes `buildUnifiedTrialBalance`; the existing engine remains the sole calculation engine behind the Central runtime adapter.
-- Runtime execution requires Central Shadow `status=compared`, non-null parity, and `exactParity=true`. Missing or contradictory identity or incomplete parity fails closed.
-- The independent review proved that passing all accounts directly to Shadow was insufficient because `buildAccountRegistry` excludes inactive source accounts from normal definitions while their IDs are still considered known.
-- The accepted correction deliberately does **not** change the shared Registry contract. Only inactive accounts whose stable IDs are referenced by Entries inside the current report cutoff receive temporary in-memory Shadow-only copies with `isActive=true` so their stored historical metadata can be classified.
-- Original account objects remain inactive and unchanged. The final Trial Balance calculation still receives only the original active accounts, preserving pre-PR visibility and balance semantics.
 - Final independent acceptance: historical inactive-account compatibility PASS; Shadow exact parity PASS; source Account/Entry immutability PASS; final Trial Balance equals pre-PR semantics PASS; no inactive presentation leakage; focused `52/52 PASS` across 8 files; TypeScript, Balance Contract, build and `git diff --check` PASS; full suite `608 PASS / 13 FAIL` with the same pre-existing failure set.
-- The runtime adapter calls Central Shadow and then the requested Unified Trial Balance only; it does not recalculate the full Phase 3 Ledger + Trial Balance + Financial Statements evidence chain on each refresh.
-- General Ledger and EGP Financial Statements are not switched by Phase 4A; each requires focused runtime verification before widening the read-only migration.
 - No protected accounting/data surface changed. No Firebase/Firestore write occurred. No Production runtime activation or deployment occurred.
+
+### Phase 4B — General Ledger Central read-only runtime wiring
+
+- Owner approved continuation to the General Ledger runtime consumer on 2026-09-01.
+- Working branch: `feature/central-read-only-runtime-general-ledger-phase4b`, created from `main` `bf55950158925c060c23afd9e488488279529d21`.
+- Status: `CODE IMPLEMENTATION COMPLETE / REPOSITORY VERIFICATION PENDING / NOT MERGED / NOT DEPLOYED`.
+- Decision: D-025 / ADR-014.
+- Approved runtime flow: `General Ledger UI → Central read-only runtime adapter → referenced inactive-account Shadow compatibility copies → exact Registry-gated Shadow → complete Registry-approved temporary Entry identity → existing dimension discovery + Balance Engine period balances + existing buildLedgerReport`.
+- General Ledger account selection remains the existing read-only registry-driven presentation; Phase 4B changes the Ledger details calculation path only.
+- One exact Shadow run now supplies identity to all Ledger dimensions and the all-time summary; the UI no longer directly invokes `getAvailableDimensions`, `computePeriodAccountBalances`, or `buildLedgerReport`.
+- Existing Ledger engines remain unchanged. The selected dimension is read from the already-built period bundle, removing the previous duplicate selected-dimension report build.
+- Historical inactive source accounts referenced by report Entries remain temporary Shadow-only compatibility copies. Original accounts stay inactive and unchanged; final Ledger presentation uses the existing report-account set.
+- Entries after the later of the selected report end date and the existing summary cutoff are excluded before Central Shadow so irrelevant later rows cannot block an earlier report.
+- Contradictory, unknown, blank, whitespace, non-exact Shadow, or incomplete parity identity fails closed with no Ledger bundle and no direct UI fallback.
+- Source Account/Entry objects remain unchanged. No React accounting rule, RAW_DATA/CATS/OPERATION_RULES authority, Firebase persistence, or writer path was added.
+- Repository verification and an independent Evidence Pack are required before merge review. No deployment is authorized by this checkpoint.
 
 ## Protected accounting/data invariants
 
@@ -77,15 +85,14 @@ Do not change without a separate explicit owner decision and approval:
 - Firestore Rules / Indexes / Functions / Storage / Auth.
 - Golden Baseline.
 
-Central Registry Phases 1–4A changed none of these protected surfaces and made no Production Firestore data write.
+Central Registry Phases 1–4B changed none of these protected surfaces and made no Production Firestore data write.
 
 ## Current next gate
 
-- Phase 4A is merged and verified but not deployed.
-- Remaining read-only runtime consumers are General Ledger and EGP Financial Statements before the final EntryForm/write-path Cutover.
-- Each remaining consumer requires its own focused verification and owner-approved workflow gate.
+- Verify Phase 4B General Ledger repository behavior and architecture on the exact branch HEAD.
+- If accepted, merge and synchronize GitHub + Notion + Google Drive; deployment remains separate and is not implied.
+- EGP Financial Statements remain the final read-only runtime consumer before the EntryForm/write-path Cutover.
 - EntryForm/write-path Cutover remains last and requires a separate explicit approval gate.
-- Deployment remains separate from merge and is not implied.
 
 ## Other current notes
 
@@ -96,11 +103,12 @@ Central Registry Phases 1–4A changed none of these protected surfaces and made
 
 ## Primary references
 
-- `docs/DECISIONS.md` — active decisions D-021 through D-024.
+- `docs/DECISIONS.md` — active decisions D-021 through D-025.
 - `docs/adr/ADR-010-central-accounting-registry.md`.
 - `docs/adr/ADR-011-central-accounting-shadow-orchestration.md`.
 - `docs/adr/ADR-012-central-read-only-output-evidence.md`.
 - `docs/adr/ADR-013-central-read-only-runtime-trial-balance.md`.
+- `docs/adr/ADR-014-central-read-only-runtime-general-ledger.md`.
 
 ## Source roles and closure
 
