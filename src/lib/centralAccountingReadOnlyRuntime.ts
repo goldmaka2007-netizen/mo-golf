@@ -1,10 +1,19 @@
-import type { Account, CanonicalAccountDefinition, Entry } from '../types';
+import type { Account, AnnualOpeningCostConfig, CanonicalAccountDefinition, Entry } from '../types';
 import type { InventoryCostTimeline } from './inventoryCostTypes';
 import {
   buildCentralAccountingShadowReport,
   type CentralAccountingShadowReport,
 } from './centralAccountingShadow';
 import { computePeriodAccountBalances } from './engine';
+import {
+  buildFinancialStatementsEgp,
+  type BuildFinancialStatementsEgpOptions,
+  type FinancialStatementsEgp,
+} from './financialStatementsEgp';
+import {
+  buildMonthlyFinancialPosition,
+  type MonthlyFinancialPositionResult,
+} from './monthlyFinancialPosition';
 import {
   buildLedgerReport,
   getAvailableDimensions,
@@ -250,5 +259,122 @@ export const buildCentralAccountingReadOnlyRuntimeGeneralLedger = ({
     dimensions,
     periodReports,
     summaryReports,
+  };
+};
+
+export interface CentralFinancialStatementsRuntimeInput {
+  accounts: Account[];
+  entries: Entry[];
+  options?: BuildFinancialStatementsEgpOptions;
+}
+
+export interface CentralFinancialStatementsRuntimeReport {
+  version: typeof CENTRAL_ACCOUNTING_READ_ONLY_RUNTIME_VERSION;
+  mode: 'read_only_runtime_financial_statements';
+  status: 'ready' | 'blocked';
+  shadow: CentralAccountingShadowReport;
+  blockers: CentralReadOnlyRuntimeBlocker[];
+  financialStatements: FinancialStatementsEgp | null;
+}
+
+/**
+ * Phase 4C read-only runtime adapter for EGP Financial Statements.
+ * Entries after the requested income end date are excluded before Shadow because
+ * they cannot affect the displayed income period. Earlier rows remain available so
+ * the existing cost timeline and historical context are preserved.
+ */
+export const buildCentralAccountingReadOnlyRuntimeFinancialStatements = ({
+  accounts,
+  entries,
+  options = {},
+}: CentralFinancialStatementsRuntimeInput): CentralFinancialStatementsRuntimeReport => {
+  const runtimeEntries = options.incomeEndDate
+    ? entries.filter(entry => entry.date <= options.incomeEndDate!)
+    : entries;
+  const manualAccountDefinitions = options.canonicalDefinitions ?? [];
+  const identity = buildCentralRuntimeIdentity(accounts, runtimeEntries, manualAccountDefinitions);
+  if (!identity.normalizedEntries) {
+    return {
+      version: CENTRAL_ACCOUNTING_READ_ONLY_RUNTIME_VERSION,
+      mode: 'read_only_runtime_financial_statements',
+      status: 'blocked',
+      shadow: identity.shadow,
+      blockers: blocked(identity.shadow, 'Complete exact Central Shadow identity is required before Financial Statements runtime execution.'),
+      financialStatements: null,
+    };
+  }
+
+  return {
+    version: CENTRAL_ACCOUNTING_READ_ONLY_RUNTIME_VERSION,
+    mode: 'read_only_runtime_financial_statements',
+    status: 'ready',
+    shadow: identity.shadow,
+    blockers: [],
+    financialStatements: buildFinancialStatementsEgp(identity.normalizedEntries, accounts, options),
+  };
+};
+
+export interface CentralMonthlyFinancialPositionRuntimeInput {
+  accounts: Account[];
+  entries: Entry[];
+  canonicalDefinitions: CanonicalAccountDefinition[];
+  openingCostConfig: AnnualOpeningCostConfig[];
+  cutoffDate: string;
+  goldPriceEgp?: number | null;
+  silverPriceEgp?: number | null;
+}
+
+export interface CentralMonthlyFinancialPositionRuntimeReport {
+  version: typeof CENTRAL_ACCOUNTING_READ_ONLY_RUNTIME_VERSION;
+  mode: 'read_only_runtime_monthly_financial_position';
+  status: 'ready' | 'blocked';
+  shadow: CentralAccountingShadowReport;
+  blockers: CentralReadOnlyRuntimeBlocker[];
+  financialPosition: MonthlyFinancialPositionResult | null;
+}
+
+/**
+ * Phase 4C read-only runtime adapter for the monthly EGP Financial Position.
+ * Only rows on/before the selected cutoff enter Shadow, matching the existing
+ * monthly engine's own cutoff contract and preventing irrelevant future rows from
+ * blocking an earlier statement.
+ */
+export const buildCentralAccountingReadOnlyRuntimeMonthlyFinancialPosition = ({
+  accounts,
+  entries,
+  canonicalDefinitions,
+  openingCostConfig,
+  cutoffDate,
+  goldPriceEgp = null,
+  silverPriceEgp = null,
+}: CentralMonthlyFinancialPositionRuntimeInput): CentralMonthlyFinancialPositionRuntimeReport => {
+  const cutoffEntries = entries.filter(entry => entry.date <= cutoffDate);
+  const identity = buildCentralRuntimeIdentity(accounts, cutoffEntries, canonicalDefinitions);
+  if (!identity.normalizedEntries) {
+    return {
+      version: CENTRAL_ACCOUNTING_READ_ONLY_RUNTIME_VERSION,
+      mode: 'read_only_runtime_monthly_financial_position',
+      status: 'blocked',
+      shadow: identity.shadow,
+      blockers: blocked(identity.shadow, 'Complete exact Central Shadow identity is required before Financial Position runtime execution.'),
+      financialPosition: null,
+    };
+  }
+
+  return {
+    version: CENTRAL_ACCOUNTING_READ_ONLY_RUNTIME_VERSION,
+    mode: 'read_only_runtime_monthly_financial_position',
+    status: 'ready',
+    shadow: identity.shadow,
+    blockers: [],
+    financialPosition: buildMonthlyFinancialPosition({
+      entries: identity.normalizedEntries,
+      accounts,
+      canonicalDefinitions,
+      openingCostConfig,
+      cutoffDate,
+      goldPriceEgp,
+      silverPriceEgp,
+    }),
   };
 };
