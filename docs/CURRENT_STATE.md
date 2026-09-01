@@ -59,18 +59,21 @@ Last reviewed: 2026-09-01
 ### Phase 4B — General Ledger Central read-only runtime wiring
 
 - Owner approved continuation to the General Ledger runtime consumer on 2026-09-01.
-- Working branch: `feature/central-read-only-runtime-general-ledger-phase4b`, created from `main` `bf55950158925c060c23afd9e488488279529d21`.
-- Status: `CODE IMPLEMENTATION COMPLETE / REPOSITORY VERIFICATION PENDING / NOT MERGED / NOT DEPLOYED`.
+- Original Draft PR: `#22`; verified head: `c8f17ea37df1358de11508a7ed0e43b9c735bc64`.
+- The first independent review passed every functional/architecture gate except one new UI routing guard that required a literal spelling. The correction changed only `src/components/views/__tests__/GeneralLedgerView.test.ts`; runtime/accounting behavior did not change.
+- Final independent re-verification on the same runtime code: focused `83/83 PASS` across 10 files; TypeScript, Balance Contract, build and `git diff --check` PASS; full suite `614 PASS / 13 FAIL` with the same accepted pre-existing failure set; new Phase 4B regression NO.
+- Because the GitHub connector could not transition Draft PR `#22` to Ready for Review, verified replacement PR `#23` was created from the exact verified head and merged to `main` as squash commit `82e1f372589be86e5b578f87d680ecfd3891f29c`.
+- Status: `IMPLEMENTATION COMPLETE / VERIFIED / MERGED / NOT DEPLOYED`.
 - Decision: D-025 / ADR-014.
 - Approved runtime flow: `General Ledger UI → Central read-only runtime adapter → referenced inactive-account Shadow compatibility copies → exact Registry-gated Shadow → complete Registry-approved temporary Entry identity → existing dimension discovery + Balance Engine period balances + existing buildLedgerReport`.
 - General Ledger account selection remains the existing read-only registry-driven presentation; Phase 4B changes the Ledger details calculation path only.
-- One exact Shadow run now supplies identity to all Ledger dimensions and the all-time summary; the UI no longer directly invokes `getAvailableDimensions`, `computePeriodAccountBalances`, or `buildLedgerReport`.
+- One exact Shadow run supplies identity to all Ledger dimensions and the all-time summary. The UI no longer directly invokes `getAvailableDimensions`, `computePeriodAccountBalances`, or `buildLedgerReport`.
 - Existing Ledger engines remain unchanged. The selected dimension is read from the already-built period bundle, removing the previous duplicate selected-dimension report build.
 - Historical inactive source accounts referenced by report Entries remain temporary Shadow-only compatibility copies. Original accounts stay inactive and unchanged; final Ledger presentation uses the existing report-account set.
 - Entries after the later of the selected report end date and the existing summary cutoff are excluded before Central Shadow so irrelevant later rows cannot block an earlier report.
 - Contradictory, unknown, blank, whitespace, non-exact Shadow, or incomplete parity identity fails closed with no Ledger bundle and no direct UI fallback.
-- Source Account/Entry objects remain unchanged. No React accounting rule, RAW_DATA/CATS/OPERATION_RULES authority, Firebase persistence, or writer path was added.
-- Repository verification and an independent Evidence Pack are required before merge review. No deployment is authorized by this checkpoint.
+- Semantic parity vs origin/main, dimensions/order, period balances/rows, summary behavior, date cutoff, account selection, historical inactive compatibility, source immutability and Phase 4A Trial Balance regression all passed independent review.
+- No protected accounting/data surface changed. No Firebase/Firestore write occurred. No Production runtime activation or deployment occurred.
 
 ## Protected accounting/data invariants
 
@@ -89,10 +92,11 @@ Central Registry Phases 1–4B changed none of these protected surfaces and made
 
 ## Current next gate
 
-- Verify Phase 4B General Ledger repository behavior and architecture on the exact branch HEAD.
-- If accepted, merge and synchronize GitHub + Notion + Google Drive; deployment remains separate and is not implied.
-- EGP Financial Statements remain the final read-only runtime consumer before the EntryForm/write-path Cutover.
+- Phase 4B General Ledger is merged and independently verified but not deployed.
+- EGP Financial Statements are the final remaining read-only runtime consumer before the EntryForm/write-path Cutover.
+- EGP Financial Statements require their own focused workflow, implementation and independent acceptance before merge.
 - EntryForm/write-path Cutover remains last and requires a separate explicit approval gate.
+- Deployment remains separate from merge and is not implied.
 
 ## Other current notes
 
