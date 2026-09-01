@@ -5,7 +5,7 @@ import { ClipboardList, Plus, CheckCircle2, History, X, Save, Scale, Package, Ar
 import { format } from 'date-fns';
 import { ar } from 'date-fns/locale';
 import { useAppStore } from '../../store';
-import { collection, addDoc, serverTimestamp, deleteDoc, doc, updateDoc, runTransaction } from 'firebase/firestore';
+import { collection, addDoc, serverTimestamp, deleteDoc, doc, updateDoc } from 'firebase/firestore';
 import { db, handleFirestoreError } from '../../firebase';
 import { cn } from '../../lib/utils';
 import { parseWeight } from '../../lib/accounting';
@@ -19,9 +19,9 @@ import {
   calculateInventoryCheckDiff,
   effectiveInventoryCheckStatus,
   findAccountByCheck,
-  prepareEntryForCentralSave,
   statusForInventoryCheck,
 } from '../../lib/inventoryCheckSettlement';
+import { createCentralInventoryAdjustment } from '../../lib/centralAccountingWriteService';
 
 const HistoryCard = React.memo(({
   item,
@@ -350,7 +350,8 @@ export const InventoryCheckView = React.memo(() => {
       setGlobalError('تم ترحيل هذا الجرد من قبل.');
       return;
     }
-    setAdjustLoading(check.id || null);
+
+    setAdjustLoading(check.id);
     try {
       const draft = buildInventoryAdjustmentDraftEntry({
         check,
@@ -362,54 +363,23 @@ export const InventoryCheckView = React.memo(() => {
         setGlobalError(draft.message);
         return;
       }
-      const prepared = prepareEntryForCentralSave({
+
+      const result = await createCentralInventoryAdjustment({
         entry: draft.entry,
-        entries,
-        accountsDb,
-        openingCostConfig,
-        canonicalAccounts,
+        checkId: check.id,
+        context: {
+          entries,
+          accounts: accountsDb,
+          openingCostConfig,
+          manualAccountDefinitions: canonicalAccounts,
+        },
+        actor: { userId: user!.uid, userEmail: user?.email || '' },
       });
-      if (!prepared.ok) {
-        setGlobalError(prepared.message);
-        return;
+      if (result.ok === false) {
+        setGlobalError(result.message);
       }
-
-      const checkRef = doc(db, 'inventory_checks', check.id);
-      const entryRef = doc(collection(db, 'entries'));
-      const auditRef = doc(collection(db, 'audit_logs'));
-      await runTransaction(db, async transaction => {
-        const currentCheck = await transaction.get(checkRef);
-        if (!currentCheck.exists()) throw new Error('جرد غير موجود.');
-        const current = { id: currentCheck.id, ...currentCheck.data() } as InventoryCheck;
-        if (effectiveInventoryCheckStatus(current) === 'posted' || current.postedEntryId) {
-          throw new Error('تم ترحيل هذا الجرد من قبل.');
-        }
-        transaction.set(entryRef, {
-          ...prepared.entry,
-          createdAt: serverTimestamp(),
-        });
-        transaction.update(checkRef, {
-          status: 'posted',
-          isResolved: true,
-          postedEntryId: entryRef.id,
-          postedAt: serverTimestamp(),
-          postedBy: user!.uid,
-          updatedAt: serverTimestamp(),
-        });
-        transaction.set(auditRef, {
-          action: 'inventory_check_posted',
-          collection: 'entries',
-          documentId: entryRef.id,
-          inventoryCheckId: check.id,
-          userId: user!.uid,
-          userEmail: user?.email || '',
-          timestamp: serverTimestamp(),
-        });
-      });
-      return;
-
     } catch (error) {
-       handleFirestoreError(error, OperationType.CREATE, 'entries');
+      handleFirestoreError(error, OperationType.CREATE, 'entries');
     } finally {
       setAdjustLoading(null);
     }

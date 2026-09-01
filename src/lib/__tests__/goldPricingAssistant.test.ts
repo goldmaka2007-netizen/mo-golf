@@ -248,7 +248,8 @@ describe('account rules and EntryForm handoff', () => {
     expect(assistantSource).not.toContain('addDoc');
     expect(assistantSource).not.toContain("collection(db, 'entries')");
     expect(entryFormSource).toContain('renderStep3');
-    expect(entryFormSource).toContain("addDoc(collection(db, 'entries')");
+    expect(entryFormSource).toContain('createCentralAccountingEntry');
+    expect(entryFormSource).not.toContain("addDoc(collection(db, 'entries')");
   });
 });
 

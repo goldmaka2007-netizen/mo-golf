@@ -12,12 +12,9 @@ import {
   Save,
   FilePlus,
 } from 'lucide-react';
-import { 
-  collection, 
-  addDoc, 
+import {
   doc, 
-  setDoc,
-  writeBatch 
+  setDoc
 } from 'firebase/firestore';
 import { db } from '../../firebase';
 import { AnnualOpeningCostConfig } from '../../types';
@@ -30,7 +27,6 @@ import { buildWacAuditCsv, wacAuditFilename } from '../../lib/wacAuditExcel';
 import { normalizeSmartMarginSettings, SmartMarginSettings } from '../../lib/dailyJournalSmartDashboard';
 import { normalizeStoryGoldBuySpreadEgp, parseStoryGoldBuySpreadInput, saveStoryGoldBuySpreadEgp } from '../../lib/storyPricing';
 import { downloadCsv } from '../../utils/csv';
-import { parseSettingsEntryCsv } from '../../utils/csvImport';
 import {
   normalizeGoldSaleTaxStampPerGramEgp,
   normalizeGoldPricingConfig,
@@ -381,123 +377,13 @@ export const SettingsView = React.memo(() => {
   };
 
   const handleDeleteAllData = async () => {
-    if (operationWritesLocked) {
-      setGlobalError('لا يمكن حذف العمليات أثناء تشغيل أو فشل إعادة احتساب التكلفة.');
-      return;
-    }
-    setIsDeletingAll(true);
-    try {
-      const entriesToDelete = [...entries];
-      while (entriesToDelete.length > 0) {
-        const chunk = entriesToDelete.splice(0, 500);
-        const batch = writeBatch(db);
-        chunk.forEach(e => {
-          batch.delete(doc(db, 'entries', e.id!));
-        });
-        await batch.commit();
-      }
-      setShowDeleteAllConfirm(false);
-      alert("تم مسح كافة البيانات بنجاح!");
-    } catch (error) {
-      console.error("Delete All Error:", error);
-      setGlobalError("فشل مسح البيانات. يرجى المحاولة لاحقاً.");
-    } finally {
-      setIsDeletingAll(false);
-    }
+    setGlobalError('بعد Central Accounting Cutover لا يسمح بمسح القيود المحاسبية من الإعدادات. التصحيح يتم من خلال القيد وبسجل مراجعة.');
   };
 
   const [importProgress, setImportProgress] = useState<{ current: number, total: number, success: number, failed: number } | null>(null);
 
   const handleRetroactiveInvoiceNumbers = async () => {
-    if (operationWritesLocked) {
-      setGlobalError('لا يمكن تعديل العمليات أثناء تشغيل أو فشل إعادة احتساب التكلفة.');
-      return;
-    }
-    setIsImporting(true);
-    
-    // 1. Sort all entries to assign sequentially in chronological order
-    const sortedEntries = [...entries].sort((a, b) => {
-      const aTime = a.createdAt?.seconds || 0;
-      const bTime = b.createdAt?.seconds || 0;
-      if (aTime !== bTime) return aTime - bTime;
-      return (a.seq || 0) - (b.seq || 0);
-    });
-
-    // 2. Identify entries without an invoice number
-    const missingInvoices = sortedEntries.filter(e => !e.invoiceNumber);
-    
-    if (missingInvoices.length === 0) {
-      alert("جميع القيود الحالية مرقمة بالفعل.");
-      setIsImporting(false);
-      return;
-    }
-
-    // 3. Find max existing numbers
-    const maxNums: Record<string, number> = {};
-    entries.forEach(e => {
-      if (e.invoiceNumber) {
-        const prefixMatch = e.invoiceNumber.match(/^[A-Za-z]+/);
-        if (prefixMatch) {
-          const p = prefixMatch[0].toUpperCase();
-          const numMatch = e.invoiceNumber.match(/\d+/);
-          if (numMatch) {
-            const num = parseInt(numMatch[0], 10);
-            if (!maxNums[p] || num > maxNums[p]) {
-              maxNums[p] = num;
-            }
-          }
-        }
-      }
-    });
-
-    try {
-      const batch = writeBatch(db);
-      const limit = 400; // Keep safely under 500
-      let updatedCount = 0;
-
-      for (let i = 0; i < missingInvoices.length; i++) {
-        const e = missingInvoices[i];
-        if (!e.id) continue;
-        
-        let prefix = 'TX';
-        const txType = e.tx || '';
-        if (txType.includes('بيع')) prefix = 'S';
-        else if (txType.includes('شراء')) prefix = 'P';
-        else if (txType.includes('مصاريف') || txType.includes('مصروف')) prefix = 'E';
-        else if (txType.includes('مسحوبات')) prefix = 'W';
-        else if (txType.includes('قبض')) prefix = 'R';
-        else if (txType.includes('دفع')) prefix = 'D';
-        else if (txType.includes('تحويل')) prefix = 'T';
-        else if (txType.includes('تيفيت')) prefix = 'M';
-        else if (txType.includes('تسوية') || txType.includes('عجز') || txType.includes('زيادة')) prefix = 'ADJ';
-        else if (txType.includes('تصليح')) prefix = 'RP';
-
-        if (!maxNums[prefix]) maxNums[prefix] = 0;
-        maxNums[prefix]++;
-        const newInvoiceNum = `${prefix}${maxNums[prefix]}`;
-        
-        batch.update(doc(db, 'entries', e.id), { invoiceNumber: newInvoiceNum });
-        updatedCount++;
-
-        if (updatedCount >= limit) {
-          await batch.commit();
-          alert("تم ترقيم عدد كبير من القيود، يرجى الضغط مرة أخرى لاستكمال الباقي");
-          setIsImporting(false);
-          return;
-        }
-      }
-
-      if (updatedCount > 0) {
-        await batch.commit();
-      }
-      
-      alert(`تم إضافة أرقام تسلسلية لـ ${updatedCount} قيد قديم بنجاح!`);
-    } catch (error) {
-      console.error("Migration error:", error);
-      setGlobalError("فشل في ترقيم القيود القديمة.");
-    } finally {
-      setIsImporting(false);
-    }
+    setGlobalError('الترقيم الرجعي الذي يعيد كتابة القيود التاريخية متوقف بعد Central Accounting Cutover. أي Migration تاريخي يحتاج مسارًا منفصلًا ومعتمدًا.');
   };
 
   const handleExportData = (mode: 'new' | 'update') => {
@@ -565,55 +451,7 @@ export const SettingsView = React.memo(() => {
   };
 
   const handleImport = async () => {
-    if (!importText.trim()) return;
-    if (operationWritesLocked) {
-      setGlobalError('لا يمكن استيراد عمليات أثناء تشغيل أو فشل إعادة احتساب التكلفة.');
-      return;
-    }
-    setIsImporting(true);
-    setImportProgress(null);
-    
-    try {
-      const importedRows = parseSettingsEntryCsv(importText);
-      const total = importedRows.length;
-      let success = 0;
-      let failed = 0;
-      
-      setImportProgress({ current: 0, total, success: 0, failed: 0 });
-
-      for (let i = 0; i < importedRows.length; i++) {
-        try {
-          const { date, tx, debit, credit, cash, weight, notes, karat, count, arabicWeight, multiplier } = importedRows[i];
-          
-          await addDoc(collection(db, 'entries'), {
-            date: date || "",
-            tx: tx || "",
-            debit: debit || "",
-            credit: credit || "",
-            cash: cash || "0",
-            weight: weight || "0",
-            notes: notes || "",
-            karat: karat === null ? null : parseInt(String(karat), 10),
-            count: count || "0",
-            arabicWeight: arabicWeight || "0",
-            multiplier: multiplier === null ? null : parseFloat(String(multiplier)),
-            userId: user.uid,
-            createdAt: new Date().toISOString()
-          });
-          success++;
-        } catch (err) {
-          failed++;
-        }
-        setImportProgress({ current: i + 1, total, success, failed });
-      }
-      setImportText('');
-      alert(`اكتمل الاستيراد: ${success} ناجح، ${failed} فشل`);
-    } catch (error) {
-      alert("حدث خطأ أثناء الاستيراد");
-    } finally {
-      setIsImporting(false);
-      setImportProgress(null);
-    }
+    setGlobalError('استيراد قيود CSV المباشر متوقف بعد Central Accounting Cutover. الاستيراد التاريخي يحتاج Migration معتمد ولا يمر من Writer اليومي.');
   };
 
   return (

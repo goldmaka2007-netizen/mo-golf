@@ -69,7 +69,7 @@ const cutoverCatalog: readonly CanonicalOperationDefinition[] = CANONICAL_OPERAT
 );
 
 describe('Central Accounting Write Preflight Phase 5A', () => {
-  it('keeps the real default gate blocked while a transition-only writer is still selectable', () => {
+  it('keeps legacy adjustment resolvable for history while the approved default catalog has no transition writer', () => {
     const candidate = entry();
     const before = JSON.stringify(candidate);
     const result = buildCentralAccountingWritePreflight({
@@ -81,11 +81,9 @@ describe('Central Accounting Write Preflight Phase 5A', () => {
       source: 'user',
     });
 
-    expect(result.ready).toBe(false);
-    expect(result.blockers).toEqual(expect.arrayContaining([
-      expect.objectContaining({ code: 'registry_not_cutover_ready' }),
-    ]));
-    expect(result.coverage.transitionOperationsStillWritable).toContain('inventory.adjustment.legacy');
+    expect(result.ready).toBe(true);
+    expect(result.blockers).toEqual([]);
+    expect(result.coverage.transitionOperationsStillWritable).toEqual([]);
     expect(JSON.stringify(candidate)).toBe(before);
   });
 
@@ -228,6 +226,72 @@ describe('Central Accounting Write Preflight Phase 5A', () => {
     ]));
   });
 
+  it('blocks a duplicate invoice number on create after whitespace normalization', () => {
+    const existing = entry({ id: 'existing-invoice', invoiceNumber: ' TX1 ' });
+    const result = buildCentralAccountingWritePreflight({
+      entry: entry({ id: 'new-invoice', invoiceNumber: 'TX1' }),
+      entries: [existing],
+      accounts,
+      openingCostConfig: [],
+      manualAccountDefinitions: approvedDefinitions(accounts, [existing]),
+      operationCatalog: cutoverCatalog,
+      source: 'user',
+    });
+
+    expect(result.ready).toBe(false);
+    expect(result.blockers).toEqual(expect.arrayContaining([
+      expect.objectContaining({ code: 'invoice_number_conflict' }),
+    ]));
+  });
+
+  it('allows an update to keep its own normalized invoice number', () => {
+    const existing = entry({
+      id: 'own-invoice', invoiceNumber: ' TX1 ', operationKind: 'expense',
+      debitAccountId: expense.id, creditAccountId: cash.id,
+    });
+    const result = buildCentralAccountingWritePreflight({
+      entry: { ...existing, invoiceNumber: 'TX1', notes: 'correction' },
+      entries: [existing],
+      accounts,
+      openingCostConfig: [],
+      manualAccountDefinitions: approvedDefinitions(accounts, [existing]),
+      operationCatalog: cutoverCatalog,
+      source: 'user',
+      mode: 'update',
+    });
+
+    expect(result.ready).toBe(true);
+    expect(result.blockers).not.toEqual(expect.arrayContaining([
+      expect.objectContaining({ code: 'invoice_number_conflict' }),
+    ]));
+  });
+
+  it('blocks an update that changes to another Entry invoice number', () => {
+    const existing = entry({
+      id: 'first-invoice', invoiceNumber: 'TX1', operationKind: 'expense',
+      debitAccountId: expense.id, creditAccountId: cash.id,
+    });
+    const other = entry({
+      id: 'other-invoice', seq: 2, invoiceNumber: ' TX2 ', operationKind: 'expense',
+      debitAccountId: expense.id, creditAccountId: cash.id,
+    });
+    const result = buildCentralAccountingWritePreflight({
+      entry: { ...existing, invoiceNumber: 'TX2' },
+      entries: [existing, other],
+      accounts,
+      openingCostConfig: [],
+      manualAccountDefinitions: approvedDefinitions(accounts, [existing, other]),
+      operationCatalog: cutoverCatalog,
+      source: 'user',
+      mode: 'update',
+    });
+
+    expect(result.ready).toBe(false);
+    expect(result.blockers).toEqual(expect.arrayContaining([
+      expect.objectContaining({ code: 'invoice_number_conflict' }),
+    ]));
+  });
+
   it('fails closed for an unknown operation instead of consulting legacy operation rules', () => {
     const result = buildCentralAccountingWritePreflight({
       entry: entry({ tx: 'عملية غير معروفة' }),
@@ -262,6 +326,30 @@ describe('Central Accounting Write Preflight Phase 5A', () => {
       expect.objectContaining({ code: 'operation_kind_conflict' }),
     ]));
     expect(result.preparedEntry?.operationKind).toBe('expense');
+  });
+
+  it.each([
+    { canonicalOperationId: 'sale.gold' },
+    { canonicalOperationVersion: 999 },
+  ])('fails closed when supplied canonical operation identity contradicts the Registry: %o', patch => {
+    const result = buildCentralAccountingWritePreflight({
+      entry: entry(patch),
+      entries: [],
+      accounts,
+      openingCostConfig: [],
+      manualAccountDefinitions: approvedDefinitions(accounts),
+      operationCatalog: cutoverCatalog,
+      source: 'user',
+    });
+
+    expect(result.ready).toBe(false);
+    expect(result.blockers).toEqual(expect.arrayContaining([
+      expect.objectContaining({ code: 'operation_identity_conflict' }),
+    ]));
+    expect(result.preparedEntry).toMatchObject({
+      canonicalOperationId: 'expense.operating',
+      canonicalOperationVersion: 1,
+    });
   });
 
   it('does not allow a system-generated operation to be submitted from the user path', () => {

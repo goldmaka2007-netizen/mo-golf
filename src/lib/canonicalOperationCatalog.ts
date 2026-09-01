@@ -220,7 +220,7 @@ export const CANONICAL_OPERATION_CATALOG: readonly CanonicalOperationDefinition[
     decisionSource: 'Owner-approved Tifeet Grill 2026-08-31',
   },
   {
-    id: 'inventory.adjustment.legacy', displayName: 'تسوية', aliases: ['تسوية'], version: 1, operationKind: 'adjustment', domain: 'inventory', availability: 'transition_only', userSelectable: true, systemGenerated: false,
+    id: 'inventory.adjustment.legacy', displayName: 'تسوية', aliases: ['تسوية'], version: 1, operationKind: 'adjustment', domain: 'inventory', availability: 'transition_only', userSelectable: false, systemGenerated: false,
     accountRoles: ['inventory_item', 'inventory_adjustment_counterpart'], fieldPolicy: fields('optional', 'account_defined', 'account_defined'),
     contract: contract('operation_specific', 'adjust', { requiresInventoryCostTimeline: true, revenue: 'operation_specific', cogs: 'forbidden', forbidsMarketPriceAsInventoryCost: true }),
     decisionSource: 'Current Production compatibility + owner-approved split target 2026-08-31',

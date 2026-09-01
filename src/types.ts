@@ -40,6 +40,13 @@ export interface Entry {
   legacySourceHash?: string;
   tx: string;
   operationKind?: AccountingOperationKind;
+  /** Stable Central operation contract identity for new/modified Entries after Cutover. */
+  canonicalOperationId?: string;
+  canonicalOperationVersion?: number;
+  /** Latest explicit correction metadata. Full correction history lives in audit_logs. */
+  modifiedAt?: any;
+  modifiedBy?: string;
+  modificationReason?: string;
   subTx?: string;
   debit: string;
   credit: string;

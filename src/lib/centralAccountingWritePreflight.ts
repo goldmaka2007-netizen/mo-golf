@@ -23,6 +23,7 @@ export type CentralWriteBlockerCode =
   | 'operation_unknown'
   | 'operation_ambiguous'
   | 'operation_kind_conflict'
+  | 'operation_identity_conflict'
   | 'operation_not_writable'
   | 'account_unknown'
   | 'account_ambiguous'
@@ -30,6 +31,7 @@ export type CentralWriteBlockerCode =
   | 'account_missing_stable_id'
   | 'create_id_conflict'
   | 'update_target_missing'
+  | 'invoice_number_conflict'
   | 'accounting_policy'
   | 'numbering_policy'
   | 'posting_invalid'
@@ -200,6 +202,19 @@ export const buildCentralAccountingWritePreflight = ({
         message: `Stored operationKind ${entry.operationKind} contradicts Central operation ${operation.operationKind}.`,
       });
     }
+    if (entry.canonicalOperationId && entry.canonicalOperationId !== operation.id) {
+      blockers.push({
+        code: 'operation_identity_conflict',
+        message: `Stored canonicalOperationId ${entry.canonicalOperationId} contradicts Central operation ${operation.id}.`,
+      });
+    }
+    if (entry.canonicalOperationVersion !== undefined
+      && entry.canonicalOperationVersion !== operation.version) {
+      blockers.push({
+        code: 'operation_identity_conflict',
+        message: `Stored canonicalOperationVersion ${entry.canonicalOperationVersion} contradicts Central operation version ${operation.version}.`,
+      });
+    }
     if (!operationIsWritable(operation, source)) {
       blockers.push({
         code: 'operation_not_writable',
@@ -217,9 +232,25 @@ export const buildCentralAccountingWritePreflight = ({
   const preparedEntry: Entry = {
     ...entry,
     operationKind: operation.operationKind,
+    canonicalOperationId: operation.id,
+    canonicalOperationVersion: operation.version,
     debitAccountId: debit.sourceAccountId,
     creditAccountId: credit.sourceAccountId,
   };
+
+  const normalizedInvoiceNumber = String(preparedEntry.invoiceNumber || '').trim();
+  if (normalizedInvoiceNumber) {
+    const conflict = entries.some(existing =>
+      String(existing.invoiceNumber || '').trim() === normalizedInvoiceNumber
+      && (mode !== 'update' || existing.id !== preparedEntry.id),
+    );
+    if (conflict) {
+      blockers.push({
+        code: 'invoice_number_conflict',
+        message: `Invoice number is already used by another Entry: ${normalizedInvoiceNumber}`,
+      });
+    }
+  }
 
   const accountingPolicyIssues = validateAccountingPolicy(preparedEntry, accounts);
   accountingPolicyIssues.forEach(issue => blockers.push({

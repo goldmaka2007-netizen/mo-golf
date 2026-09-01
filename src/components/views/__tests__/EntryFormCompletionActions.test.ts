@@ -39,14 +39,15 @@ describe('EntryForm completion actions', () => {
     expect(source).not.toContain('continueSameInvoice');
   });
 
-  it('places invoice accounting fields on the entry before save-time policy validation', () => {
+  it('places invoice accounting fields on the entry before Central save validation', () => {
     const source = readFileSync(new URL('../EntryForm.tsx', import.meta.url), 'utf8');
     const entryFields = source.indexOf('marketPrice: formData.marketPrice');
-    const policyValidation = source.indexOf('validateAccountingPolicy(entry, accountsDb)');
+    const centralSave = source.indexOf('createCentralAccountingEntry({');
 
     expect(entryFields).toBeGreaterThanOrEqual(0);
     expect(source.indexOf('karat: formData.karat ?? undefined')).toBeGreaterThanOrEqual(0);
-    expect(entryFields).toBeLessThan(policyValidation);
+    expect(centralSave).toBeGreaterThan(entryFields);
+    expect(source).not.toContain('validateAccountingPolicy(entry, accountsDb)');
     expect(source).not.toContain('if (formData.karat) entry.karat = formData.karat;');
     expect(source).not.toContain('if (formData.marketPrice !== undefined) entry.marketPrice = formData.marketPrice;');
   });
