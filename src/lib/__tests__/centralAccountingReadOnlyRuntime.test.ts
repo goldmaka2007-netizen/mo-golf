@@ -2,11 +2,15 @@ import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
 import type { Account, Entry } from '../../types';
 import {
+  buildCentralAccountingReadOnlyRuntimeFinancialStatements,
   buildCentralAccountingReadOnlyRuntimeGeneralLedger,
+  buildCentralAccountingReadOnlyRuntimeMonthlyFinancialPosition,
   buildCentralAccountingReadOnlyRuntimeTrialBalance,
 } from '../centralAccountingReadOnlyRuntime';
 import { computePeriodAccountBalances } from '../engine';
+import { buildFinancialStatementsEgp } from '../financialStatementsEgp';
 import { buildLedgerReport, getAvailableDimensions, type LedgerReport } from '../ledgerReport';
+import { buildMonthlyFinancialPosition } from '../monthlyFinancialPosition';
 import { buildUnifiedTrialBalance } from '../unifiedTrialBalance';
 
 const account = (patch: Partial<Account>): Account => ({
@@ -263,8 +267,128 @@ describe('Central Accounting Read-Only Runtime Phase 4B — General Ledger', () 
       expect(runtime.summaryReports).toEqual([]);
     });
   });
+});
 
-  it('keeps Central runtime lightweight and free from fallback accounting authority', () => {
+describe('Central Accounting Read-Only Runtime Phase 4C — EGP Financial Statements', () => {
+  it('matches the existing EGP Financial Statements engine after Registry-approved identity', () => {
+    const rows = [entry({ operationKind: undefined })];
+    const before = JSON.stringify(rows);
+    const options = { incomeStartDate: '2026-08-01', incomeEndDate: '2026-08-31' };
+
+    const runtime = buildCentralAccountingReadOnlyRuntimeFinancialStatements({ accounts, entries: rows, options });
+    const legacy = buildFinancialStatementsEgp(rows, accounts, options);
+
+    expect(runtime.status).toBe('ready');
+    expect(runtime.shadow.status).toBe('compared');
+    expect(runtime.shadow.exactParity).toBe(true);
+    expect(runtime.financialStatements).toEqual(legacy);
+    expect(JSON.stringify(rows)).toBe(before);
+    expect(rows[0].operationKind).toBeUndefined();
+  });
+
+  it('excludes later irrelevant rows before Income Statement Shadow without changing the requested period', () => {
+    const valid = entry({ operationKind: undefined, date: '2026-08-31' });
+    const futureUnknown = entry({ id: 'future', seq: 2, tx: 'عملية مستقبلية غير معروفة', operationKind: 'other', date: '2026-09-15' });
+    const options = { incomeStartDate: '2026-08-01', incomeEndDate: '2026-08-31' };
+
+    const runtime = buildCentralAccountingReadOnlyRuntimeFinancialStatements({ accounts, entries: [valid, futureUnknown], options });
+    const legacy = buildFinancialStatementsEgp([valid], accounts, options);
+
+    expect(runtime.status).toBe('ready');
+    expect(runtime.shadow.parity?.rows).toHaveLength(1);
+    expect(runtime.financialStatements?.incomeStatement).toEqual(legacy.incomeStatement);
+  });
+
+  it('matches the existing monthly Financial Position engine at the same cutoff', () => {
+    const rows = [entry({ operationKind: undefined })];
+    const before = JSON.stringify(rows);
+    const args = {
+      accounts,
+      entries: rows,
+      canonicalDefinitions: [],
+      openingCostConfig: [],
+      cutoffDate: '2026-08-31',
+    };
+
+    const runtime = buildCentralAccountingReadOnlyRuntimeMonthlyFinancialPosition(args);
+    const legacy = buildMonthlyFinancialPosition(args);
+
+    expect(runtime.status).toBe('ready');
+    expect(runtime.shadow.exactParity).toBe(true);
+    expect(runtime.financialPosition).toEqual(legacy);
+    expect(JSON.stringify(rows)).toBe(before);
+    expect(rows[0].operationKind).toBeUndefined();
+  });
+
+  it('excludes future unknown operations before monthly Financial Position Shadow', () => {
+    const valid = entry({ operationKind: undefined, date: '2026-08-31' });
+    const futureUnknown = entry({ id: 'future', seq: 2, tx: 'عملية مستقبلية غير معروفة', operationKind: 'other', date: '2026-09-15' });
+    const args = {
+      accounts,
+      entries: [valid, futureUnknown],
+      canonicalDefinitions: [],
+      openingCostConfig: [],
+      cutoffDate: '2026-08-31',
+    };
+
+    const runtime = buildCentralAccountingReadOnlyRuntimeMonthlyFinancialPosition(args);
+    const legacy = buildMonthlyFinancialPosition(args);
+
+    expect(runtime.status).toBe('ready');
+    expect(runtime.shadow.parity?.rows).toHaveLength(1);
+    expect(runtime.financialPosition).toEqual(legacy);
+  });
+
+  it('keeps historical inactive accounts Shadow-only and source objects immutable', () => {
+    const historicalAccounts: Account[] = [
+      account({ id: 'cash', name: 'الخزنة', type: 'cash' }),
+      account({ id: 'silver-old', name: 'كسر فضة قديم', type: 'silver', metal: 'silver', is_inventory: true, balanceNature: 'جرام فضة', isActive: false }),
+    ];
+    const rows = [entry({ debit: 'كسر فضة قديم', debitAccountId: 'silver-old', operationKind: undefined })];
+    const accountsBefore = JSON.stringify(historicalAccounts);
+    const rowsBefore = JSON.stringify(rows);
+
+    const runtime = buildCentralAccountingReadOnlyRuntimeFinancialStatements({
+      accounts: historicalAccounts,
+      entries: rows,
+      options: { incomeStartDate: '2026-08-01', incomeEndDate: '2026-08-31' },
+    });
+
+    expect(runtime.status).toBe('ready');
+    expect(runtime.shadow.exactParity).toBe(true);
+    expect(runtime.shadow.parity?.rows[0]?.canonicalResult.issues.map(issue => issue.code)).not.toContain('unknown_account');
+    expect(JSON.stringify(historicalAccounts)).toBe(accountsBefore);
+    expect(JSON.stringify(rows)).toBe(rowsBefore);
+    expect(historicalAccounts[1].isActive).toBe(false);
+  });
+
+  it('fails closed before either Financial Statement engine on relevant invalid identity', () => {
+    [
+      entry({ operationKind: 'sale' }),
+      entry({ tx: 'عملية غير معروفة', operationKind: 'other' }),
+      entry({ tx: '', operationKind: undefined }),
+      entry({ tx: '   ', operationKind: undefined }),
+    ].forEach(row => {
+      const income = buildCentralAccountingReadOnlyRuntimeFinancialStatements({
+        accounts,
+        entries: [row],
+        options: { incomeEndDate: '2026-12-31' },
+      });
+      const position = buildCentralAccountingReadOnlyRuntimeMonthlyFinancialPosition({
+        accounts,
+        entries: [row],
+        canonicalDefinitions: [],
+        openingCostConfig: [],
+        cutoffDate: '2026-12-31',
+      });
+      expect(income.status).toBe('blocked');
+      expect(income.financialStatements).toBeNull();
+      expect(position.status).toBe('blocked');
+      expect(position.financialPosition).toBeNull();
+    });
+  });
+
+  it('keeps Central runtime read-only and free from fallback accounting authority', () => {
     const source = readFileSync(new URL('../centralAccountingReadOnlyRuntime.ts', import.meta.url), 'utf8');
 
     expect(source).toMatch(/buildCentralAccountingShadowReport/);
@@ -272,10 +396,10 @@ describe('Central Accounting Read-Only Runtime Phase 4B — General Ledger', () 
     expect(source).toMatch(/canonicalResult\.operationKind/);
     expect(source).toMatch(/buildUnifiedTrialBalance/);
     expect(source).toMatch(/buildLedgerReport/);
-    expect(source).toMatch(/getAvailableDimensions/);
-    expect(source).toMatch(/computePeriodAccountBalances/);
+    expect(source).toMatch(/buildFinancialStatementsEgp/);
+    expect(source).toMatch(/buildMonthlyFinancialPosition/);
     expect(source).not.toMatch(/buildCentralAccountingReadOnlyOutputEvidence/);
-    expect(source).not.toMatch(/buildFinancialStatementsEgp|buildLegacyLedgerLegs/);
+    expect(source).not.toMatch(/buildLegacyLedgerLegs/);
     expect(source).not.toMatch(/\?\?\s*entry\.operationKind/);
     expect(source).not.toMatch(/RAW_DATA|OPERATION_RULES|CATS/);
     expect(source).not.toMatch(/from ['"]firebase|setDoc\(|addDoc\(|deleteDoc\(|writeBatch\(/);
