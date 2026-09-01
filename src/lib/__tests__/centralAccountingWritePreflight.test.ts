@@ -182,6 +182,34 @@ describe('Central Accounting Write Preflight Phase 5A', () => {
     expect(JSON.stringify([existing])).toBe(beforeRows);
   });
 
+  it('keeps the stored account labels during unrelated updates while stable IDs remain authoritative', () => {
+    const existing = entry({
+      id: 'renamed-account-entry',
+      operationKind: 'expense',
+      debit: 'مصروف تشغيل — الاسم التاريخي',
+      debitAccountId: expense.id,
+      creditAccountId: cash.id,
+    });
+    const result = buildCentralAccountingWritePreflight({
+      entry: { ...existing, notes: 'note only' },
+      entries: [existing],
+      accounts,
+      openingCostConfig: [],
+      manualAccountDefinitions: approvedDefinitions(accounts, [existing]),
+      operationCatalog: cutoverCatalog,
+      source: 'user',
+      mode: 'update',
+    });
+
+    expect(result.ready).toBe(true);
+    expect(result.preparedEntry).toMatchObject({
+      debit: 'مصروف تشغيل — الاسم التاريخي',
+      debitAccountId: expense.id,
+      credit: cash.name,
+      creditAccountId: cash.id,
+    });
+  });
+
   it('fails closed when an update target cannot be resolved exactly once', () => {
     const result = buildCentralAccountingWritePreflight({
       entry: entry({ id: 'missing-entry' }),
