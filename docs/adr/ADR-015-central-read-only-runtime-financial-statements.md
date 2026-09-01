@@ -46,6 +46,7 @@ Rules:
 11. `FinancialStatementsView` remains a presentation-only wrapper. No duplicate accounting calculation is added there.
 12. Phase 4C does not change EntryForm, save/edit contracts, Production writer, Posting Matrix, Inventory WAC/COGS, Merchant Metal WAC, Balance Engine semantics, Financial Statement or Equity accounting semantics, shared `accountRegistry`, historical Firestore data, Firebase backend resources, or Golden Baseline.
 13. Phase 4C does not authorize deployment.
+14. Phase 4C is not complete until independent verification confirms Income Statement, Financial Position, Equity Statement, Phase 4A Trial Balance, and Phase 4B General Ledger behavior on the exact branch HEAD.
 
 ## Cutoff behavior
 
