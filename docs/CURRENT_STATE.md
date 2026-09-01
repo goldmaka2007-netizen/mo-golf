@@ -75,21 +75,23 @@ Last reviewed: 2026-09-01
 - Semantic parity vs origin/main, dimensions/order, period balances/rows, summary behavior, date cutoff, account selection, historical inactive compatibility, source immutability and Phase 4A Trial Balance regression all passed independent review.
 - No protected accounting/data surface changed. No Firebase/Firestore write occurred. No Production runtime activation or deployment occurred.
 
-### Phase 4C — EGP Financial Statements Central read-only runtime wiring
+### Phase 4C — EGP Financial Reporting Central read-only runtime wiring
 
-- Owner approved continuation to the final currently planned read-only runtime consumer on 2026-09-01.
+- Owner approved continuation to the final read-only reporting consumers on 2026-09-01, and explicitly approved including the separate Statement of Changes in Equity in the same Phase 4C after a direct-React accounting bypass was identified during self-review.
 - Working branch: `feature/central-read-only-runtime-financial-statements-phase4c`, created from `main` `45a524a73c677fdfd9e90a82cbc092c4f9f619bd`.
+- Draft PR: `#24`.
 - Status: `CODE IMPLEMENTATION COMPLETE / REPOSITORY VERIFICATION PENDING / NOT MERGED / NOT DEPLOYED`.
 - Decision: D-026 / ADR-015.
-- Scope covers the existing EGP Income Statement and monthly Financial Position views. `FinancialStatementsView` remains a presentation-only wrapper around those same two child views, so its Income/Balance tabs use the Central path automatically.
+- Scope covers the EGP Income Statement, monthly Financial Position, and Statement of Changes in Equity. `FinancialStatementsView` remains a presentation-only wrapper around the Income and Financial Position child views.
 - Approved Income flow: `Income Statement UI → Central read-only runtime adapter → Entries on/before requested income end date → referenced inactive-account Shadow compatibility copies → exact Registry-gated Shadow → complete Registry-approved temporary Entry identity → existing buildFinancialStatementsEgp`.
 - Approved Financial Position flow: `Financial Position UI/export → Central read-only runtime adapter → Entries on/before selected cutoff → referenced inactive-account Shadow compatibility copies → exact Registry-gated Shadow → complete Registry-approved temporary Entry identity → existing buildMonthlyFinancialPosition`.
-- `buildFinancialStatementsEgp`, `buildMonthlyFinancialPosition`, Cost Timeline behavior and Financial Statement accounting semantics remain unchanged.
-- Financial Position CSV export now uses the same Central monthly runtime boundary; React no longer directly calls the monthly Financial Position engine for export.
-- An existing monthly `available=false` Cost Timeline diagnostic remains distinct from a Central identity blocker and retains its existing UI behavior.
-- Relevant later entries are excluded before Shadow so an unrelated future invalid operation cannot block an earlier Income period or Financial Position cutoff.
+- Approved Equity flow: `Equity Statement UI → Central read-only runtime adapter → Entries on/before selected cutoff → referenced inactive-account Shadow compatibility copies → exact Registry-gated Shadow → complete Registry-approved temporary Entry identity → existing buildEquityStatementEgp + existing Balance Engine diagnostic`.
+- `buildFinancialStatementsEgp`, `buildMonthlyFinancialPosition`, `buildEquityStatementEgp`, Cost Timeline behavior, Balance Engine semantics, and financial-reporting accounting semantics remain unchanged.
+- Financial Position CSV export uses the same Central monthly runtime boundary; React no longer directly calls the monthly Financial Position engine for export.
+- Equity UI no longer directly calls `buildEquityStatementEgp` or `computeAccountBalances`; both execute behind the Central runtime boundary.
+- Existing Financial Position Cost Timeline unavailable states and Equity reconciliation diagnostics remain engine-level diagnostics after Central identity succeeds; they are not reclassified as Central identity blockers.
+- Relevant later entries are excluded before Shadow so an unrelated future invalid operation cannot block an earlier Income period, Financial Position cutoff, or Equity cutoff.
 - Source Account/Entry objects remain unchanged; inactive historical compatibility stays Shadow-only; no stored `Entry.operationKind` fallback was introduced.
-- The separate Equity Statement report is not rewired by this Phase 4C scope; it is not part of the current two-tab `FinancialStatementsView` wrapper and no Equity accounting behavior is changed.
 - Repository verification and an independent Evidence Pack are required before merge review. No deployment is authorized by this checkpoint.
 
 ## Protected accounting/data invariants
@@ -109,11 +111,11 @@ Central Registry Phases 1–4C changed none of these protected surfaces and made
 
 ## Current next gate
 
-- Verify Phase 4C EGP Financial Statements repository behavior and architecture on the exact branch HEAD.
-- If accepted, merge and synchronize GitHub + Notion + Google Drive; deployment remains separate and is not implied.
-- After the currently planned read-only consumers are verified and merged, the next architectural stage is EntryForm/write-path Cutover.
+- Verify Phase 4C EGP Financial Reporting repository behavior and architecture on the exact branch HEAD, including Income Statement, Financial Position, Equity Statement, cutoff behavior, fail-closed identity, source immutability, and Phase 4A/4B regression safety.
+- If independently accepted, present the owner with an explicit merge approval gate for PR `#24`; do not merge automatically.
+- After approved merge, synchronize GitHub + Notion + Google Drive and re-read all three before closing Phase 4C. Deployment remains separate and is not implied.
+- After the read-only consumers are verified and merged, the next architectural stage is EntryForm/write-path Cutover.
 - EntryForm/write-path Cutover remains protected and requires a separate explicit owner approval gate before implementation.
-- The separate Equity Statement remains unchanged by Phase 4C; any need to rewire it must be grounded separately rather than silently added to this scope.
 
 ## Other current notes
 
