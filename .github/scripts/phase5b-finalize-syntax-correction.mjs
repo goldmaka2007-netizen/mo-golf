@@ -25,6 +25,12 @@ replaceExact(
   '  return (',
   'Settings return duplicate marker',
 );
+replaceExact(
+  'src/components/views/EntryForm.tsx',
+  '    setFormData(prev => ({\n      ...initialFormState,\n      date: prev.date,\n      tx: prev.tx,',
+  '    setFormData(prev => ({\n      ...createInitialFormState(),\n      date: prev.date,\n      tx: prev.tx,',
+  'EntryForm same-type operation identity reset',
+);
 
 {
   const path = 'src/lib/centralAccountingWriteService.ts';
