@@ -75,6 +75,27 @@ Last reviewed: 2026-09-01
 - Semantic parity vs origin/main, dimensions/order, period balances/rows, summary behavior, date cutoff, account selection, historical inactive compatibility, source immutability and Phase 4A Trial Balance regression all passed independent review.
 - No protected accounting/data surface changed. No Firebase/Firestore write occurred. No Production runtime activation or deployment occurred.
 
+### Phase 4C — EGP Financial Reporting Central read-only runtime wiring
+
+- Owner approved continuation to the final read-only reporting consumers on 2026-09-01, and explicitly approved including the separate Statement of Changes in Equity in the same Phase 4C after a direct-React accounting bypass was identified during self-review.
+- Working branch: `feature/central-read-only-runtime-financial-statements-phase4c`, created from `main` `45a524a73c677fdfd9e90a82cbc092c4f9f619bd`.
+- Draft PR: `#24`.
+- Status: `CODE IMPLEMENTATION COMPLETE / RE-VERIFICATION PENDING / NOT MERGED / NOT DEPLOYED`.
+- Decision: D-026 / ADR-015.
+- Scope covers the EGP Income Statement, monthly Financial Position, and Statement of Changes in Equity. `FinancialStatementsView` remains a presentation-only wrapper around the Income and Financial Position child views.
+- Approved Income flow: `Income Statement UI → Central read-only runtime adapter → Entries on/before requested income end date → referenced inactive-account Shadow compatibility copies → exact Registry-gated Shadow → complete Registry-approved temporary Entry identity → existing buildFinancialStatementsEgp`.
+- Approved Financial Position flow: `Financial Position UI/export → Central read-only runtime adapter → Entries on/before selected cutoff → referenced inactive-account Shadow compatibility copies → exact Registry-gated Shadow → complete Registry-approved temporary Entry identity → existing buildMonthlyFinancialPosition`.
+- Approved Equity flow: `Equity Statement UI → Central read-only runtime adapter → Entries on/before selected cutoff → referenced inactive-account Shadow compatibility copies → exact Registry-gated Shadow → complete Registry-approved temporary Entry identity → existing buildEquityStatementEgp + existing Balance Engine diagnostic`.
+- `buildFinancialStatementsEgp`, `buildMonthlyFinancialPosition`, `buildEquityStatementEgp`, Cost Timeline behavior, Balance Engine semantics, and financial-reporting accounting semantics remain unchanged.
+- Financial Position CSV export uses the same Central monthly runtime boundary; React no longer directly calls the monthly Financial Position engine for export.
+- Equity UI no longer directly calls `buildEquityStatementEgp` or `computeAccountBalances`; both execute behind the Central runtime boundary.
+- Existing Financial Position Cost Timeline unavailable states and Equity reconciliation diagnostics remain engine-level diagnostics after Central identity succeeds; they are not reclassified as Central identity blockers.
+- Relevant later entries are excluded before Shadow so an unrelated future invalid operation cannot block an earlier Income period, Financial Position cutoff, or Equity cutoff.
+- Source Account/Entry objects remain unchanged; inactive historical compatibility stays Shadow-only; no stored `Entry.operationKind` fallback was introduced.
+- First independent acceptance on head `8515b5662bb5c1117a6e811f2579f3e4cfac7d1e` passed routing, identity safety, parity, cutoffs, focused `103/103`, full-suite `628 PASS / 13 FAIL`, and protected-surface checks, but blocked on two technical gates: a TypeScript union-narrowing error in Financial Position CSV export and an outdated Balance Contract guard that still required direct `computeAccountBalances` in `EquityStatementView`.
+- Corrections keep accounting/runtime semantics unchanged: Financial Position export now uses explicit `available === false` narrowing; the Balance Contract now requires Equity UI → Central Equity runtime routing and verifies that `computeAccountBalances` remains inside that Central adapter rather than restoring a direct React calculation.
+- Independent re-verification is required on the exact new HEAD before merge review. No deployment is authorized by this checkpoint.
+
 ## Protected accounting/data invariants
 
 Do not change without a separate explicit owner decision and approval:
@@ -88,15 +109,15 @@ Do not change without a separate explicit owner decision and approval:
 - Firestore Rules / Indexes / Functions / Storage / Auth.
 - Golden Baseline.
 
-Central Registry Phases 1–4B changed none of these protected surfaces and made no Production Firestore data write.
+Central Registry Phases 1–4C changed none of these protected surfaces and made no Production Firestore data write.
 
 ## Current next gate
 
-- Phase 4B General Ledger is merged and independently verified but not deployed.
-- EGP Financial Statements are the final remaining read-only runtime consumer before the EntryForm/write-path Cutover.
-- EGP Financial Statements require their own focused workflow, implementation and independent acceptance before merge.
-- EntryForm/write-path Cutover remains last and requires a separate explicit approval gate.
-- Deployment remains separate from merge and is not implied.
+- Re-verify Phase 4C EGP Financial Reporting repository behavior and architecture on the exact corrected branch HEAD, including TypeScript, Balance Contract, build, Income Statement, Financial Position, Equity Statement, cutoff behavior, fail-closed identity, source immutability, and Phase 4A/4B regression safety.
+- If independently accepted, present the owner with an explicit merge approval gate for PR `#24`; do not merge automatically.
+- After approved merge, synchronize GitHub + Notion + Google Drive and re-read all three before closing Phase 4C. Deployment remains separate and is not implied.
+- After the read-only consumers are verified and merged, the next architectural stage is EntryForm/write-path Cutover.
+- EntryForm/write-path Cutover remains protected and requires a separate explicit owner approval gate before implementation.
 
 ## Other current notes
 
@@ -107,12 +128,13 @@ Central Registry Phases 1–4B changed none of these protected surfaces and made
 
 ## Primary references
 
-- `docs/DECISIONS.md` — active decisions D-021 through D-025.
+- `docs/DECISIONS.md` — active decisions D-021 through D-026.
 - `docs/adr/ADR-010-central-accounting-registry.md`.
 - `docs/adr/ADR-011-central-accounting-shadow-orchestration.md`.
 - `docs/adr/ADR-012-central-read-only-output-evidence.md`.
 - `docs/adr/ADR-013-central-read-only-runtime-trial-balance.md`.
 - `docs/adr/ADR-014-central-read-only-runtime-general-ledger.md`.
+- `docs/adr/ADR-015-central-read-only-runtime-financial-statements.md`.
 
 ## Source roles and closure
 
