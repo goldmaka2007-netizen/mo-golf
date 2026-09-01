@@ -64,8 +64,9 @@ const comparable = (value: unknown): string => {
 };
 
 const IDEMPOTENT_BUSINESS_FIELDS: Array<keyof Entry> = [
-  'seq', 'tx', 'subTx', 'debit', 'credit', 'date', 'cash', 'weight', 'count', 'arabicWeight',
-  'karat', 'multiplier', 'notes', 'invoiceNumber', 'clientName', 'clientPhone', 'marketPrice', 'inventoryCheckId',
+  'seq', 'tx', 'subTx', 'debit', 'credit', 'debitAccountId', 'creditAccountId', 'date',
+  'cash', 'weight', 'count', 'arabicWeight', 'karat', 'multiplier', 'notes', 'invoiceNumber',
+  'clientName', 'clientPhone', 'marketPrice', 'inventoryCheckId',
 ];
 
 export const sameCentralOperationPayload = (before: Entry, after: Entry): boolean => (
