@@ -9,7 +9,7 @@ Last reviewed: 2026-09-01
 - Firebase project: `makka-central-accounting`.
 - Current deployed application commit: `5241d44d3251a515a81ec6004fb6ae8447a64956`.
 - Latest Production release family remains Smart Sale Product Groups + Bullion/Coin Price Board.
-- Central Registry / Shadow / Output Evidence work is **not deployed** and does not change current Production runtime behavior.
+- Central Registry / Shadow / Output Evidence / Runtime Wiring work is **not deployed** and does not change current Production runtime behavior.
 
 ## Central Accounting architecture — current checkpoint
 
@@ -40,22 +40,31 @@ Last reviewed: 2026-09-01
 - Status: `IMPLEMENTATION COMPLETE / VERIFIED / MERGED / NOT DEPLOYED`.
 - Decision: D-023 / ADR-012.
 - Approved evidence flow: `Central Registry → exact Central Shadow → complete Shadow parity identity → temporary in-memory normalized Entry copies → existing Ledger/financial projection → existing Unified Trial Balance → existing EGP Financial Statements`.
-- Phase 3 does not introduce another operation resolver, report accounting rule, writer, UI path, or Firebase persistence path.
 - Registry-approved operation identity comes exclusively from complete Shadow parity. Missing parity, row-count mismatch, or missing parity identity fails closed with `shadow_parity_incomplete`; `Entry.operationKind` is never a fallback authority.
-- Source Entry rows remain unchanged. Existing downstream engines are reused as-is and source-vs-normalized outputs must match exactly.
-- Final independent acceptance verification on the verified PR head:
-  - focused tests: `44/44 PASS` across 6 files;
-  - TypeScript: PASS;
-  - Balance Contract: PASS;
-  - build: PASS;
-  - `git diff --check`: PASS;
-  - full suite: `602 PASS / 13 FAIL`, with the same pre-existing failure set and 3 existing suite load errors;
-  - Architecture review: PASS;
-  - new Phase 3 regression: NO;
-  - Firebase/Firestore writes: NO;
-  - tracked verification changes: NO.
-- Protected accounting/data surfaces remain unchanged.
-- Phase 3 merging alone does **not** activate live Production Shadow/output execution and requires no deployment.
+- Final independent acceptance: focused `44/44 PASS` across 6 files; TypeScript, Balance Contract, build and `git diff --check` PASS; full suite `602 PASS / 13 FAIL` with the same pre-existing failure set; Architecture review PASS; no Firebase/Firestore writes.
+
+### Phase 4A — Unified Trial Balance Central read-only runtime wiring
+
+- Owner approved Phase 4 implementation on 2026-09-01; the first focused runtime consumer is the Unified Trial Balance.
+- Working branch: `feature/central-read-only-runtime-trial-balance-phase4`, created from `main` `d3544e2effe9b3a77223626c694c5823ec2af9a2`.
+- Draft PR: `#20`.
+- Previous independently reviewed head `9fe90e1847cad311019443db4dd777012b1b43d9` passed all repository/test gates but was blocked by historical inactive-account compatibility.
+- Current correction head: `4fb60f774b40eb08b3320d569ce3f7541412b09b`.
+- Status: `CORRECTION IMPLEMENTED / INDEPENDENT RE-VERIFICATION PENDING / NOT MERGED / NOT DEPLOYED`.
+- Decision: D-024 / ADR-013.
+- Phase 3 remains the offline acceptance proof that Registry-approved identity does not change Ledger, Unified Trial Balance, or EGP Financial Statement outputs; the interactive runtime does not recalculate that full evidence chain on every refresh.
+- Approved runtime flow: `Trial Balance UI → Central read-only runtime adapter → historical Shadow compatibility copies for referenced inactive accounts → Central Registry-gated exact Shadow + complete parity identity → temporary Registry-normalized Entries → existing buildUnifiedTrialBalance`.
+- The Trial Balance UI no longer directly invokes `buildUnifiedTrialBalance`; the existing engine remains the sole calculation engine behind the Central runtime adapter.
+- Runtime execution requires Central Shadow `status=compared`, non-null parity, and `exactParity=true`. Missing or contradictory identity or incomplete parity fails closed.
+- The first independent review proved the initial claim that simply passing all accounts to Shadow was insufficient: `buildAccountRegistry` excludes inactive source accounts from normal definitions while their IDs are still considered known.
+- The correction deliberately does **not** change the shared Registry contract. Only inactive accounts whose stable IDs are referenced by Entries inside the current report cutoff receive temporary in-memory Shadow-only copies with `isActive=true` so their stored historical metadata can be classified.
+- Original account objects remain inactive and unchanged. The final Trial Balance calculation still receives only the original active accounts, preserving pre-PR visibility and balance semantics.
+- A regression test compares the final runtime report with the pre-PR direct Trial Balance calculation for a representative inactive historical silver-inventory account and asserts no source mutation or stable-ID presentation leakage.
+- The UI does not silently fall back to the old direct runtime path when Central readiness blocks; it displays a blocked state.
+- Source Entries remain unchanged. No React/UI accounting rule, legacy RAW_DATA/CATS/OPERATION_RULES authority, Firebase persistence, or writer path was added.
+- Self-review removed an initially heavier design that reran the entire Phase 3 Ledger + Trial Balance + Financial Statements evidence on each UI refresh; final runtime uses only the exact Registry-gated Shadow plus the requested Trial Balance engine.
+- General Ledger and EGP Financial Statements are not switched by this first Phase 4A step; each requires focused runtime verification before widening the read-only migration.
+- Independent re-verification on the exact current correction head is required before merge review. No deployment is authorized by this checkpoint.
 
 ## Protected accounting/data invariants
 
@@ -70,13 +79,14 @@ Do not change without a separate explicit owner decision and approval:
 - Firestore Rules / Indexes / Functions / Storage / Auth.
 - Golden Baseline.
 
-Central Registry Phases 1–3 changed none of these protected surfaces and made no Production Firestore data write.
+Central Registry Phases 1–4A changed none of these protected surfaces and made no Production Firestore data write.
 
 ## Current next gate
 
-- The next architectural phase is **Phase 4: explicitly approved read-only runtime wiring** through the proven Central boundary.
-- Phase 4 must not be started automatically. It requires the normal Makka Change Workflow, current Reviewer Context review, current GitHub verification, and explicit owner approval before implementation.
-- EntryForm/write-path Cutover remains later and last. No writer switch, Cutover, or deployment is implied by Phases 1–3.
+- Independently re-verify Phase 4A on the exact correction HEAD.
+- If accepted, merge and synchronize GitHub + Notion + Google Drive; deployment remains separate and is not implied.
+- Remaining read-only runtime consumers are General Ledger and EGP Financial Statements before the final EntryForm/write-path Cutover.
+- EntryForm/write-path Cutover remains last and requires a separate explicit approval gate.
 
 ## Other current notes
 
@@ -87,11 +97,11 @@ Central Registry Phases 1–3 changed none of these protected surfaces and made 
 
 ## Primary references
 
-- `docs/DECISIONS.md` — active decisions D-021, D-022, D-023.
+- `docs/DECISIONS.md` — active decisions D-021 through D-024.
 - `docs/adr/ADR-010-central-accounting-registry.md`.
 - `docs/adr/ADR-011-central-accounting-shadow-orchestration.md`.
 - `docs/adr/ADR-012-central-read-only-output-evidence.md`.
-- Detailed Production release records remain in their dedicated release documents.
+- `docs/adr/ADR-013-central-read-only-runtime-trial-balance.md`.
 
 ## Source roles and closure
 

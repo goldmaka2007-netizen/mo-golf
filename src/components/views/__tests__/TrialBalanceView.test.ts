@@ -10,11 +10,22 @@ describe('TrialBalanceView mobile presentation', () => {
     expect(formatTrialDisplayAmount(5, 'quantity')).toBe('5');
     expect(formatTrialDisplayAmount(1.25, 'quantity')).toBe('1.25');
   });
+
   it('keeps mobile cards and desktop table in separate breakpoint layouts with bottom safe-area space', () => {
     const source = readFileSync(new URL('../reports/TrialBalanceView.tsx', import.meta.url), 'utf8');
     expect(source).toContain('md:hidden');
     expect(source).toContain('hidden md:block');
     expect(source).toContain('safe-area-inset-bottom');
     expect(source).toContain('tabular-nums');
+  });
+
+  it('routes runtime Trial Balance through the Central read-only adapter with no UI fallback', () => {
+    const source = readFileSync(new URL('../reports/TrialBalanceView.tsx', import.meta.url), 'utf8');
+
+    expect(source).toMatch(/buildCentralAccountingReadOnlyRuntimeTrialBalance/);
+    expect(source).not.toMatch(/buildUnifiedTrialBalance\(/);
+    expect(source).toContain('لم يتم الرجوع للمسار القديم');
+    expect(source).not.toMatch(/RAW_DATA|OPERATION_RULES|CATS/);
+    expect(source).not.toMatch(/setDoc\(|addDoc\(|deleteDoc\(|writeBatch\(/);
   });
 });
