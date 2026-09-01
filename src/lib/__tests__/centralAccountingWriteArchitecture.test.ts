@@ -31,9 +31,31 @@ const directEntryWriterPatterns = [
   /setDoc\s*\(\s*doc\([^\n)]*['"]entries['"]/s,
   /updateDoc\s*\(\s*doc\([^\n)]*['"]entries['"]/s,
   /deleteDoc\s*\(\s*doc\([^\n)]*['"]entries['"]/s,
-  /batch\.(?:delete|update|set)\s*\(\s*doc\([^\n)]*['"]entries['"]/s,
+  /(?:batch|transaction)\.(?:delete|update|set)\s*\(\s*doc\([^\n)]*['"]entries['"]/s,
   /doc\s*\(\s*collection\([^\n)]*['"]entries['"][\s\S]{0,2000}?(?:batch|transaction)\.(?:set|update|delete)\s*\(/s,
 ];
+
+const entryDocumentRefNames = (source: string): string[] => {
+  const names = new Set<string>();
+  const patterns = [
+    /(?:const|let|var)\s+([A-Za-z_$][\w$]*)\s*=\s*doc\s*\(\s*db\s*,\s*['"]entries['"]/g,
+    /(?:const|let|var)\s+([A-Za-z_$][\w$]*)\s*=\s*doc\s*\(\s*collection\([^\n)]*['"]entries['"][^)]*\)\s*\)/g,
+  ];
+  for (const pattern of patterns) {
+    for (const match of source.matchAll(pattern)) names.add(match[1]);
+  }
+  return [...names];
+};
+
+const escapedRegex = (value: string): string => value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+
+const writesThroughEntryRef = (source: string, methods: string): boolean => (
+  entryDocumentRefNames(source).some(refName => {
+    const ref = escapedRegex(refName);
+    return new RegExp(`(?:setDoc|updateDoc|deleteDoc)\\s*\\(\\s*${ref}\\b`).test(source)
+      || new RegExp(`(?:batch|transaction)\\.${methods}\\s*\\(\\s*${ref}\\b`).test(source);
+  })
+);
 
 describe('Central Accounting write architecture guard', () => {
   it('has no runtime accounting Entry writer outside the Central write service', () => {
@@ -43,7 +65,8 @@ describe('Central Accounting write architecture guard', () => {
         source: readFileSync(full, 'utf8'),
       }))
       .filter(file => file.path !== allowedWriter)
-      .filter(file => directEntryWriterPatterns.some(pattern => pattern.test(file.source)))
+      .filter(file => directEntryWriterPatterns.some(pattern => pattern.test(file.source))
+        || writesThroughEntryRef(file.source, '(?:set|update|delete)'))
       .map(file => file.path)
       .sort();
 
@@ -57,7 +80,8 @@ describe('Central Accounting write architecture guard', () => {
         source: readFileSync(full, 'utf8'),
       }))
       .filter(file => /deleteDoc\s*\(\s*doc\([^\n)]*['"]entries['"]/s.test(file.source)
-        || /batch\.delete\s*\(\s*doc\([^\n)]*['"]entries['"]/s.test(file.source))
+        || /(?:batch|transaction)\.delete\s*\(\s*doc\([^\n)]*['"]entries['"]/s.test(file.source)
+        || writesThroughEntryRef(file.source, 'delete'))
       .map(file => file.path)
       .sort();
 
