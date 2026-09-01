@@ -104,7 +104,7 @@ describe('inventory check settlement flow', () => {
 
   it('builds gold shortage and surplus adjustment entries with central metadata', () => {
     const shortage = prepare({ id: 'c1', accountId: 'ذهب 21', accountDbId: 'seed-account-ea099bf0071894125ad3', date: '2026-01-02', systemWeight: 10, actualWeight: 9, systemCount: 1, actualCount: 3, notes: '', userId });
-    expect(shortage).toMatchObject({ tx: 'تسوية', operationKind: 'adjustment', debit: 'عجز-الذهب', credit: 'ذهب 21', debitAccountId: 'gold-shortage', creditAccountId: 'seed-account-ea099bf0071894125ad3', weight: '1.00', count: '2.00', inventoryCheckId: 'c1' });
+    expect(shortage).toMatchObject({ tx: 'تسوية عجز', operationKind: 'adjustment', debit: 'عجز-الذهب', credit: 'ذهب 21', debitAccountId: 'gold-shortage', creditAccountId: 'seed-account-ea099bf0071894125ad3', weight: '1.00', count: '2.00', inventoryCheckId: 'c1' });
     expect(shortage.invoiceNumber).toBe('ADJ-2026-0001');
     expect(shortage.goldEquivalent21Snapshot?.equivalent21).toBe('1.00');
 

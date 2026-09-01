@@ -69,7 +69,7 @@ const cutoverCatalog: readonly CanonicalOperationDefinition[] = CANONICAL_OPERAT
 );
 
 describe('Central Accounting Write Preflight Phase 5A', () => {
-  it('keeps the real default gate blocked while a transition-only writer is still selectable', () => {
+  it('keeps legacy adjustment resolvable for history while the approved default catalog has no transition writer', () => {
     const candidate = entry();
     const before = JSON.stringify(candidate);
     const result = buildCentralAccountingWritePreflight({
@@ -81,11 +81,9 @@ describe('Central Accounting Write Preflight Phase 5A', () => {
       source: 'user',
     });
 
-    expect(result.ready).toBe(false);
-    expect(result.blockers).toEqual(expect.arrayContaining([
-      expect.objectContaining({ code: 'registry_not_cutover_ready' }),
-    ]));
-    expect(result.coverage.transitionOperationsStillWritable).toContain('inventory.adjustment.legacy');
+    expect(result.ready).toBe(true);
+    expect(result.blockers).toEqual([]);
+    expect(result.coverage.transitionOperationsStillWritable).toEqual([]);
     expect(JSON.stringify(candidate)).toBe(before);
   });
 

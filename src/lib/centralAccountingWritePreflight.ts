@@ -30,6 +30,7 @@ export type CentralWriteBlockerCode =
   | 'account_missing_stable_id'
   | 'create_id_conflict'
   | 'update_target_missing'
+  | 'invoice_number_conflict'
   | 'accounting_policy'
   | 'numbering_policy'
   | 'posting_invalid'
@@ -217,9 +218,25 @@ export const buildCentralAccountingWritePreflight = ({
   const preparedEntry: Entry = {
     ...entry,
     operationKind: operation.operationKind,
+    canonicalOperationId: operation.id,
+    canonicalOperationVersion: operation.version,
     debitAccountId: debit.sourceAccountId,
     creditAccountId: credit.sourceAccountId,
   };
+
+  const normalizedInvoiceNumber = String(preparedEntry.invoiceNumber || '').trim();
+  if (normalizedInvoiceNumber) {
+    const conflict = entries.some(existing =>
+      String(existing.invoiceNumber || '').trim() === normalizedInvoiceNumber
+      && (mode !== 'update' || existing.id !== preparedEntry.id),
+    );
+    if (conflict) {
+      blockers.push({
+        code: 'invoice_number_conflict',
+        message: `Invoice number is already used by another Entry: ${normalizedInvoiceNumber}`,
+      });
+    }
+  }
 
   const accountingPolicyIssues = validateAccountingPolicy(preparedEntry, accounts);
   accountingPolicyIssues.forEach(issue => blockers.push({

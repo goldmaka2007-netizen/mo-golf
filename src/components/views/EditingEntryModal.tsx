@@ -1,6 +1,6 @@
 import React from 'react';
 import { motion } from 'framer-motion';
-import { X, Trash2, Save, BarChart3, Printer } from 'lucide-react';
+import { X, Save, BarChart3, Printer } from 'lucide-react';
 import { Entry } from '../../types';
 import { useAppStore } from '../../store';
 import { cn } from '../../lib/utils';
@@ -13,10 +13,7 @@ import { AccountSearchSelect } from '../ui/AccountSearchSelect';
 interface EditingEntryModalProps {
   editingEntry: Partial<Entry> | null;
   setEditingEntry: (e: Partial<Entry> | null) => void;
-  handleUpdate: (e: React.FormEvent) => void;
-  handleDelete: (id: string) => void;
-  deleteConfirmId: string | null;
-  setDeleteConfirmId: (id: string | null) => void;
+  handleUpdate: (e: React.FormEvent, reason: string) => void;
   isUpdating?: boolean;
 }
 
@@ -24,12 +21,14 @@ export const EditingEntryModal = ({
   editingEntry,
   setEditingEntry,
   handleUpdate,
-  handleDelete,
-  deleteConfirmId,
-  setDeleteConfirmId,
   isUpdating
 }: EditingEntryModalProps) => {
   const { accounts, accountsDb, goldPrice, silverPrice } = useAppStore();
+  const [correctionReason, setCorrectionReason] = React.useState('');
+
+  React.useEffect(() => {
+    setCorrectionReason('');
+  }, [editingEntry?.id]);
 
   React.useEffect(() => {
     if (editingEntry && editingEntry.tx) {
@@ -137,7 +136,7 @@ export const EditingEntryModal = ({
           <p className="text-[10px] text-[#5a5548] font-bold uppercase tracking-widest">تحديث بيانات العملية المحفوظة</p>
         </div>
         
-        <form onSubmit={handleUpdate} className="space-y-6">
+        <form onSubmit={(event) => handleUpdate(event, correctionReason)} className="space-y-6">
           <div className="grid grid-cols-2 gap-3 bg-[#11141d]/10 p-2.5 rounded-3xl border border-[#1a1e2a] relative">
             <AccountSearchSelect 
               label="المدين"
@@ -313,45 +312,29 @@ export const EditingEntryModal = ({
           </div>
 
 
+          <div className="space-y-2">
+            <label className="text-xs text-[#c9a84c] font-bold uppercase tracking-widest px-1">سبب التعديل (إجباري)</label>
+            <textarea
+              value={correctionReason}
+              onChange={(event) => setCorrectionReason(event.target.value)}
+              className="w-full bg-[#080a0f] border border-[#c9a84c33] rounded-2xl p-4 text-base text-[#ddd8cc] outline-none focus:border-[#c9a84c] transition-all h-20 resize-none"
+              placeholder="اكتب سبب تصحيح القيد..."
+              required
+            />
+          </div>
+
           <div className="flex gap-4 pt-4">
-            {deleteConfirmId === editingEntry.id ? (
-              <div className="flex-1 flex gap-3">
-                <button 
-                  type="button" 
-                  onClick={() => setDeleteConfirmId(null)} 
-                  className="flex-1 py-4 bg-[#1a1e2a] text-[#5a5548] font-bold rounded-2xl border border-[#1a1e2a] hover:bg-[#252a3a] transition-all"
-                >
-                  إلغاء
-                </button>
-                <button 
-                  type="button" 
-                  onClick={() => handleDelete(editingEntry.id!)} 
-                  className="flex-1 py-4 bg-red-500/10 text-red-500 font-bold rounded-2xl border border-red-500/20 hover:bg-red-500/20 transition-all"
-                >
-                  تأكيد الحذف
-                </button>
-              </div>
-            ) : (
-              <button 
-                type="button" 
-                onClick={() => setDeleteConfirmId(editingEntry.id!)} 
-                className="flex-1 py-4 bg-red-500/5 text-red-500/60 font-bold rounded-2xl border border-red-500/10 hover:bg-red-500/10 hover:text-red-500 transition-all flex items-center justify-center gap-2"
-              >
-                <Trash2 className="w-4 h-4" />
-                حذف
-              </button>
-            )}
             <button 
               type="submit" 
-              disabled={isUpdating}
-              className="flex-[2] py-4 bg-gradient-to-r from-[#c9a84c] to-[#9a7830] text-[#080a0f] font-bold rounded-2xl shadow-lg shadow-[#c9a84c22] hover:shadow-[#c9a84c44] transition-all active:scale-95 flex items-center justify-center gap-2 disabled:opacity-50"
+              disabled={isUpdating || !correctionReason.trim()}
+              className="flex-1 py-4 bg-gradient-to-r from-[#c9a84c] to-[#9a7830] text-[#080a0f] font-bold rounded-2xl shadow-lg shadow-[#c9a84c22] hover:shadow-[#c9a84c44] transition-all active:scale-95 flex items-center justify-center gap-2 disabled:opacity-50"
             >
               {isUpdating ? (
                 <motion.div animate={{ rotate: 360 }} transition={{ repeat: Infinity, duration: 1 }}>
                   <BarChart3 className="w-4 h-4 animate-pulse" />
                 </motion.div>
               ) : <Save className="w-4 h-4" />}
-              حفظ التغييرات
+              حفظ التصحيح
             </button>
           </div>
         </form>

@@ -128,7 +128,7 @@ export const buildInventoryAdjustmentDraftEntry = (args: {
   const invoiceNumber = `ADJ-${year}-${String(sequence).padStart(4, '0')}`;
 
   const entry = {
-    tx: '\u062a\u0633\u0648\u064a\u0629',
+    tx: direction === 'shortage' ? 'تسوية عجز' : 'تسوية زيادة',
     operationKind: 'adjustment',
     debit,
     credit,

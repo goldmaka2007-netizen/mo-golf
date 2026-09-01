@@ -5,8 +5,6 @@ import {
   CheckCircle2,
 } from 'lucide-react';
 import { format } from 'date-fns';
-import { collection, addDoc, serverTimestamp } from 'firebase/firestore';
-import { db } from '../../firebase';
 import { Entry } from '../../types';
 import { CATS, RAW_DATA } from '../../constants';
 import { useAppStore } from '../../store';
@@ -30,6 +28,7 @@ import { buildAccountRegistry } from '../../lib/accountRegistry';
 import { buildCanonicalPosting } from '../../lib/postingMatrix';
 import { validateAccountingPolicy } from '../../lib/accountingPolicy';
 import { mergeGoldMerchantSettlementEntryRules } from '../../lib/merchantSettlementEntryOptions';
+import { createCentralAccountingEntry } from '../../lib/centralAccountingWriteService';
 import { GoldPricingAssistant } from './GoldPricingAssistant';
 import {
   createGoldAssistantSession,
@@ -381,28 +380,7 @@ export const EntryForm = React.memo(({ onStepChange }: EntryFormProps) => {
       return;
     }
 
-    // Check inventory balance for weight-based credit transactions
-    if (formData.tx?.includes('بيع') || formData.credit?.startsWith('12') || formData.credit?.startsWith('13')) {
-      const creditAccountId = formData.credit;
-      if (creditAccountId?.startsWith('12') || creditAccountId?.startsWith('13')) {
-        const requiredWeight = parseFloat(formData.weight || '0');
-        const currentBalance = entries.reduce((acc: number, current: Entry) => {
-          let bal = acc;
-          const w = parseFloat(current.weight || '0');
-          if (current.debit === creditAccountId) bal += w;
-          if (current.credit === creditAccountId) bal -= w;
-          return bal;
-        }, 0);
-
-        if (requiredWeight > currentBalance + 0.05) { // Add small epsilon for JS float precision
-          alert(`تنبيه: لا يوجد رصيد كافٍ. الرصيد المتاح: ${currentBalance.toFixed(2)}، المطلوب: ${requiredWeight.toFixed(2)}`);
-          return;
-        }
-      }
-    }
-
-    // Preparation of entry data
-    const entry: any = {
+    const entry: Entry = {
       tx: formData.tx || '',
       debit: formData.debit || '',
       credit: formData.credit || '',
@@ -422,90 +400,33 @@ export const EntryForm = React.memo(({ onStepChange }: EntryFormProps) => {
       clientPhone: formData.clientPhone || '',
       userId: user?.uid || '',
       seq: Date.now(),
-      createdAt: serverTimestamp()
     };
-
-    const identity = resolveEntryIdentity(entry, accountsDb);
-    if (identity.ok === false) {
-      setGlobalError(identity.message);
-      return;
-    }
-    Object.assign(entry, identity.value);
-
-    const accountingPolicyIssues = validateAccountingPolicy(entry, accountsDb);
-    if (accountingPolicyIssues.length > 0) {
-      setGlobalError(accountingPolicyIssues.map(issue => issue.message).join(' — '));
-      return;
-    }
-
-    const numberingValidation = validateEntryNumberingPolicy(entry);
-    if (!numberingValidation.valid) {
-      setGlobalError(`رفض سياسة ترقيم القيد: ${numberingValidation.issues.map(issue => issue.message).join(' — ')}`);
-      return;
-    }
-
-    const normalizedInvoiceNumber = String(entry.invoiceNumber || '').trim();
-    const invoiceNumberAlreadyUsed = normalizedInvoiceNumber && (
-      lastSavedInvoiceRef.current === normalizedInvoiceNumber
-      || entries.some(existing => String(existing.invoiceNumber || '').trim() === normalizedInvoiceNumber)
-    );
-    if (invoiceNumberAlreadyUsed) {
-      setGlobalError(`رقم الفاتورة ${normalizedInvoiceNumber} مستخدم بالفعل. كل عملية يجب أن يكون لها رقم فاتورة مستقل.`);
-      return;
-    }
-
-    // The legacy engine remains authoritative, while the central matrix acts
-    // as a save-time guard once the shadow registry has been initialized.
-    if (canonicalAccounts.length > 0) {
-      const shadowPosting = buildCanonicalPosting(entry as Entry, buildAccountRegistry(accountsDb, entries, canonicalAccounts));
-      if (!shadowPosting.valid) {
-        setGlobalError(`رفض Posting Matrix: ${shadowPosting.issues.map(issue => issue.message).join(' — ')}`);
-        return;
-      }
-    }
 
     setIsSaving(true);
     try {
-      if (isGoldEquivalentEntry(entry, accountsDb)) {
-        const calculationKarat = entry.karat ?? inferGoldKaratFromMultiplier(entry.multiplier);
-        if (!canCalculateGoldEquivalent21(entry.weight, calculationKarat)) {
-          setGlobalError('وزن الذهب أو العيار غير صالح. أدخل وزنًا موجبًا بحد أقصى منزلتين عشريتين وعيار 18 أو 21 أو 24.');
-          return;
-        }
-
-        const goldAudit = buildGoldEquivalent21Audit(entry.weight, calculationKarat);
-        if (goldAudit) {
-          entry.goldEquivalent21Snapshot = goldAudit.snapshot;
-          if (goldAudit.legacyComparison) entry.goldEquivalent21LegacyComparison = goldAudit.legacyComparison;
-        }
-      }
-
-      const accessoryAccount = accountsDb.find(acc => acc.type === 'accessory' && (acc.name === entry.debit || acc.name === entry.credit || acc.id === entry.debitAccountId || acc.id === entry.creditAccountId));
-      if (accessoryAccount && !isQuantityAlignedToStep(entry.count, accessoryAccount.quantityStep ?? 1)) {
-        setGlobalError(`كمية الملحقات يجب أن تكون من مضاعفات خطوة الصنف (${accessoryAccount.quantityStep ?? 1}).`);
+      const result = await createCentralAccountingEntry({
+        entry,
+        context: {
+          entries,
+          accounts: accountsDb,
+          openingCostConfig,
+          manualAccountDefinitions: canonicalAccounts,
+        },
+        actor: { userId: user?.uid || '', userEmail: user?.email || '' },
+        source: formData.tx === 'قيد افتتاحي' ? 'setup' : 'user',
+      });
+      if (result.ok === false) {
+        setGlobalError(result.message);
         return;
       }
 
-      const pendingEntry = { ...entry, id: '__pending_cost_validation__' } as Entry;
-      const openingConfig = buildOpeningCostConfig(openingCostConfig, accountsDb);
-      const costValidation = rebuildRuntimeInventoryCostTimeline(
-        [...entries, pendingEntry], accountsDb, openingConfig,
-      );
-      if (!costValidation.valid) {
-        const diagnostic = costValidation.diagnostics[0];
-        setGlobalError(`رفض محرك التكلفة: ${diagnostic?.code || 'unknown'} — ${diagnostic?.message || 'تعذر اعتماد تكلفة العملية.'}`);
-        return;
-      }
-      await addDoc(collection(db, 'entries'), sanitizeFirestorePayload(entry));
-      lastSavedInvoiceRef.current = normalizedInvoiceNumber;
-      
-      // Transition to success step only after successful save
+      lastSavedInvoiceRef.current = String(result.entry.invoiceNumber || '').trim();
       setStep(4);
       localStorage.removeItem('entry_form_draft');
       incrementUsage([formData.tx, formData.debit, formData.credit]);
     } catch (error) {
-      console.error("Save error details:", error);
-      setGlobalError("فشل تسجيل القيد في قاعدة البيانات. يرجى التأكد من اتصالك وقيمة البيانات.");
+      console.error('Central save error:', error);
+      setGlobalError('فشل تسجيل القيد في قاعدة البيانات. لم يتم حفظ العملية.');
     } finally {
       setIsSaving(false);
     }

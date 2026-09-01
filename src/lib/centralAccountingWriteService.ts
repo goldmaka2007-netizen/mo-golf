@@ -67,7 +67,7 @@ const changedFieldNames = (before: Entry, after: Entry): string[] => {
   const ignored = new Set(['id', 'modifiedAt', 'modifiedBy', 'modificationReason']);
   return [...new Set([...Object.keys(before), ...Object.keys(after)])]
     .filter(key => !ignored.has(key))
-    .filter(key => comparable((before as Record<string, unknown>)[key]) !== comparable((after as Record<string, unknown>)[key]))
+    .filter(key => comparable((before as unknown as Record<string, unknown>)[key]) !== comparable((after as unknown as Record<string, unknown>)[key]))
     .sort();
 };
 

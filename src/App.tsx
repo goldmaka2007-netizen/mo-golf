@@ -1,12 +1,13 @@
 import React, { useState, useEffect } from 'react';
-import { deleteDoc, doc, updateDoc, serverTimestamp, addDoc, collection } from 'firebase/firestore';
 import { AnimatePresence, motion } from 'framer-motion';
 import { useAppStore } from './store';
-import { db, firebaseProjectId, firestoreDatabaseId, logOut } from './firebase';
+import { firebaseProjectId, firestoreDatabaseId, logOut } from './firebase';
 import { buildGoldEquivalent21Audit, canCalculateGoldEquivalent21, inferGoldKaratFromMultiplier } from './lib/goldEquivalent';
 import { isGoldEquivalentEntry } from './utils/accountLogic';
 import { resolveEntryIdentity } from './lib/entryIdentity';
 import { validateAccountingPolicy } from './lib/accountingPolicy';
+import type { Entry } from './types';
+import { updateCentralAccountingEntry } from './lib/centralAccountingWriteService';
 
 import { Home, BookOpenCheck, PlusCircle, BarChart3, Menu } from 'lucide-react';
 
@@ -32,7 +33,7 @@ export default function App() {
   const {
     user, isAuthReady, view, setView, setReportsTab,
     globalError, setGlobalError,
-    editingEntry, setEditingEntry, accountsDb,
+    editingEntry, setEditingEntry, accountsDb, entries, openingCostConfig, canonicalAccounts,
     costCalculationRun, requestCostRetry
   } = useAppStore();
 
@@ -44,7 +45,6 @@ export default function App() {
   useCostRecalculation();
 
   const [isUpdatingEntry, setIsUpdatingEntry] = useState(false);
-  const [deleteConfirmId, setDeleteConfirmId] = useState<string | null>(null);
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [entryStep, setEntryStep] = useState(1);
   // Local UI-only preview for responsive navigation checks. Vite removes this
@@ -98,28 +98,7 @@ export default function App() {
     if (view === 'profit-analysis' || view === 'advanced-analytics') setReportsTab('inventory-profitability');
   }, [view, setReportsTab]);
 
-  const handleDelete = async (id: string) => {
-    if (areOperationWritesLocked(costCalculationRun)) {
-      setGlobalError('لا يمكن حذف العمليات أثناء توقف أو إعادة احتساب التكلفة. أصلح الخطأ من الإعدادات ثم أعد المحاولة.');
-      return;
-    }
-    try {
-      await deleteDoc(doc(db, 'entries', id));
-      if (user) {
-        await addDoc(collection(db, 'audit_logs'), {
-          action: 'delete', collection: 'entries', documentId: id,
-          userId: user.uid, userEmail: user.email, timestamp: serverTimestamp()
-        });
-      }
-      setEditingEntry(null);
-      setDeleteConfirmId(null);
-    } catch (error) {
-      console.error("Delete Error:", error);
-      setGlobalError('فشل حذف القيد. يرجى المحاولة مرة أخرى.');
-    }
-  };
-
-  const handleUpdate = async (e: React.FormEvent) => {
+  const handleUpdate = async (e: React.FormEvent, reason: string) => {
     e.preventDefault();
     if (areOperationWritesLocked(costCalculationRun)) {
       setGlobalError('لا يمكن تعديل العمليات أثناء توقف أو إعادة احتساب التكلفة. أصلح الخطأ من الإعدادات ثم أعد المحاولة.');
@@ -127,48 +106,27 @@ export default function App() {
     }
     if (!editingEntry?.id || isUpdatingEntry) return;
 
-    const entryToUpdate = { ...editingEntry };
     setIsUpdatingEntry(true);
     try {
-      const { id, ...rawData } = entryToUpdate;
-      const identity = resolveEntryIdentity({ ...rawData, tx: rawData.tx || '', debit: rawData.debit || '', credit: rawData.credit || '' }, accountsDb);
-      if (identity.ok === false) {
-        setGlobalError(identity.message);
-        return;
-      }
-      Object.assign(rawData, identity.value);
-      const accountingPolicyIssues = validateAccountingPolicy(rawData, accountsDb);
-      if (accountingPolicyIssues.length > 0) {
-        setGlobalError(accountingPolicyIssues.map(issue => issue.message).join(' — '));
-        return;
-      }
-      const calculationKarat = rawData.karat ?? inferGoldKaratFromMultiplier(rawData.multiplier);
-      if (isGoldEquivalentEntry(rawData, accountsDb) && canCalculateGoldEquivalent21(rawData.weight || '', calculationKarat)) {
-        const goldAudit = buildGoldEquivalent21Audit(rawData.weight || '', calculationKarat, rawData.arabicWeight);
-        if (goldAudit) {
-          rawData.goldEquivalent21Snapshot = goldAudit.snapshot;
-          if (goldAudit.legacyComparison) rawData.goldEquivalent21LegacyComparison = goldAudit.legacyComparison;
-        }
-      }
-      const data: any = {};
-      Object.keys(rawData).forEach(key => {
-        const val = (rawData as any)[key];
-        if (val !== undefined && (typeof val !== 'number' || !isNaN(val))) {
-          data[key] = val;
-        }
+      const result = await updateCentralAccountingEntry({
+        entry: editingEntry as Entry,
+        context: {
+          entries,
+          accounts: accountsDb,
+          openingCostConfig,
+          manualAccountDefinitions: canonicalAccounts,
+        },
+        actor: { userId: user?.uid || '', userEmail: user?.email || '' },
+        reason,
       });
-
-      await updateDoc(doc(db, 'entries', id), { ...data, updatedAt: serverTimestamp() });
-      if (user) {
-        await addDoc(collection(db, 'audit_logs'), {
-          action: 'update', collection: 'entries', documentId: id,
-          userId: user.uid, userEmail: user.email, changes: data, timestamp: serverTimestamp()
-        });
+      if (result.ok === false) {
+        setGlobalError(result.message);
+        return;
       }
       setEditingEntry(null);
     } catch (error) {
-      console.error("Update Error:", error);
-      setGlobalError('فشل تحديث القيد. يرجى مراجعة البيانات والاتصال.');
+      console.error('Central update error:', error);
+      setGlobalError('فشل تحديث القيد. لم يتم حفظ أي تعديل.');
     } finally {
       setIsUpdatingEntry(false);
     }
@@ -284,9 +242,6 @@ export default function App() {
               editingEntry={editingEntry}
               setEditingEntry={setEditingEntry}
               handleUpdate={handleUpdate}
-              handleDelete={handleDelete}
-              deleteConfirmId={deleteConfirmId}
-              setDeleteConfirmId={setDeleteConfirmId}
               isUpdating={isUpdatingEntry}
             />
           )}
