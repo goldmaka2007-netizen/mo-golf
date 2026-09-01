@@ -157,7 +157,9 @@ const buildCostCandidateEntries = (
  * current writer. It proves whether a create/update candidate can be prepared
  * using Central Registry identity while preserving the existing Posting Matrix,
  * accounting policy, numbering, gold-equivalent, quantity-step, and runtime
- * inventory-cost validators.
+ * inventory-cost validators. Stable account IDs become authority while the
+ * submitted labels remain unchanged so an unrelated update cannot rewrite
+ * historical display text after an account rename.
  */
 export const buildCentralAccountingWritePreflight = ({
   entry,
@@ -215,8 +217,6 @@ export const buildCentralAccountingWritePreflight = ({
   const preparedEntry: Entry = {
     ...entry,
     operationKind: operation.operationKind,
-    debit: debit.displayName,
-    credit: credit.displayName,
     debitAccountId: debit.sourceAccountId,
     creditAccountId: credit.sourceAccountId,
   };
