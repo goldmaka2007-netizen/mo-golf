@@ -35,6 +35,19 @@ export interface CentralTrialBalanceRuntimeReport {
   trialBalance: UnifiedTrialBalanceReport | null;
 }
 
+const buildHistoricalShadowAccounts = (accounts: Account[], entries: Entry[]): Account[] => {
+  const referencedAccountIds = new Set(entries.flatMap(entry => [
+    entry.debitAccountId,
+    entry.creditAccountId,
+  ]).filter((accountId): accountId is string => Boolean(accountId)));
+
+  return accounts.map(account => account.isActive === false
+    && account.id
+    && referencedAccountIds.has(account.id)
+    ? { ...account, isActive: true }
+    : account);
+};
+
 const buildRegistryApprovedRuntimeEntries = (
   entries: Entry[],
   shadow: CentralAccountingShadowReport,
@@ -58,9 +71,15 @@ const buildRegistryApprovedRuntimeEntries = (
  * leaves the existing downstream Ledger, Trial Balance, and Financial Statement
  * outputs unchanged. Runtime therefore performs only the required Central
  * Registry/Shadow identity gate, avoiding the cost of recalculating every Phase 3
- * evidence output on each UI refresh. Shadow receives the full account registry so
- * historical rows may still resolve accounts that later became inactive; the Trial
- * Balance engine retains its existing active-account presentation scope.
+ * evidence output on each UI refresh.
+ *
+ * The current Registry intentionally excludes inactive source accounts from its
+ * normal definitions. For historical Entries that still reference such accounts,
+ * this adapter supplies temporary in-memory account copies with isActive=true to
+ * Shadow only, so their stable IDs and stored metadata remain resolvable. The
+ * source account records stay unchanged and the final Trial Balance engine still
+ * receives only the original active accounts, so inactive accounts are not
+ * reactivated or reintroduced into report presentation.
  */
 export const buildCentralAccountingReadOnlyRuntimeTrialBalance = ({
   accounts,
@@ -70,8 +89,9 @@ export const buildCentralAccountingReadOnlyRuntimeTrialBalance = ({
   manualAccountDefinitions = [],
   timeline = null,
 }: CentralTrialBalanceRuntimeInput): CentralTrialBalanceRuntimeReport => {
+  const shadowAccounts = buildHistoricalShadowAccounts(accounts, entries);
   const shadow = buildCentralAccountingShadowReport({
-    accounts,
+    accounts: shadowAccounts,
     entries,
     manualAccountDefinitions,
   });
