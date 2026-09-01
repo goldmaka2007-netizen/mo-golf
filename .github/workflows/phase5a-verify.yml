@@ -1,0 +1,36 @@
+name: Phase 5A Verification
+
+on:
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+      - name: Install
+        run: npm ci
+      - name: Focused Phase 5A tests
+        run: npx vitest run src/lib/__tests__/centralAccountingRegistry.test.ts src/lib/__tests__/centralAccountingWritePreflight.test.ts src/lib/__tests__/centralAccountingPipeline.regression.test.ts src/lib/__tests__/inventoryCheckSettlement.test.ts --testTimeout=30000
+      - name: Typecheck
+        run: npm run typecheck
+      - name: Balance Contract
+        run: npm run check:balance-contract
+      - name: Build
+        run: npm run build
+      - name: Diff check
+        run: git diff --check origin/main...HEAD
+      - name: Full suite baseline
+        continue-on-error: true
+        run: npm test
