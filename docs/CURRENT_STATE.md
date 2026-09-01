@@ -9,7 +9,7 @@ Last reviewed: 2026-09-01
 - Firebase project: `makka-central-accounting`.
 - Current deployed application commit: `5241d44d3251a515a81ec6004fb6ae8447a64956`.
 - Latest Production release family remains Smart Sale Product Groups + Bullion/Coin Price Board.
-- Central Registry / Shadow / Output Evidence / Runtime Wiring work is **not deployed** and does not change current Production runtime behavior.
+- Central Registry / Shadow / Output Evidence / Runtime Wiring / Write Preflight work is **not deployed** and does not change current Production runtime behavior.
 
 ## Central Accounting architecture — current checkpoint
 
@@ -97,6 +97,26 @@ Last reviewed: 2026-09-01
 - Final independent re-verification on head `d0f3c4896aab2f81bb5ec632afc274b89972a046`: focused `103/103 PASS` across 13 files; TypeScript PASS; Balance Contract PASS; build PASS; `git diff --check` PASS; full suite `628 PASS / 13 FAIL` with the same accepted pre-existing failure set; new Phase 4C regression NO.
 - No protected accounting/data surface changed. No Firebase/Firestore write occurred. No Golden Baseline change occurred. No Production runtime activation or deployment occurred.
 
+### Phase 5A — Central write contract and Cutover preflight
+
+- Owner explicitly approved Phase 5A only on 2026-09-01. No EntryForm/App/Firestore writer activation was authorized.
+- Original Draft PR: `#26`, later closed as superseded because the GitHub connector again could not transition Draft → Ready for Review.
+- Verified source/test head: `02c102150404fafbf93bc9ece9d3ab24e6857817`.
+- GitHub Actions run `33503684233` completed with conclusion `success`; focused Phase 5A tests, TypeScript, Balance Contract, build, diff check, and full-suite baseline step all passed. The connector did not expose trustworthy test-count totals, so no count is asserted here.
+- After the successful verification head, the source/test files did not change. The only later branch changes were removal of the temporary branch-only CI workflow and addition of D-027 / ADR-016 documentation.
+- Verified replacement PR: `#27`, exact final reviewed head `67b3992639d2e1b3fa49fd3fe468880d70edc643`.
+- Merged to `main` as squash commit `2b68e9b3d87da808c47bd1337b94a4c6d0282efe`.
+- Status: `IMPLEMENTATION COMPLETE / VERIFIED / MERGED / NOT DEPLOYED`.
+- Decision: D-027 / ADR-016.
+- Added pure `buildCentralAccountingWritePreflight`; it performs no persistence and is not wired to the current writer.
+- Preflight requires global Registry Cutover readiness, Central operation identity, stable writable account identity, explicit source (`user`, `setup`, or `system`), and the existing accounting policy, numbering, Posting Matrix, gold-equivalent, accessory quantity-step, and runtime inventory Cost Timeline validators.
+- Unknown/ambiguous/contradictory operation identity, non-writable operations/accounts, invalid create/update target identity, or any existing validator failure blocks the candidate with structured blockers and no persistence.
+- Stable account IDs are authoritative while submitted historical display labels remain unchanged during unrelated updates.
+- Update cost validation replaces exactly one existing Entry in memory rather than appending a duplicate.
+- The real Registry remains **not Cutover-ready** because transition-only `inventory.adjustment.legacy` is still selectable/writable. Phase 5A intentionally preserves that fail-closed truth.
+- Post-Cutover delete/correction behavior remains unresolved and must be explicitly decided before writer Cutover; current hard-delete behavior is not silently adopted as the Central contract.
+- No EntryForm/App writer wiring changed. No Firestore persistence/schema changed. No Posting Matrix, WAC/COGS, Balance Engine, historical data, Firebase backend resource, Golden Baseline, or Production runtime changed.
+
 ## Protected accounting/data invariants
 
 Do not change without a separate explicit owner decision and approval:
@@ -110,13 +130,14 @@ Do not change without a separate explicit owner decision and approval:
 - Firestore Rules / Indexes / Functions / Storage / Auth.
 - Golden Baseline.
 
-Central Registry Phases 1–4C changed none of these protected surfaces and made no Production Firestore data write.
+Central Registry Phases 1–5A made no Production Firestore data write and did not activate a new Production writer. Phase 5A added only an in-memory preflight contract inside its explicitly approved scope.
 
 ## Current next gate
 
 - The approved read-only accounting migration is complete in repository source: Unified Trial Balance, General Ledger, Income Statement, Financial Position/CSV export, and Statement of Changes in Equity all pass through the Central Registry-gated runtime identity boundary.
-- The next architectural stage is EntryForm/write-path Cutover.
-- EntryForm/write-path Cutover is a protected write-path change and requires a separate explicit owner approval gate before implementation.
+- Phase 5A now provides the verified Central write preflight boundary but does **not** activate Cutover.
+- Before any Phase 5B writer wiring, remaining Cutover blockers must be resolved intentionally, including transition-only `inventory.adjustment.legacy` writability and the explicit post-Cutover delete/correction policy.
+- EntryForm/App/Firestore writer wiring remains a protected write-path change and requires a new explicit owner approval gate before implementation.
 - Deployment remains separate from merge and has not been authorized.
 
 ## Other current notes
@@ -128,13 +149,14 @@ Central Registry Phases 1–4C changed none of these protected surfaces and made
 
 ## Primary references
 
-- `docs/DECISIONS.md` — active decisions D-021 through D-026.
+- `docs/DECISIONS.md` — active decisions D-021 through D-027.
 - `docs/adr/ADR-010-central-accounting-registry.md`.
 - `docs/adr/ADR-011-central-accounting-shadow-orchestration.md`.
 - `docs/adr/ADR-012-central-read-only-output-evidence.md`.
 - `docs/adr/ADR-013-central-read-only-runtime-trial-balance.md`.
 - `docs/adr/ADR-014-central-read-only-runtime-general-ledger.md`.
 - `docs/adr/ADR-015-central-read-only-runtime-financial-statements.md`.
+- `docs/adr/ADR-016-central-write-contract-preflight.md`.
 
 ## Source roles and closure
 
