@@ -4,7 +4,11 @@ import {
   buildCentralAccountingShadowReport,
   type CentralAccountingShadowReport,
 } from './centralAccountingShadow';
-import { computePeriodAccountBalances } from './engine';
+import { computeAccountBalances, computePeriodAccountBalances } from './engine';
+import {
+  buildEquityStatementEgp,
+  type EquityStatementEgpResult,
+} from './equityStatementEgp';
 import {
   buildFinancialStatementsEgp,
   type BuildFinancialStatementsEgpOptions,
@@ -376,5 +380,73 @@ export const buildCentralAccountingReadOnlyRuntimeMonthlyFinancialPosition = ({
       goldPriceEgp,
       silverPriceEgp,
     }),
+  };
+};
+
+export interface CentralEquityStatementRuntimeInput {
+  accounts: Account[];
+  entries: Entry[];
+  canonicalDefinitions: CanonicalAccountDefinition[];
+  openingCostConfig: AnnualOpeningCostConfig[];
+  cutoffDate: string;
+  goldPriceEgp?: number | null;
+  silverPriceEgp?: number | null;
+}
+
+export interface CentralEquityStatementRuntimeReport {
+  version: typeof CENTRAL_ACCOUNTING_READ_ONLY_RUNTIME_VERSION;
+  mode: 'read_only_runtime_equity_statement';
+  status: 'ready' | 'blocked';
+  shadow: CentralAccountingShadowReport;
+  blockers: CentralReadOnlyRuntimeBlocker[];
+  equityStatement: EquityStatementEgpResult | null;
+  balanceEngineVersion: string | null;
+}
+
+/**
+ * Phase 4C read-only runtime adapter for the EGP Statement of Changes in Equity.
+ * It preserves the existing equity roll-forward engine while moving operation
+ * identity and the UI Balance Engine diagnostic behind the same exact Shadow gate.
+ */
+export const buildCentralAccountingReadOnlyRuntimeEquityStatement = ({
+  accounts,
+  entries,
+  canonicalDefinitions,
+  openingCostConfig,
+  cutoffDate,
+  goldPriceEgp = null,
+  silverPriceEgp = null,
+}: CentralEquityStatementRuntimeInput): CentralEquityStatementRuntimeReport => {
+  const cutoffEntries = entries.filter(entry => entry.date <= cutoffDate);
+  const identity = buildCentralRuntimeIdentity(accounts, cutoffEntries, canonicalDefinitions);
+  if (!identity.normalizedEntries) {
+    return {
+      version: CENTRAL_ACCOUNTING_READ_ONLY_RUNTIME_VERSION,
+      mode: 'read_only_runtime_equity_statement',
+      status: 'blocked',
+      shadow: identity.shadow,
+      blockers: blocked(identity.shadow, 'Complete exact Central Shadow identity is required before Equity Statement runtime execution.'),
+      equityStatement: null,
+      balanceEngineVersion: null,
+    };
+  }
+
+  const normalizedEntries = identity.normalizedEntries;
+  return {
+    version: CENTRAL_ACCOUNTING_READ_ONLY_RUNTIME_VERSION,
+    mode: 'read_only_runtime_equity_statement',
+    status: 'ready',
+    shadow: identity.shadow,
+    blockers: [],
+    equityStatement: buildEquityStatementEgp({
+      entries: normalizedEntries,
+      accounts,
+      canonicalDefinitions,
+      openingCostConfig,
+      cutoffDate,
+      goldPriceEgp,
+      silverPriceEgp,
+    }),
+    balanceEngineVersion: computeAccountBalances(normalizedEntries, accounts).balanceEngineVersion,
   };
 };
