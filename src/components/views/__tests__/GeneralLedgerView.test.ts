@@ -6,8 +6,8 @@ describe('GeneralLedgerView Central runtime routing', () => {
     const source = readFileSync(new URL('../reports/GeneralLedgerView.tsx', import.meta.url), 'utf8');
 
     expect(source).toMatch(/buildCentralAccountingReadOnlyRuntimeGeneralLedger/);
-    expect(source).toMatch(/sourceAccounts:\s*accountsDb/);
-    expect(source).toMatch(/reportAccounts:\s*accounts/);
+    expect(source).toMatch(/<LedgerDetails[\s\S]*?sourceAccounts=\{accountsDb\}[\s\S]*?>/);
+    expect(source).toMatch(/buildCentralAccountingReadOnlyRuntimeGeneralLedger\(\{[\s\S]*?sourceAccounts,[\s\S]*?reportAccounts:\s*accounts,/);
     expect(source).not.toMatch(/buildLedgerReport\(/);
     expect(source).not.toMatch(/getAvailableDimensions\(/);
     expect(source).not.toMatch(/computePeriodAccountBalances\(/);
