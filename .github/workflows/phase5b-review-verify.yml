@@ -1,0 +1,47 @@
+name: Phase 5B Review Verify
+
+on:
+  push:
+    branches:
+      - feature/central-write-cutover-phase5b
+
+permissions:
+  contents: read
+
+env:
+  VITE_FIREBASE_API_KEY: dummy-api-key
+  VITE_FIREBASE_AUTH_DOMAIN: dummy.firebaseapp.com
+  VITE_FIREBASE_PROJECT_ID: dummy-project
+  VITE_FIREBASE_STORAGE_BUCKET: dummy.appspot.com
+  VITE_FIREBASE_MESSAGING_SENDER_ID: '123456789'
+  VITE_FIREBASE_APP_ID: '1:123456789:web:dummy'
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+      - run: npm ci
+      - name: Focused Phase 5B tests
+        run: >-
+          npx vitest run
+          src/lib/__tests__/centralAccountingWritePreflight.test.ts
+          src/lib/__tests__/centralAccountingWriteCutover.test.ts
+          src/lib/__tests__/centralAccountingWriteArchitecture.test.ts
+          src/lib/__tests__/centralAccountingRegistry.test.ts
+          src/lib/__tests__/centralAccountingShadow.test.ts
+          src/lib/__tests__/centralAccountingPipeline.regression.test.ts
+          src/lib/__tests__/inventoryCheckSettlement.test.ts
+          src/lib/__tests__/postingMatrix.test.ts
+          src/lib/__tests__/costRecalculation.test.ts
+          src/components/views/__tests__/TrialBalanceView.test.ts
+          src/components/views/__tests__/GeneralLedgerView.test.ts
+          src/components/views/__tests__/FinancialStatementsCentralRuntime.test.ts
+      - run: npm run typecheck
+      - run: npm run check:balance-contract
+      - run: npm run build
+      - run: git diff --check
