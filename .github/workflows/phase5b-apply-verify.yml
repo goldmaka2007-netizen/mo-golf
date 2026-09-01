@@ -32,6 +32,7 @@ jobs:
         run: |
           node .github/scripts/phase5b-codemod.mjs
           node .github/scripts/phase5b-test-correction.mjs
+          node .github/scripts/phase5b-type-correction.mjs
       - name: Focused Cutover tests
         run: >-
           npx vitest run
