@@ -398,6 +398,8 @@ describe('Central Accounting Read-Only Runtime Phase 4C — EGP Financial Statem
     expect(source).toMatch(/buildLedgerReport/);
     expect(source).toMatch(/buildFinancialStatementsEgp/);
     expect(source).toMatch(/buildMonthlyFinancialPosition/);
+    expect(source).toMatch(/buildEquityStatementEgp/);
+    expect(source).toMatch(/computeAccountBalances/);
     expect(source).not.toMatch(/buildCentralAccountingReadOnlyOutputEvidence/);
     expect(source).not.toMatch(/buildLegacyLedgerLegs/);
     expect(source).not.toMatch(/\?\?\s*entry\.operationKind/);
