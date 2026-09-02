@@ -37,7 +37,7 @@ Final approved behavior:
 - Corrections require an explicit reason and complete Central revalidation, with atomic audit metadata.
 - Stable Operation ID / Firestore document identity provides idempotent retry; conflicting same-ID authoritative payloads fail closed.
 - Invoice-number uniqueness is enforced centrally.
-- Legacy generic `تسوية` remains historical compatibility only and is not writable for new operations.
+- Legacy generic `تسوية` remains historical/transition compatibility only and is not writable for new operations.
 - Inventory checks system-generate `تسوية عجز` / `تسوية زيادة` from the actual difference.
 - Legacy Settings Entry deletion, historical renumbering, and direct CSV Entry import are fail-closed.
 - Historical Entries remain readable; new Central/audit metadata is optional; no backfill or historical rewrite occurred.
@@ -45,15 +45,15 @@ Final approved behavior:
 
 Final independent acceptance reported no new Phase 5B regression versus exact base `main`. TypeScript, Balance Contract, build and diff checks passed. Protected Posting Matrix, WAC/COGS, Balance Engine, Firebase backend, historical data and Golden Baseline semantics/data were unchanged.
 
-## Mandatory next gate
+## 2026 Open Year decision
 
-Year-Close / closed-period authority is intentionally **NOT implemented** in Phase 5B.
+Owner decision on 2026-09-02: 2026 remains an open operating year. Year-Close / closed-period authority and 2027 transition work are deferred until end-of-year work and are **not** prerequisites for Production Readiness or Production activation of the already-approved Central Accounting Phases 1–5B during 2026.
 
-Therefore:
+This decision adds no new accounting logic, date-boundary rule, migration, or backend/data change. Historical 2026 corrections continue to use the existing Phase 5B correction controls: explicit reason, complete Central revalidation, and audit metadata. Reports for still-open 2026 periods remain live/dynamic rather than permanently closed snapshots.
 
-`Production Write Cutover / deployment = BLOCKED pending a separately approved and verified Year-Close authority.`
+Decision record: `docs/adr/ADR-017-2026-open-year-year-close-deferred.md`.
 
-Deployment remains a separate explicit owner approval. Merge of Phase 5B does not authorize Production activation.
+Deployment is still separate and requires explicit owner approval. Nothing in this decision authorizes Production activation.
 
 ## Protected accounting/data invariants
 
@@ -70,9 +70,11 @@ Do not change without a separate explicit owner decision and approval:
 
 ## Current next work
 
-The next Central Accounting task is a separately scoped **Year-Close / closed-period authority** design and implementation. It must pass its own workflow, owner approval gate, independent verification, merge, and cross-system synchronization before Production Write Cutover can be considered.
+The next Central Accounting gate is **Production Readiness Verification** on the existing implementation. No Year-Close or 2027 preparation is part of this gate.
 
-Production remains on deployed application commit `5241d44d3251a515a81ec6004fb6ae8447a64956`.
+After readiness is verified, Production deployment remains a separate explicit owner approval. Production stays on deployed application commit `5241d44d3251a515a81ec6004fb6ae8447a64956` until that approval is given.
+
+Year-Close remains deferred future work and must pass its own workflow and approval gate when the owner chooses to start it.
 
 ## Source roles and closure
 
