@@ -2,92 +2,116 @@
 
 Last reviewed: 2026-09-02
 
-## Production baseline
+## Current Production operating baseline
 
 - Repository: `goldmaka2007-netizen/mo-golf`.
 - Production: `https://makka-central-accounting.web.app`.
 - Firebase project: `makka-central-accounting`.
-- Central Accounting Phases 1–5B were deployed to Firebase Hosting only from approved application SHA `c7d7522f8a4737708f4658293176748f13607cfe`.
-- Current deployed main asset after that deployment: `/assets/index-B_SQyuZ-.js`.
-- Deployment verification: root/asset HTTP 200; React/Firebase/session startup passed; initial read-only smoke passed.
-- No Firestore Data/Rules/Indexes/Functions/Storage/Auth change and no synthetic Production accounting transaction was created.
+- Production is intentionally rolled back to the last known working and owner-accepted legacy application SHA `5241d44d3251a515a81ec6004fb6ae8447a64956`.
+- Current Production main asset after rollback: `/assets/index-Bebc0LQE.js`.
+- Rollback validation passed: `npm ci`, TypeScript, Balance Contract, production build, Firebase Hosting-only deploy, Production root HTTP 200, asset HTTP 200, Firebase/session startup, and browser smoke without console errors.
+- Owner mobile operational check after rollback: PASS; the owner confirmed the legacy application is working and usable for daily work.
+- The rollback changed Firebase Hosting only. It did **not** change Firestore data, Rules, Indexes, Functions, Storage, Auth, backend configuration, Posting Matrix, WAC/COGS, Merchant Metal WAC, Balance Engine, Entry contracts, or Golden Baseline.
 
-## Central Accounting — current checkpoint
+## GitHub / Central Accounting source state
 
-- Phases 1–4C + 5A + 5B: `IMPLEMENTATION COMPLETE / VERIFIED / MERGED / DEPLOYED`.
-- Production owner acceptance: `BLOCKED`.
-- Task closure: `NOT CLOSED`.
+- The Central Accounting implementation remains preserved in GitHub; it was **not** reverted or deleted.
+- Central Accounting application/code merge baseline: `223f473785ff72b7b92bdd005ef34508f56168af` (PR #31 merged).
+- That baseline includes the narrow historical `customer.payment` Shadow compatibility correction.
+- Production must **not** be redeployed from the Central Accounting/main application state until the unresolved parity and operational issues are investigated, corrected, independently verified, and explicitly re-approved by the owner.
+- Documentation sync may advance GitHub `main` beyond `223f473...`; the important distinction is: Production runs legacy SHA `5241d44...`, while Central Accounting source remains preserved in GitHub for offline remediation.
 
-Owner iPhone acceptance passed Home, Daily Journal, Operations, Gold Sale Entry opening, and Reports menu. Unified Trial Balance then failed closed with `central_shadow_not_exact`, so acceptance stopped before closure.
+## Central Accounting Production acceptance result
 
-## Trial Balance Production blocker — read-only evidence
+Central Accounting Phases 1–5B were previously deployed to Firebase Hosting and then tested on Production. The release is **NOT Production accepted**.
 
-A Production read-only Evidence Pack found:
+### Historical identity blocker correction
 
-- `shadow.status = blocked`.
-- `shadow.exactParity = false`.
-- `coverage.shadowReady = true`.
-- `operationCatalogIssues = 0`.
-- `unmappedOperations = 0`.
-- `ambiguousAccountAliases = 0`.
-- `accountClassificationConflicts = 0`.
-- Exactly 5 `operation_identity_mismatch` blockers.
+The first Production Evidence Pack found five historical `دفع لعميل` rows with stored legacy `operationKind=transfer` while Central Registry resolved `customer.payment / other`. The approved narrow compatibility fix was implemented, tested, merged through PR #31, and deployed.
 
-All five blocking Entries are historical `دفع لعميل` rows dated 2026-06-18 through 2026-08-05. Their stored legacy `operationKind` is `transfer`, while normal Central Registry resolution is `customer.payment / other`. Shadow intentionally blocks before parity, so no parity rows are produced. Evidence attributes the conflict to historical Production data that predates the 2026-09-02 deployment, not to new data created by the deployment.
+A later read-only RCA proved that this identity fix worked correctly:
 
-## Approved compatibility correction
+- all 5 historical rows satisfy the approved compatibility boundary;
+- `operation_identity_mismatch = 0` for those rows;
+- source rows remain unchanged as `transfer`;
+- canonical parity identity is `customer.payment / other`;
+- no historical Firestore backfill or mutation was performed.
 
-Owner explicitly approved the smallest code compatibility fix. Do **not** modify or backfill the five historical Firestore rows.
+### Current real blocker after the identity fix
 
-The approved compatibility boundary is intentionally narrow. An identity mismatch may bypass the historical mismatch blocker only when all of the following are true:
+Production RCA on 3,504 Entries / 76 Accounts / 74 canonical definitions found:
 
-1. `canonicalOperationId` is absent.
-2. `canonicalOperationVersion` is absent.
-3. stored `operationKind === 'transfer'`.
-4. normal Registry resolution is successful.
-5. resolved operation ID is exactly `customer.payment`.
-6. resolved Registry `operationKind === 'other'`.
+- `shadow.status = compared`;
+- `shadow.exactParity = false`;
+- `coverage.shadowReady = true`;
+- operation catalog issues = 0;
+- unmapped operations = 0;
+- ambiguous account aliases = 0;
+- account classification conflicts = 0;
+- Shadow blockers = 0.
 
-For that exact historical case only, Shadow may continue through the existing Registry-normalized parity-copy path without mutating the source Entry. Any centrally identified row and every other identity mismatch must remain fail-closed. No hardcoded date bypass is approved.
+Parity result:
 
-Target implementation scope: `src/lib/centralAccountingShadow.ts` plus focused Shadow/runtime/Trial Balance tests only, unless compilation proves a minimal adjacent change is necessary.
+- total rows = 3,504;
+- matched = 1,643;
+- open = 1,861;
+- errors = 0;
+- 105 repeated discrepancy patterns.
 
-## Required implementation verification
+Difference counts:
 
-Before merge, prove at minimum:
+- dimension = 1,863;
+- value = 1,860;
+- inventory = 1;
+- validation = 3.
 
-- historical `دفع لعميل` with no Central identity + stored `transfer` reaches comparison/parity without mutating source data;
-- the same row with `canonicalOperationId` present remains blocked;
-- the same row with `canonicalOperationVersion` present remains blocked;
-- stored `sale` / `purchase` contradictions remain blocked;
-- ordinary operation identity contradictions and unknown/unmapped operations remain blocked;
-- focused Shadow + Central read-only runtime + Trial Balance tests pass;
-- TypeScript passes;
-- Balance Contract passes;
-- relevant Central Accounting regression set shows no new regression.
+Severity:
 
-No Golden Baseline regeneration is authorized.
+- warning = 1,860;
+- info = 1.
 
-## Phase 5B durable state
+The dominant discrepancy is legacy quantity being used/carried while canonical quantity is not used / resolves to `0`. Example: 1,088 `بيع ذهب` rows show quantity `1 -> 0`.
 
-Phase 5B established `src/lib/centralAccountingWriteService.ts` as the single runtime accounting Entry write boundary for current Entry create, correction/update, and inventory-check settlement paths.
+Open rows by major operation:
 
-- Saved accounting Entries have no hard-delete runtime path.
-- Corrections require an explicit reason and complete Central revalidation, with atomic audit metadata.
-- Stable Operation ID / Firestore document identity provides idempotent retry; conflicting same-ID authoritative payloads fail closed.
-- Invoice-number uniqueness is enforced centrally.
-- Legacy generic `تسوية` remains historical/transition compatibility only and is not writable for new operations.
-- Inventory checks system-generate `تسوية عجز` / `تسوية زيادة` from the actual difference.
-- Historical Entries remain readable; Central/audit metadata is optional on legacy rows; no historical rewrite is implied.
+- `بيع ذهب`: 1,219;
+- `تيفيت`: 295;
+- `شراء ذهب`: 150;
+- `بيع ملحقات`: 75;
+- `بيع فضة`: 47;
+- other operations: 75.
 
-Detailed Phase 5B acceptance: `docs/PHASE_5B_CENTRAL_WRITE_CUTOVER_2026-09-02.md`.
-Production Readiness record: `docs/CENTRAL_ACCOUNTING_PRODUCTION_READINESS_2026-09-02.md`.
+Therefore the current `central_shadow_not_exact` is **not** an identity blocker. The identity fix succeeded and exposed a broader parity-model mismatch that must be resolved before Central Accounting can be accepted for Production.
 
-## 2026 Open Year decision
+## Additional operational blocker observed by owner
 
-Owner decision on 2026-09-02: 2026 remains an open operating year. Year-Close / closed-period authority and 2027 transition work remain deferred until end-of-year work. This Trial Balance compatibility fix does not reopen or alter that decision.
+During the Central Accounting Production attempt, the owner also tried a Gold Sale invoice and reported that it would not save. This was not investigated before the emergency rollback because restoring daily business operation took priority.
 
-Decision record: `docs/adr/ADR-017-2026-open-year-year-close-deferred.md`.
+Treat the Sale-save failure as a separate Production-critical issue to reproduce and investigate read-only/focused before any future Central Accounting redeploy. Do not assume it shares the same root cause as the 1,861 parity discrepancies.
+
+## Current status
+
+- Daily business Production: `LEGACY BASELINE RESTORED / OWNER OPERATIONAL CHECK PASSED`.
+- Central Accounting code: `PRESERVED IN GITHUB / NOT PRODUCTION ACCEPTED`.
+- Central Accounting Production Acceptance task: `BLOCKED / NOT CLOSED`.
+- Emergency rollback task: `IMPLEMENTED / OWNER CHECK PASSED`.
+- No Central Accounting redeploy is authorized at this checkpoint.
+- 2026 remains an Open Year; Year-Close / closed-period authority and 2027 transition remain deferred until end-of-year work.
+
+## Mandatory next work for the next ChatGPT account
+
+Start from live sources, not old chat history:
+
+1. Read Notion `Makka Change Workflow — مسار أي تعديل جديد`.
+2. Read Google Drive `Makka — Current Reviewer Context`.
+3. Verify GitHub `main`, then read `AGENTS.md`, `CONSTITUTION.md`, and this file.
+4. Keep Production pinned to legacy SHA `5241d44d3251a515a81ec6004fb6ae8447a64956` unless the owner explicitly approves another deployment.
+5. Do **not** deploy current Central Accounting source to Production merely because it is on `main`.
+6. Investigate Central Accounting in two controlled tracks before any redeploy:
+   - parity remediation for the 1,861 open rows, starting with quantity semantics and repeated operation patterns;
+   - independent RCA for the owner-observed Gold Sale save failure.
+7. Any accounting/business semantic change requires explicit decision lock and owner approval under the Makka Change Workflow.
+8. After a corrected release passes independent verification and Owner Production Acceptance, sync GitHub + Notion + Google Drive and verify all three before closing.
 
 ## Protected accounting/data invariants
 
@@ -98,21 +122,14 @@ Do not change without a separate explicit owner decision and approval:
 - Merchant Metal WAC.
 - Balance Engine semantics.
 - Entry save/edit contract outside an explicitly approved scope.
-- Historical Firestore records.
+- Historical Firestore records / Production data.
 - Firestore Rules / Indexes / Functions / Storage / Auth.
 - Golden Baseline.
+- Any accounting or business rule not proven from approved project evidence.
 
-## Current next work
+## Source roles and transfer note
 
-Implement the approved narrow historical `customer.payment` Shadow compatibility fix on a clean branch from current verified `main`, run the required focused and regression checks, open a PR, and stop before merge/deploy for independent ChatGPT review.
-
-A code fix approval does **not** authorize a new Production deployment. Any redeploy requires a separate explicit owner approval after the PR is reviewed/merged and the exact deployable SHA is verified.
-
-After redeploy, owner mobile acceptance must resume from the Trial Balance blocker and continue through the remaining safe read-only checks. Final closure requires successful Production acceptance plus verified GitHub + Notion + Google Drive synchronization.
-
-## Source roles and closure
-
-- GitHub: current code, tests, implementation, and technical truth.
-- Notion: mandatory workflow, approved decisions/status, and change history.
-- Google Drive: accounting/operational/architecture references and `Makka — Current Reviewer Context`.
-- The task is not Closed until GitHub + Notion + Google Drive are synchronized and directly re-read by ChatGPT.
+- GitHub = executable/source/test truth and this durable current-state record.
+- Notion = mandatory workflow, approved decisions/status, and change log.
+- Google Drive = reviewer-facing/accounting/operational references and `Makka — Current Reviewer Context`.
+- This state was synchronized specifically so work can continue from another ChatGPT account without relying on chat history.
