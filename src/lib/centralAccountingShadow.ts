@@ -72,6 +72,13 @@ const operationIdentityBlockers = (
   if (!entry.operationKind) return [];
   const resolution = registry.resolveOperation(entry.tx);
   if (resolution.status !== 'resolved' || resolution.operation.operationKind === entry.operationKind) return [];
+  const isApprovedHistoricalCustomerPaymentCompatibility =
+    entry.canonicalOperationId === undefined
+    && entry.canonicalOperationVersion === undefined
+    && entry.operationKind === 'transfer'
+    && resolution.operation.id === 'customer.payment'
+    && resolution.operation.operationKind === 'other';
+  if (isApprovedHistoricalCustomerPaymentCompatibility) return [];
   const sourceOperationId = entry.id || entry.legacyOperationId || entry.legacyOperationNo || String(entry.seq ?? '');
   return [{
     code: 'operation_identity_mismatch' as const,

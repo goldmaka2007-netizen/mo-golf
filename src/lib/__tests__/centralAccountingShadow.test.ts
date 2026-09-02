@@ -181,6 +181,50 @@ describe('Central Accounting Shadow Phase 2', () => {
     expect(JSON.stringify(row)).toBe(before);
   });
 
+  it('allows only the approved historical customer-payment transfer compatibility row through Registry-normalized parity', () => {
+    const row = entry({
+      tx: 'دفع لعميل',
+      operationKind: 'transfer',
+      debit: 'عميل اختبار', debitAccountId: 'customer', credit: 'الخزنة', creditAccountId: 'cash',
+      cash: '100', weight: '0', arabicWeight: '0',
+    });
+    const before = JSON.stringify(row);
+    const report = buildCentralAccountingShadowReport({ accounts, entries: [row] });
+
+    expect(report.coverage.shadowReady).toBe(true);
+    expect(report.status).toBe('compared');
+    expect(report.exactParity).toBe(true);
+    expect(report.blockers.map(blocker => blocker.code)).not.toContain('operation_identity_mismatch');
+    expect(report.parity?.rows[0].canonicalResult.operationKind).toBe('other');
+    expect(row.operationKind).toBe('transfer');
+    expect(JSON.stringify(row)).toBe(before);
+  });
+
+  const customerPaymentContradictions: { name: string; patch: Partial<Entry> }[] = [
+    { name: 'canonicalOperationId exists', patch: { canonicalOperationId: 'customer.payment' } },
+    { name: 'canonicalOperationVersion exists', patch: { canonicalOperationVersion: 1 } },
+    { name: 'stored operationKind is sale', patch: { operationKind: 'sale' } },
+    { name: 'stored operationKind is purchase', patch: { operationKind: 'purchase' } },
+  ];
+
+  it.each(customerPaymentContradictions)('keeps customer-payment contradiction blocked when $name', ({ patch }) => {
+    const report = buildCentralAccountingShadowReport({
+      accounts,
+      entries: [entry({
+        tx: 'دفع لعميل',
+        operationKind: 'transfer',
+        debit: 'عميل اختبار', debitAccountId: 'customer', credit: 'الخزنة', creditAccountId: 'cash',
+        cash: '100', weight: '0', arabicWeight: '0',
+        ...patch,
+      })],
+    });
+
+    expect(report.status).toBe('blocked');
+    expect(report.parity).toBeNull();
+    expect(report.exactParity).toBe(false);
+    expect(report.blockers.map(blocker => blocker.code)).toContain('operation_identity_mismatch');
+  });
+
   it('is read-only and leaves source entries unchanged', () => {
     const rows = [entry({ operationKind: undefined })];
     const before = JSON.stringify(rows);
