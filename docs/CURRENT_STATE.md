@@ -20,6 +20,7 @@ Last reviewed: 2026-09-02
 - Phase 4C — EGP Financial Reporting Central runtime: `IMPLEMENTATION COMPLETE / VERIFIED / MERGED / NOT DEPLOYED`.
 - Phase 5A — Central Write Contract / Cutover Preflight: `IMPLEMENTATION COMPLETE / VERIFIED / MERGED / NOT DEPLOYED`.
 - Phase 5B — Central Write Cutover: `IMPLEMENTATION COMPLETE / VERIFIED / MERGED / NOT DEPLOYED`.
+- Production Readiness: `VERIFIED / READY FOR OWNER DEPLOYMENT DECISION / NOT DEPLOYED`.
 
 ## Phase 5B — final verified state
 
@@ -53,7 +54,15 @@ This decision adds no new accounting logic, date-boundary rule, migration, or ba
 
 Decision record: `docs/adr/ADR-017-2026-open-year-year-close-deferred.md`.
 
-Deployment is still separate and requires explicit owner approval. Nothing in this decision authorizes Production activation.
+## Production Readiness — verified
+
+Readiness record: `docs/CENTRAL_ACCOUNTING_PRODUCTION_READINESS_2026-09-02.md`.
+
+The independently verified Phase 5B pre-merge HEAD and its squash merge have the exact same Git tree (`41dece646a20ab172018b099bff6a0a0003be2da`). From that merge through the Open Year decision sync, only documentation files changed. Therefore current application/test source is identical to the accepted Phase 5B source, and the existing accepted test evidence remains applicable without repeating the same heavy test run.
+
+Result: Central Accounting Phases 1–5B are **PRODUCTION READY** under the approved 2026 open-year policy.
+
+This does not authorize deployment. Production deployment remains a separate explicit owner approval.
 
 ## Protected accounting/data invariants
 
@@ -70,9 +79,11 @@ Do not change without a separate explicit owner decision and approval:
 
 ## Current next work
 
-The next Central Accounting gate is **Production Readiness Verification** on the existing implementation. No Year-Close or 2027 preparation is part of this gate.
+The next gate is the owner's explicit **Production Deployment approval**.
 
-After readiness is verified, Production deployment remains a separate explicit owner approval. Production stays on deployed application commit `5241d44d3251a515a81ec6004fb6ae8447a64956` until that approval is given.
+Until that approval is given, Production stays on deployed application commit `5241d44d3251a515a81ec6004fb6ae8447a64956` and no Central Accounting deployment occurs.
+
+If approved, deployment scope is Firebase Hosting only unless the owner explicitly authorizes otherwise, followed by safe root/asset verification and non-destructive acceptance. No synthetic accounting operation should be created on Production solely for testing.
 
 Year-Close remains deferred future work and must pass its own workflow and approval gate when the owner chooses to start it.
 
