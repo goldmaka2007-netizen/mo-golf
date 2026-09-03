@@ -2,6 +2,14 @@
 
 Last reviewed: 2026-08-29
 
+## Latest local StoryBuilder visual redesign — not deployed
+
+- Baseline: `release/story-ui-legacy-2026-09-03` at `7642c22b76b316966cfe67490c8992ebff13a6f2`.
+- Compact and Full Story renderers remain dynamic 1080×1920 PNGs; this local change updates presentation only.
+- The Canvas visual system now uses warm ivory, deep navy, and restrained metallic-gold accents, with cream price/product panels, navy CTA/footer, improved ribbons, spacing, hierarchy, and readability.
+- Compact and Full preserve their existing business sections, data sources, pricing semantics, sharing, and download behavior. Compact establishment text is `تأسس منذ 2003`.
+- No production deployment or Firebase/Firestore surface change was made.
+
 ## Production baseline
 
 - Repository: `goldmaka2007-netizen/mo-golf`

@@ -170,56 +170,88 @@ const generateStoryCanvas = (canvas: HTMLCanvasElement, ctx: CanvasRenderingCont
   const cardInnerWidth = contentWidth - (cardPadding * 2);
   const rtlFont = '"IBM Plex Sans Arabic", "Tajawal", sans-serif';
   const numericFont = '"JetBrains Mono", monospace';
-  const C = { bg: '#081321', surface: '#0f1c2d', elevated: '#142033', primary: '#f4f7fb', secondary: '#a7b3c3', muted: '#718095', gold: '#c9a84c', goldTint: 'rgba(201, 168, 76, 0.10)', buy: '#47d7a5', sell: '#f07f8a', border: '#26364a', goldBorder: 'rgba(201, 168, 76, 0.42)' };
-  const V = variant === 'compact'
-    ? { ...C, bg: '#08101e', surface: '#0f1b2d', secondary: '#94a3b8', gold: '#e6be68', border: '#1c2e47', goldBorder: 'rgba(230, 190, 104, 0.42)', buy: '#34d399', sell: '#f87171' }
-    : C;
+  const V = {
+    bg: '#f6ecd8',
+    surface: '#fffaf0',
+    elevated: '#0d1c2d',
+    primary: '#172334',
+    secondary: '#71675b',
+    muted: '#9b8e7d',
+    gold: '#bd8b2f',
+    goldTint: '#f2d68d',
+    buy: '#197447',
+    sell: '#a43a3a',
+    border: '#d8c29a',
+    goldBorder: '#bd8b2f',
+    navy: '#0d1c2d',
+    silver: '#747a82',
+  };
 
   ctx.fillStyle = V.bg;
   ctx.fillRect(0, 0, canvas.width, canvas.height);
   ctx.textAlign = 'center';
-  const headerTop = variant === 'full' ? 40 : 48;
+  const drawGoldFlourish = (x: number, y: number, scale = 1, mirrored = false) => {
+    ctx.save();
+    ctx.translate(x, y);
+    ctx.scale(mirrored ? -scale : scale, scale);
+    ctx.strokeStyle = V.gold;
+    ctx.fillStyle = V.gold;
+    ctx.lineWidth = 2;
+    ctx.lineCap = 'round';
+    ctx.beginPath();
+    ctx.moveTo(-42, 4);
+    ctx.bezierCurveTo(-24, 4, -26, -17, -7, -14);
+    ctx.bezierCurveTo(4, -12, 3, 0, -6, 2);
+    ctx.bezierCurveTo(-16, 5, -12, 15, 0, 13);
+    ctx.bezierCurveTo(14, 11, 14, -2, 29, -5);
+    ctx.bezierCurveTo(38, -7, 43, -2, 46, 3);
+    ctx.stroke();
+    ctx.beginPath();
+    ctx.arc(-42, 4, 3, 0, Math.PI * 2);
+    ctx.arc(46, 3, 3, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.restore();
+  };
   const generatedAt = new Date();
   const dateStr = generatedAt.toLocaleDateString('ar-EG', { day: 'numeric', month: 'long', year: 'numeric' });
   const timeStr = generatedAt.toLocaleTimeString('ar-EG', { hour: 'numeric', minute: '2-digit', hour12: true });
-  if (variant === 'compact') {
-    ctx.fillStyle = V.primary;
-    ctx.font = `bold 46px ${rtlFont}`;
-    ctx.fillText('مكة للذهب والمجوهرات', centerX, headerTop + 50);
-    ctx.fillStyle = V.secondary;
-    ctx.font = `500 26px ${rtlFont}`;
-    ctx.fillText('تأسس منذ 1983', centerX, headerTop + 94);
-    ctx.fillStyle = V.gold;
-    ctx.font = `bold 32px ${rtlFont}`;
-    ctx.fillText('أسعار اليوم', centerX, headerTop + 150);
-    ctx.fillStyle = V.secondary;
-    ctx.font = `500 26px ${rtlFont}`;
-    ctx.fillText(`${dateStr}  •  ${timeStr}`, centerX, headerTop + 190);
-  } else {
-    ctx.fillStyle = V.gold;
-    ctx.font = `bold 60px ${rtlFont}`;
-    ctx.fillText('مكة', centerX, headerTop + 62);
-    ctx.fillRect(centerX - 35, headerTop + 76, 70, 2);
-    ctx.fillStyle = V.primary;
-    ctx.font = `bold 42px ${rtlFont}`;
-    ctx.fillText('مكة للذهب والمجوهرات', centerX, headerTop + 132);
-    ctx.fillStyle = V.secondary;
-    ctx.font = `500 24px ${rtlFont}`;
-    ctx.fillText('تأسس منذ ٢٠٠٣', centerX, headerTop + 170);
-    ctx.fillStyle = V.gold;
-    ctx.font = `bold 30px ${rtlFont}`;
-    ctx.fillText('أسعار اليوم', centerX, headerTop + 220);
-    ctx.fillStyle = V.secondary;
-    ctx.font = `500 24px ${rtlFont}`;
-    ctx.fillText(dateStr, centerX, headerTop + 256);
-  }
-
-  const heroY = variant === 'full' ? 300 : 280;
-  const heroHeight = variant === 'full' ? 400 : 490;
-  roundedPanel(ctx, contentX, heroY, contentWidth, heroHeight, 24, V.surface, V.border);
+  ctx.fillStyle = V.navy;
+  ctx.fillRect(0, 0, canvas.width, 250);
   ctx.fillStyle = V.gold;
-  ctx.font = `bold 32px ${rtlFont}`;
-  ctx.fillText('الجرام — شراء / بيع', centerX, heroY + 54);
+  ctx.fillRect(72, 22, canvas.width - 144, 2);
+  ctx.fillRect(72, 228, canvas.width - 144, 2);
+  ctx.beginPath(); ctx.arc(72, 23, 5, 0, Math.PI * 2); ctx.arc(canvas.width - 72, 23, 5, 0, Math.PI * 2); ctx.fill();
+  drawGoldFlourish(142, 84, 0.9);
+  drawGoldFlourish(canvas.width - 142, 84, 0.9, true);
+  ctx.fillStyle = V.gold;
+  ctx.font = `bold ${variant === 'full' ? 74 : 68}px ${rtlFont}`;
+  ctx.fillText('مكة', centerX, 94);
+  ctx.fillStyle = '#fff7e8';
+  ctx.font = `bold ${variant === 'full' ? 42 : 40}px ${rtlFont}`;
+  ctx.fillText('مكة للذهب والمجوهرات', centerX, 150);
+  ctx.fillStyle = V.gold;
+  ctx.font = `500 25px ${rtlFont}`;
+  ctx.fillText('تأسس منذ 2003', centerX, 184);
+  ctx.fillStyle = '#f0dfba';
+  ctx.font = `500 24px ${rtlFont}`;
+  ctx.fillText(`${dateStr}  •  ${timeStr}`, centerX, 218);
+
+  const sectionRibbon = (title: string, y: number, width = 320) => {
+    ctx.fillStyle = V.navy;
+    ctx.beginPath(); ctx.roundRect(centerX - (width / 2), y - 25, width, 50, 20); ctx.fill();
+    ctx.fillStyle = V.gold;
+    ctx.font = `bold 28px ${rtlFont}`;
+    ctx.fillText(title, centerX, y + 9);
+    ctx.strokeStyle = V.gold; ctx.lineWidth = 2;
+    ctx.beginPath(); ctx.moveTo(contentX + 20, y); ctx.lineTo(centerX - (width / 2) - 14, y); ctx.moveTo(centerX + (width / 2) + 14, y); ctx.lineTo(contentX + contentWidth - 20, y); ctx.stroke();
+    drawGoldFlourish(centerX - (width / 2) - 42, y, 0.23);
+    drawGoldFlourish(centerX + (width / 2) + 42, y, 0.23, true);
+  };
+
+  const heroY = 282;
+  const heroHeight = variant === 'full' ? 400 : 490;
+  roundedPanel(ctx, contentX, heroY, contentWidth, heroHeight, 22, V.surface, V.goldBorder);
+  sectionRibbon('الجرام — شراء / بيع', heroY + 18, 350);
   const tableTop = heroY + 76;
   const tableHeight = heroHeight - 104;
   const headerHeight = 54;
@@ -228,14 +260,14 @@ const generateStoryCanvas = (canvas: HTMLCanvasElement, ctx: CanvasRenderingCont
   const buyX = cardInnerX + heroColumns[0] / 2;
   const sellX = cardInnerX + heroColumns[0] + heroColumns[1] / 2;
   const karatX = cardInnerX + heroColumns[0] + heroColumns[1] + heroColumns[2] / 2;
-  ctx.strokeStyle = V.border;
+  ctx.strokeStyle = '#d9c7a6';
   ctx.lineWidth = 1;
   ctx.beginPath();
   ctx.moveTo(cardInnerX + heroColumns[0], tableTop); ctx.lineTo(cardInnerX + heroColumns[0], tableTop + tableHeight);
   ctx.moveTo(cardInnerX + heroColumns[0] + heroColumns[1], tableTop); ctx.lineTo(cardInnerX + heroColumns[0] + heroColumns[1], tableTop + tableHeight);
   [tableTop + headerHeight, tableTop + headerHeight + rowHeight, tableTop + headerHeight + (rowHeight * 2), tableTop + tableHeight].forEach(y => { ctx.moveTo(cardInnerX, y); ctx.lineTo(cardInnerX + cardInnerWidth, y); });
   ctx.stroke();
-  ctx.font = `bold 26px ${rtlFont}`;
+  ctx.font = `bold 25px ${rtlFont}`;
   ctx.fillStyle = V.buy; ctx.fillText('شراء', buyX, tableTop + 36);
   ctx.fillStyle = V.sell; ctx.fillText('بيع', sellX, tableTop + 36);
   ctx.fillStyle = V.secondary; ctx.fillText('العيار', karatX, tableTop + 36);
@@ -252,8 +284,12 @@ const generateStoryCanvas = (canvas: HTMLCanvasElement, ctx: CanvasRenderingCont
     if (isPrimary) {
       ctx.fillStyle = V.goldTint;
       ctx.fillRect(cardInnerX + 1, rowTop + 1, cardInnerWidth - 2, rowHeight - 2);
+      ctx.fillStyle = '#dfba61';
+      ctx.fillRect(cardInnerX + 1, rowTop + 1, cardInnerWidth - 2, 2);
+      ctx.fillRect(cardInnerX + 1, rowTop + rowHeight - 3, cardInnerWidth - 2, 2);
       ctx.fillStyle = V.gold;
       ctx.fillRect(cardInnerX + cardInnerWidth - 4, rowTop + 1, 3, rowHeight - 2);
+      ctx.fillRect(cardInnerX + 1, rowTop + 1, 2, rowHeight - 2);
     }
     ctx.fillStyle = V.primary;
     ctx.font = `bold ${isPrimary ? (variant === 'full' ? 58 : 62) : (variant === 'full' ? 48 : 52)}px ${numericFont}`;
@@ -267,14 +303,14 @@ const generateStoryCanvas = (canvas: HTMLCanvasElement, ctx: CanvasRenderingCont
 
   if (variant === 'full') {
     const drawProductSection = (title: string, items: StoryProductItem[], type: 'bullion' | 'coin', y: number, height: number, columns: number) => {
-      roundedPanel(ctx, contentX, y, contentWidth, height, 24, V.surface, V.border);
-      ctx.textAlign = 'center'; ctx.fillStyle = V.gold; ctx.font = `bold 30px ${rtlFont}`; ctx.fillText(title, centerX, y + 44); ctx.fillRect(centerX - 36, y + 58, 72, 2);
+      roundedPanel(ctx, contentX, y, contentWidth, height, 22, V.surface, V.goldBorder);
+      sectionRibbon(title, y + 18, type === 'bullion' ? 220 : 230);
       const rowHeight = type === 'bullion' ? 48 : 40;
       const listTop = y + (type === 'bullion' ? 70 : 68);
       const listInnerX = contentX + 18;
       const listInnerWidth = contentWidth - 36;
       const colWidth = listInnerWidth / columns;
-      ctx.strokeStyle = V.border; ctx.lineWidth = 1; ctx.beginPath();
+      ctx.strokeStyle = '#d9c7a6'; ctx.lineWidth = 1; ctx.beginPath();
       for (let column = 1; column < columns; column += 1) { ctx.moveTo(listInnerX + (colWidth * column), listTop); ctx.lineTo(listInnerX + (colWidth * column), y + height - 16); }
       const rows = Math.ceil(items.length / columns);
       for (let row = 0; row <= rows; row += 1) { const dividerY = listTop + (rowHeight * row); if (dividerY <= y + height - 16) { ctx.moveTo(listInnerX, dividerY); ctx.lineTo(listInnerX + listInnerWidth, dividerY); } }
@@ -299,7 +335,7 @@ const generateStoryCanvas = (canvas: HTMLCanvasElement, ctx: CanvasRenderingCont
   const silverHeight = variant === 'full' ? 92 : 160;
   roundedPanel(ctx, contentX, silverY, contentWidth, silverHeight, 18, V.surface, V.border);
   if (variant === 'compact') {
-    ctx.fillStyle = V.gold; ctx.font = `bold 28px ${rtlFont}`; ctx.fillText('الفضة — شراء / بيع', centerX, silverY + 36);
+    sectionRibbon('الفضة — شراء / بيع', silverY + 18, 300);
     const silverTableTop = silverY + 52;
     const silverHeaderHeight = 34;
     const silverTableBottom = silverY + silverHeight - 16;
@@ -307,7 +343,7 @@ const generateStoryCanvas = (canvas: HTMLCanvasElement, ctx: CanvasRenderingCont
     const silverColumns = [cardInnerWidth / 2, cardInnerWidth / 2];
     const silverBuyX = cardInnerX + silverColumns[0] / 2;
     const silverSellX = cardInnerX + silverColumns[0] + silverColumns[1] / 2;
-    ctx.strokeStyle = V.border; ctx.lineWidth = 1; ctx.beginPath();
+    ctx.strokeStyle = '#d9c7a6'; ctx.lineWidth = 1; ctx.beginPath();
     ctx.moveTo(cardInnerX + silverColumns[0], silverTableTop); ctx.lineTo(cardInnerX + silverColumns[0], silverTableTop + silverHeaderHeight + silverRowHeight);
     ctx.moveTo(cardInnerX, silverTableTop + silverHeaderHeight); ctx.lineTo(cardInnerX + cardInnerWidth, silverTableTop + silverHeaderHeight);
     ctx.stroke();
@@ -318,30 +354,35 @@ const generateStoryCanvas = (canvas: HTMLCanvasElement, ctx: CanvasRenderingCont
     ctx.fillText(data.silverSwissBuy.toLocaleString(), silverBuyX, silverTableTop + silverHeaderHeight + 43);
     ctx.fillText(data.silverSwissSell.toLocaleString(), silverSellX, silverTableTop + silverHeaderHeight + 43);
   } else {
-    ctx.fillStyle = V.secondary; ctx.font = `bold 25px ${rtlFont}`; ctx.fillText('الفضة — شراء / بيع', centerX + 190, silverY + 38);
-    ctx.fillStyle = V.primary; ctx.font = `bold 34px ${numericFont}`; ctx.fillText(`${data.silverSwissBuy.toLocaleString()} / ${data.silverSwissSell.toLocaleString()}`, centerX - 190, silverY + 42);
+    sectionRibbon('الفضة — شراء / بيع', silverY + 18, 300);
+    ctx.fillStyle = V.silver; ctx.font = `bold 34px ${numericFont}`; ctx.fillText(`${data.silverSwissBuy.toLocaleString()} / ${data.silverSwissSell.toLocaleString()}`, centerX, silverY + 58);
   }
   if (variant === 'compact') {
     roundedPanel(ctx, contentX, 990, contentWidth, 230, 20, V.elevated, V.goldBorder);
-    ctx.fillStyle = V.gold; ctx.font = `bold 42px ${rtlFont}`; wrapCenteredText(ctx, COMPACT_CTA, centerX, 1050, 820, 56);
+    roundedPanel(ctx, contentX + 14, 1004, contentWidth - 28, 202, 15, V.elevated, '#76571e');
+    drawGoldFlourish(centerX, 1174, 0.34);
+    ctx.fillStyle = V.gold; ctx.font = `bold 39px ${rtlFont}`; wrapCenteredText(ctx, COMPACT_CTA, centerX, 1052, 820, 54);
   }
 
   const disclaimerY = variant === 'full' ? 1432 : 1250;
   const disclaimerHeight = variant === 'full' ? 140 : 260;
-  roundedPanel(ctx, contentX, disclaimerY, contentWidth, disclaimerHeight, 18, V.surface, V.border);
-  ctx.fillStyle = V.secondary;
+  roundedPanel(ctx, contentX, disclaimerY, contentWidth, disclaimerHeight, 18, '#fffaf0', V.border);
+  ctx.fillStyle = '#5f564b';
   const disclaimerFontSize = variant === 'compact' ? 35 : 22;
-  const disclaimerLineHeight = variant === 'compact' ? 46 : 31;
+  const disclaimerLineHeight = variant === 'compact' ? 50 : 34;
   ctx.font = `500 ${disclaimerFontSize}px ${rtlFont}`;
-  const disclaimerLines = getWrappedTextLines(ctx, data.customerMessage, 830);
+  const disclaimerLines = getWrappedTextLines(ctx, data.customerMessage, 800);
   const disclaimerBlockHeight = Math.max(0, (disclaimerLines.length - 1) * disclaimerLineHeight);
   const disclaimerStartY = variant === 'compact'
     ? disclaimerY + ((disclaimerHeight - disclaimerBlockHeight) / 2) + (disclaimerFontSize * 0.8)
     : disclaimerY + 58;
-  wrapCenteredText(ctx, data.customerMessage, centerX, disclaimerStartY, 830, disclaimerLineHeight);
+  wrapCenteredText(ctx, data.customerMessage, centerX, disclaimerStartY, 800, disclaimerLineHeight);
   const footerY = variant === 'full' ? 1590 : 1530;
   const footerHeight = variant === 'full' ? 220 : 300;
-  roundedPanel(ctx, contentX, footerY, contentWidth, footerHeight, 20, V.surface, V.border);
+  roundedPanel(ctx, contentX, footerY, contentWidth, footerHeight, 20, V.navy, V.goldBorder);
+  ctx.strokeStyle = '#76571e'; ctx.lineWidth = 1;
+  ctx.beginPath(); ctx.moveTo(contentX + 30, footerY + 24); ctx.lineTo(centerX - 52, footerY + 24); ctx.moveTo(centerX + 52, footerY + 24); ctx.lineTo(contentX + contentWidth - 30, footerY + 24); ctx.stroke();
+  drawGoldFlourish(centerX, footerY + 24, 0.28);
   const iconX = contentX + contentWidth - 46;
   const textRightX = iconX - 48;
   const rowStep = footerHeight / 3;
@@ -350,15 +391,15 @@ const generateStoryCanvas = (canvas: HTMLCanvasElement, ctx: CanvasRenderingCont
   ctx.direction = 'rtl';
   contactRows.forEach((icon, index) => {
     const y = rowYs[index];
-    if (index > 0) { ctx.strokeStyle = V.border; ctx.lineWidth = 1; ctx.beginPath(); ctx.moveTo(contentX + 28, y - (rowStep / 2)); ctx.lineTo(contentX + contentWidth - 28, y - (rowStep / 2)); ctx.stroke(); }
+    if (index > 0) { ctx.strokeStyle = '#314458'; ctx.lineWidth = 1; ctx.beginPath(); ctx.moveTo(contentX + 28, y - (rowStep / 2)); ctx.lineTo(contentX + contentWidth - 28, y - (rowStep / 2)); ctx.stroke(); }
     drawContactIcon(ctx, icon, iconX, y, variant === 'full' ? 27 : 32);
-    ctx.fillStyle = V.primary; ctx.font = `500 ${variant === 'full' ? 20 : 27}px ${rtlFont}`; ctx.direction = 'rtl'; ctx.textAlign = 'right';
+    ctx.fillStyle = '#fff7e8'; ctx.font = `500 ${variant === 'full' ? 21 : 28}px ${rtlFont}`; ctx.direction = 'rtl'; ctx.textAlign = 'right';
     if (icon === 'location') {
       ctx.fillText(CONTACT_ADDRESS, textRightX, y + 8, textRightX - (contentX + 24));
     } else if (icon === 'whatsapp') {
-      const label = 'واتساب:'; ctx.fillStyle = V.gold; ctx.fillText(label, textRightX, y + 8); const numberRightX = textRightX - ctx.measureText(label).width - 16; ctx.fillStyle = V.primary; ctx.direction = 'ltr'; ctx.textAlign = 'right'; ctx.fillText(CONTACT_WHATSAPP, numberRightX, y + 8);
+      const label = 'واتساب:'; ctx.fillStyle = V.gold; ctx.fillText(label, textRightX, y + 8); const numberRightX = textRightX - ctx.measureText(label).width - 16; ctx.fillStyle = '#fff7e8'; ctx.font = `600 ${variant === 'full' ? 23 : 30}px ${rtlFont}`; ctx.direction = 'ltr'; ctx.textAlign = 'right'; ctx.fillText(CONTACT_WHATSAPP, numberRightX, y + 8);
     } else {
-      const label = 'فيسبوك:'; ctx.fillStyle = V.gold; ctx.fillText(label, textRightX, y + 8); const nameRightX = textRightX - ctx.measureText(label).width - 14; ctx.fillStyle = V.primary; ctx.direction = 'rtl'; ctx.textAlign = 'right'; ctx.fillText(FACEBOOK_PAGE_NAME, nameRightX, y + 8); const usernameRightX = nameRightX - ctx.measureText(FACEBOOK_PAGE_NAME).width - 14; ctx.direction = 'ltr'; ctx.textAlign = 'right'; ctx.fillText(CONTACT_FACEBOOK_USERNAME, usernameRightX, y + 8);
+      const label = 'فيسبوك:'; ctx.fillStyle = V.gold; ctx.fillText(label, textRightX, y + 8); const nameRightX = textRightX - ctx.measureText(label).width - 14; ctx.fillStyle = '#fff7e8'; ctx.direction = 'rtl'; ctx.textAlign = 'right'; ctx.fillText(FACEBOOK_PAGE_NAME, nameRightX, y + 8); const usernameRightX = nameRightX - ctx.measureText(FACEBOOK_PAGE_NAME).width - 14; ctx.direction = 'ltr'; ctx.textAlign = 'right'; ctx.fillText(CONTACT_FACEBOOK_USERNAME, usernameRightX, y + 8);
     }
   });
   ctx.direction = 'ltr';

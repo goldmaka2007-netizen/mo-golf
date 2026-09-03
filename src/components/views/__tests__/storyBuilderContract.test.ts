@@ -86,14 +86,18 @@ describe('StoryBuilderView contract', () => {
   });
 
   it('avoids RTL-sensitive parentheses in Canvas section headings', () => {
-    expect(storySource).toContain("ctx.fillText('الجرام — شراء / بيع'");
-    expect(storySource).toContain("ctx.fillText('الفضة — شراء / بيع'");
+    expect(storySource).toContain("sectionRibbon('الجرام — شراء / بيع'");
+    expect(storySource).toContain("sectionRibbon('الفضة — شراء / بيع'");
+    expect(storySource).not.toContain("'Ag'");
+    expect(storySource).not.toContain('drawSilverIcon');
     expect(storySource).not.toContain("ctx.fillText('الجرام (شراء/بيع)'");
     expect(storySource).not.toContain("ctx.fillText('الفضة (شراء/بيع)'");
   });
 
-  it('uses the fintech visual layer without simulated device or luxury-poster decoration', () => {
-    expect(storySource).toContain("bg: '#081321'");
+  it('uses the luxury jewelry visual layer without simulated device or heavy decoration', () => {
+    expect(storySource).toContain("bg: '#f6ecd8'");
+    expect(storySource).toContain("navy: '#0d1c2d'");
+    expect(storySource).toContain("gold: '#bd8b2f'");
     expect(storySource).toContain("roundedPanel(ctx, contentX, heroY, contentWidth, heroHeight");
     expect(storySource).not.toContain('createRadialGradient');
     expect(storySource).not.toContain('strokeRect');
@@ -105,23 +109,28 @@ describe('StoryBuilderView contract', () => {
 
   it('keeps the lower-text readability refinement scoped to Compact', () => {
     expect(storySource).toContain("variant === 'compact' ? 35 : 22");
-    expect(storySource).toContain("variant === 'compact' ? 46 : 31");
-    expect(storySource).toContain('const disclaimerLines = getWrappedTextLines(ctx, data.customerMessage, 830);');
-    expect(storySource).toContain("variant === 'full' ? 20 : 27");
+    expect(storySource).toContain("variant === 'compact' ? 50 : 34");
+    expect(storySource).toContain('const disclaimerLines = getWrappedTextLines(ctx, data.customerMessage, 800);');
+    expect(storySource).toContain("variant === 'full' ? 21 : 28");
     expect(storySource).toContain('const timeStr = generatedAt.toLocaleTimeString');
     expect(storySource).toContain('ctx.fillText(`${dateStr}  •  ${timeStr}`');
-    expect(storySource).toContain("ctx.fillText('تأسس منذ 1983'");
+    expect(storySource).toContain("ctx.fillText('تأسس منذ 2003'");
+    expect(storySource).toContain('ctx.fillRect(0, 0, canvas.width, 250)');
+    expect(storySource).toContain('const heroY = 282');
     expect(storySource).toContain('const silverTableTop = silverY + 52');
     expect(storySource).toContain('const silverTableBottom = silverY + silverHeight - 16');
     expect(storySource).toContain('ctx.font = `bold 52px ${numericFont}`');
+    expect(storySource).toContain("ctx.fillStyle = '#5f564b'");
   });
 
-  it('starts the Compact header with the shop name while preserving the Full wordmark', () => {
-    const compactHeader = storySource.match(/if \(variant === 'compact'\) \{([\s\S]*?)\} else \{/);
-    expect(compactHeader?.[1]).toContain("ctx.fillText('مكة للذهب والمجوهرات'");
-    expect(compactHeader?.[1]).toContain("ctx.fillText('تأسس منذ 1983'");
-    expect(compactHeader?.[1]).not.toContain("ctx.fillText('مكة',");
-    expect(storySource).toContain("ctx.fillText('مكة', centerX, headerTop + 62)");
-    expect(storySource).toContain("ctx.fillText('تأسس منذ ٢٠٠٣', centerX, headerTop + 170)");
+  it('uses the premium shared header for both variants', () => {
+    expect(storySource).toContain("ctx.fillText('مكة للذهب والمجوهرات'");
+    expect(storySource).toContain("ctx.fillText('تأسس منذ 2003'");
+    expect(storySource).toContain("ctx.fillText('مكة', centerX, 94)");
+    expect(storySource).toContain("ctx.font = `bold ${variant === 'full' ? 74 : 68}px ${rtlFont}`");
+    expect(storySource).toContain("ctx.fillText('تأسس منذ 2003', centerX, 184)");
+    expect(storySource).toContain('ctx.fillText(`${dateStr}  •  ${timeStr}`, centerX, 218)');
+    expect(storySource).toContain('const drawGoldFlourish =');
+    expect(storySource).not.toContain('تأسس منذ 1983');
   });
 });
