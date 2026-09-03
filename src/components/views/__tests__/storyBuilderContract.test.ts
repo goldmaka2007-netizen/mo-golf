@@ -9,8 +9,8 @@ describe('StoryBuilderView contract', () => {
   it('keeps pricingConfig as the primary workmanship source without duplicate Story inputs', () => {
     expect(storySource).toContain('store.pricingConfig.bullionWorkmanshipByWeight');
     expect(storySource).toContain('store.pricingConfig.coinWorkmanshipByWeight');
-    expect(storySource).toContain('store.bullionCharges?.[item.weight]');
-    expect(storySource).toContain('store.coinCharges?.[item.weight]');
+    expect(storySource).toContain("workmanshipChargeForDisplay('bullion', item.weight, store.pricingConfig, store.bullionCharges)");
+    expect(storySource).toContain("workmanshipChargeForDisplay('coin', item.weight, store.pricingConfig, store.coinCharges)");
     expect(storySource).not.toContain('مصنعية الســــبائك');
     expect(storySource).not.toContain('الجنيــــهات (جم / ع 21)');
     expect(storySource).not.toContain('<textarea');
@@ -32,19 +32,23 @@ describe('StoryBuilderView contract', () => {
     expect(storySource).toContain("'بدون سبائك وجنيهات'");
     expect(storySource).toContain("'كاملة'");
     expect(storySource).toContain("if (variant === 'full')");
-    expect(storySource).toContain("const silverY = variant === 'full' ? 1326 : 738");
-    expect(storySource).toContain('const COMPACT_STORY_HEIGHT = 1560');
+    expect(storySource).toContain("const silverY = variant === 'full' ? 1310 : 800");
+    expect(storySource).toContain('const COMPACT_STORY_HEIGHT = 1920');
     expect(storySource).toContain('canvas.height = variant === \'compact\' ? COMPACT_STORY_HEIGHT : FULL_STORY_HEIGHT');
     expect(storySource).toContain('aspectRatio: variant === \'compact\'');
     expect(storySource).toContain('object-contain');
   });
 
-  it('keeps the full bullion path and adds the exact compact CTA only to compact', () => {
+  it('keeps the approved compact CTA and separates full bullion and coin layouts', () => {
     expect(storySource).toContain("const COMPACT_CTA = 'لأحدث أسعار السبائك والجنيهات وقت الطلب، ابعتلنا رسالة على واتساب أو فيسبوك'");
     expect(storySource).toContain("if (variant === 'compact')");
     expect(storySource).toContain('wrapCenteredText(ctx, COMPACT_CTA');
-    expect(storySource).toContain("const allItems = [");
-    expect(storySource).toContain("const charges = item.type === 'bullion' ? data.bullionCharges : data.coinCharges;");
+    expect(storySource).toContain("drawProductSection('السبائك', BULLION_LIST, 'bullion', 720, 310, 2)");
+    expect(storySource).toContain("drawProductSection('الجنيهات', COIN_LIST, 'coin', 1046, 240, 1)");
+    expect(storySource).toContain('const cardInnerWidth = contentWidth - (cardPadding * 2);');
+    expect(storySource).toContain('const colWidth = listInnerWidth / columns;');
+    expect(storySource).toContain("if (variant === 'compact') {\n    roundedPanel(ctx, contentX, 990, contentWidth, 230");
+    expect(storySource).not.toContain("if (variant === 'full') {\n    roundedPanel(ctx, contentX, 1000");
   });
 
   it('uses the isolated Story spread for both variants without the official buy price', () => {
@@ -67,7 +71,7 @@ describe('StoryBuilderView contract', () => {
     expect(storySource).toContain("const CONTACT_FACEBOOK_USERNAME = '@makkagoldalex'");
     expect(storySource).toContain('const drawContactIcon = (');
     expect(storySource).toContain("type ContactIcon = 'location' | 'whatsapp' | 'facebook'");
-    expect(storySource).toContain('drawContactIcon(ctx, icon, iconX, y, 30)');
+    expect(storySource).toContain('drawContactIcon(ctx, icon, iconX, y, variant === \'full\' ? 27 : 32)');
     expect(storySource).toContain('ctx.bezierCurveTo');
     expect(storySource).not.toContain('fillText("F"');
     expect(storySource).toContain("ctx.direction = 'ltr'");
@@ -78,6 +82,7 @@ describe('StoryBuilderView contract', () => {
     expect(storySource).not.toContain('drawImage');
     expect(storySource).not.toContain('نلتزم بالشفافية والثقة');
     expect(storySource).not.toContain('@mohamedyasser2400');
+    expect(storySource).not.toContain('الأسعار استرشادية وتتحدد بدقة عند التنفيذ الفعلي');
   });
 
   it('avoids RTL-sensitive parentheses in Canvas section headings', () => {
@@ -85,5 +90,38 @@ describe('StoryBuilderView contract', () => {
     expect(storySource).toContain("ctx.fillText('الفضة — شراء / بيع'");
     expect(storySource).not.toContain("ctx.fillText('الجرام (شراء/بيع)'");
     expect(storySource).not.toContain("ctx.fillText('الفضة (شراء/بيع)'");
+  });
+
+  it('uses the fintech visual layer without simulated device or luxury-poster decoration', () => {
+    expect(storySource).toContain("bg: '#081321'");
+    expect(storySource).toContain("roundedPanel(ctx, contentX, heroY, contentWidth, heroHeight");
+    expect(storySource).not.toContain('createRadialGradient');
+    expect(storySource).not.toContain('strokeRect');
+    expect(storySource).not.toContain('story progress');
+    expect(storySource).not.toContain('iPhone');
+    expect(storySource).not.toContain('BTC');
+    expect(storySource).not.toContain('أونصة');
+  });
+
+  it('keeps the lower-text readability refinement scoped to Compact', () => {
+    expect(storySource).toContain("variant === 'compact' ? 35 : 22");
+    expect(storySource).toContain("variant === 'compact' ? 46 : 31");
+    expect(storySource).toContain('const disclaimerLines = getWrappedTextLines(ctx, data.customerMessage, 830);');
+    expect(storySource).toContain("variant === 'full' ? 20 : 27");
+    expect(storySource).toContain('const timeStr = generatedAt.toLocaleTimeString');
+    expect(storySource).toContain('ctx.fillText(`${dateStr}  •  ${timeStr}`');
+    expect(storySource).toContain("ctx.fillText('تأسس منذ 1983'");
+    expect(storySource).toContain('const silverTableTop = silverY + 52');
+    expect(storySource).toContain('const silverTableBottom = silverY + silverHeight - 16');
+    expect(storySource).toContain('ctx.font = `bold 52px ${numericFont}`');
+  });
+
+  it('starts the Compact header with the shop name while preserving the Full wordmark', () => {
+    const compactHeader = storySource.match(/if \(variant === 'compact'\) \{([\s\S]*?)\} else \{/);
+    expect(compactHeader?.[1]).toContain("ctx.fillText('مكة للذهب والمجوهرات'");
+    expect(compactHeader?.[1]).toContain("ctx.fillText('تأسس منذ 1983'");
+    expect(compactHeader?.[1]).not.toContain("ctx.fillText('مكة',");
+    expect(storySource).toContain("ctx.fillText('مكة', centerX, headerTop + 62)");
+    expect(storySource).toContain("ctx.fillText('تأسس منذ ٢٠٠٣', centerX, headerTop + 170)");
   });
 });
