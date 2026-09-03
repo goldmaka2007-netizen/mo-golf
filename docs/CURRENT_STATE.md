@@ -1,17 +1,30 @@
 # Current Project State
 
-Last reviewed: 2026-09-02
+Last reviewed: 2026-09-03
 
 ## Current Production operating baseline
 
 - Repository: `goldmaka2007-netizen/mo-golf`.
 - Production: `https://makka-central-accounting.web.app`.
 - Firebase project: `makka-central-accounting`.
-- Production is intentionally rolled back to the last known working and owner-accepted legacy application SHA `5241d44d3251a515a81ec6004fb6ae8447a64956`.
-- Current Production main asset after rollback: `/assets/index-Bebc0LQE.js`.
-- Rollback validation passed: `npm ci`, TypeScript, Balance Contract, production build, Firebase Hosting-only deploy, Production root HTTP 200, asset HTTP 200, Firebase/session startup, and browser smoke without console errors.
-- Owner mobile operational check after rollback: PASS; the owner confirmed the legacy application is working and usable for daily work.
-- The rollback changed Firebase Hosting only. It did **not** change Firestore data, Rules, Indexes, Functions, Storage, Auth, backend configuration, Posting Matrix, WAC/COGS, Merchant Metal WAC, Balance Engine, Entry contracts, or Golden Baseline.
+- Daily business Production remains based on the last known working and owner-accepted legacy application SHA `5241d44d3251a515a81ec6004fb6ae8447a64956`, with the separately approved Story-only patch applied from release commit `7642c22b76b316966cfe67490c8992ebff13a6f2` on branch `release/story-ui-legacy-2026-09-03`.
+- Current Production main asset: `/assets/index-BKNQiFne.js`.
+- The Story-only release passed `npm ci`, focused Story + StoryPricing tests (15 PASS), TypeScript, Balance Contract Guard, production build, `git diff --check`, Firebase Hosting-only deploy, root/asset HTTP 200, and startup smoke without console errors.
+- Owner manual Production acceptance: Compact Story PASS, Full Story PASS, and daily-use Firebase Production works normally after deployment.
+- The Story release changed Firebase Hosting only. It did **not** change Firestore data, Rules, Indexes, Functions, Storage, Auth, backend configuration, Posting Matrix, WAC/COGS, Merchant Metal WAC, Balance Engine, Entry contracts, or Golden Baseline.
+- Current Central Accounting/main application state was **not** deployed as part of this Story release.
+
+## Accepted Story-only Production release — 2026-09-03
+
+- Release base: `5241d44d3251a515a81ec6004fb6ae8447a64956`.
+- Release branch: `release/story-ui-legacy-2026-09-03`.
+- Release commit: `7642c22b76b316966cfe67490c8992ebff13a6f2` (`feat: release approved story redesign on legacy production`).
+- Application diff was limited to `src/components/views/StoryBuilderView.tsx` plus the focused Story contract test; no accounting/backend files changed.
+- Compact and Full Story outputs are 1080×1920.
+- Compact uses the accepted price-first fintech layout with dynamic date/time, Gold hero, one-row Silver table, readable CTA/disclaimer/footer, and no decorative outer frame/fake Story UI.
+- Full preserves Gold → Bullion (two columns) → Coins (one vertical column) → Silver → disclaimer → contacts, with no Full CTA.
+- Pricing, Story-only buy spread, workmanship, source content, sharing/download behavior, and filenames remain unchanged.
+- Production release status: `DEPLOYED / OWNER MANUAL ACCEPTED / DAILY USE PASS`.
 
 ## GitHub / Central Accounting source state
 
@@ -19,7 +32,7 @@ Last reviewed: 2026-09-02
 - Central Accounting application/code merge baseline: `223f473785ff72b7b92bdd005ef34508f56168af` (PR #31 merged).
 - That baseline includes the narrow historical `customer.payment` Shadow compatibility correction.
 - Production must **not** be redeployed from the Central Accounting/main application state until the unresolved parity and operational issues are investigated, corrected, independently verified, and explicitly re-approved by the owner.
-- Documentation sync may advance GitHub `main` beyond `223f473...`; the important distinction is: Production runs legacy SHA `5241d44...`, while Central Accounting source remains preserved in GitHub for offline remediation.
+- Documentation sync may advance GitHub `main` beyond `223f473...`; the important distinction is: daily Production runs the accepted legacy baseline plus the isolated Story-only release, while Central Accounting source remains preserved in GitHub for offline remediation.
 
 ## Central Accounting Production acceptance result
 
@@ -91,7 +104,8 @@ Treat the Sale-save failure as a separate Production-critical issue to reproduce
 
 ## Current status
 
-- Daily business Production: `LEGACY BASELINE RESTORED / OWNER OPERATIONAL CHECK PASSED`.
+- Daily business Production: `LEGACY BASELINE + STORY-ONLY RELEASE / OWNER MANUAL ACCEPTED / DAILY USE PASS`.
+- Story redesign task: `CLOSED` after Production deployment, Compact + Full owner acceptance, and daily-use confirmation.
 - Central Accounting code: `PRESERVED IN GITHUB / NOT PRODUCTION ACCEPTED`.
 - Central Accounting Production Acceptance task: `BLOCKED / NOT CLOSED`.
 - Emergency rollback task: `IMPLEMENTED / OWNER CHECK PASSED`.
@@ -105,13 +119,13 @@ Start from live sources, not old chat history:
 1. Read Notion `Makka Change Workflow — مسار أي تعديل جديد`.
 2. Read Google Drive `Makka — Current Reviewer Context`.
 3. Verify GitHub `main`, then read `AGENTS.md`, `CONSTITUTION.md`, and this file.
-4. Keep Production pinned to legacy SHA `5241d44d3251a515a81ec6004fb6ae8447a64956` unless the owner explicitly approves another deployment.
+4. Preserve the accepted daily Production baseline: legacy SHA `5241d44d...` plus the Story-only release commit `7642c22b...`; do not replace it with current Central Accounting/main without a separate explicit owner decision.
 5. Do **not** deploy current Central Accounting source to Production merely because it is on `main`.
 6. Investigate Central Accounting in two controlled tracks before any redeploy:
    - parity remediation for the 1,861 open rows, starting with quantity semantics and repeated operation patterns;
    - independent RCA for the owner-observed Gold Sale save failure.
 7. Any accounting/business semantic change requires explicit decision lock and owner approval under the Makka Change Workflow.
-8. After a corrected release passes independent verification and Owner Production Acceptance, sync GitHub + Notion + Google Drive and verify all three before closing.
+8. After a corrected Central Accounting release passes independent verification and Owner Production Acceptance, sync GitHub + Notion + Google Drive and verify all three before closing that separate task.
 
 ## Protected accounting/data invariants
 
@@ -132,4 +146,4 @@ Do not change without a separate explicit owner decision and approval:
 - GitHub = executable/source/test truth and this durable current-state record.
 - Notion = mandatory workflow, approved decisions/status, and change log.
 - Google Drive = reviewer-facing/accounting/operational references and `Makka — Current Reviewer Context`.
-- This state was synchronized specifically so work can continue from another ChatGPT account without relying on chat history.
+- Story release details are recorded here and in Notion Project Change Log; `Makka — Current Reviewer Context` should stay short and point to those records rather than duplicating the full implementation history.
