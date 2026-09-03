@@ -1,22 +1,27 @@
 # Current Project State
 
-Last reviewed: 2026-08-29
+Last reviewed: 2026-09-03
 
-## Latest local StoryBuilder visual redesign — not deployed
+## StoryBuilder Luxury Jewelry production release — owner accepted
 
-- Baseline: `release/story-ui-legacy-2026-09-03` at `7642c22b76b316966cfe67490c8992ebff13a6f2`.
-- Compact and Full Story renderers remain dynamic 1080×1920 PNGs; this local change updates presentation only.
-- The Canvas visual system now uses warm ivory, deep navy, and restrained metallic-gold accents, with cream price/product panels, navy CTA/footer, improved ribbons, spacing, hierarchy, and readability.
-- Compact and Full preserve their existing business sections, data sources, pricing semantics, sharing, and download behavior. Compact establishment text is `تأسس منذ 2003`.
-- No production deployment or Firebase/Firestore surface change was made.
+- Production strategy remains the owner-accepted legacy application SHA `5241d44d3251a515a81ec6004fb6ae8447a64956` plus the isolated Story release on branch `release/story-ui-legacy-2026-09-03`.
+- Final Story release commit: `bd71245520513d663c671e2b8369cf9b20e99a56` (`release StoryBuilder Luxury Jewelry redesign`).
+- Compact and Full Story renderers remain dynamic 1080×1920 PNGs; the release changes presentation only.
+- Final visual system uses warm ivory/cream, deep navy, and restrained metallic-gold accents, with stronger Makka brand presence, corrected `تأسس منذ 2003`, premium 21K treatment, silver without the Ag icon, and refined CTA/disclaimer/footer treatment.
+- Existing Story business sections, data sources, pricing semantics, sharing, and download behavior are preserved.
+- Verification: focused Story + StoryPricing `15/15 PASS`; TypeScript PASS; Balance Contract Guard PASS; Production build PASS.
+- Firebase Hosting-only deploy to project `makka-central-accounting` succeeded. Production asset: `/assets/index-roY6hn_l.js`.
+- Owner manual Production acceptance: PASS on 2026-09-03.
+- No Firestore Data/Rules/Indexes/Functions/Storage/Auth, backend, pricing/business/accounting logic, WAC/COGS, Balance Engine, Entry contract, or Golden Baseline change.
+- Central Accounting `main` was not merged, rebased, or deployed by this Story release.
 
 ## Production baseline
 
 - Repository: `goldmaka2007-netizen/mo-golf`
 - Production: https://makka-central-accounting.web.app
 - Firebase project: `makka-central-accounting`
-- Current deployed application commit: `1fa1da6bc8be0f0dd8b6583cd9edb944a5567e82`
-- Latest release family: Account Management + Safe Account Uses + Firestore read-quota follow-up.
+- Daily Production application: legacy SHA `5241d44d3251a515a81ec6004fb6ae8447a64956` plus Story release commit `bd71245520513d663c671e2b8369cf9b20e99a56`.
+- Latest release family: StoryBuilder Luxury Jewelry Production Polish.
 - Deployment scope: Firebase Hosting only.
 - Current release status: `COMPLETED / PRODUCTION DEPLOYED / OWNER MANUAL ACCEPTED / CROSS-SYSTEM VERIFIED`.
 
