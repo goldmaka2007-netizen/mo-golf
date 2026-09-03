@@ -7,24 +7,27 @@ Last reviewed: 2026-09-03
 - Repository: `goldmaka2007-netizen/mo-golf`.
 - Production: `https://makka-central-accounting.web.app`.
 - Firebase project: `makka-central-accounting`.
-- Daily business Production remains based on the last known working and owner-accepted legacy application SHA `5241d44d3251a515a81ec6004fb6ae8447a64956`, with the separately approved Story-only patch applied from release commit `7642c22b76b316966cfe67490c8992ebff13a6f2` on branch `release/story-ui-legacy-2026-09-03`.
-- Current Production main asset: `/assets/index-BKNQiFne.js`.
-- The Story-only release passed `npm ci`, focused Story + StoryPricing tests (15 PASS), TypeScript, Balance Contract Guard, production build, `git diff --check`, Firebase Hosting-only deploy, root/asset HTTP 200, and startup smoke without console errors.
-- Owner manual Production acceptance: Compact Story PASS, Full Story PASS, and daily-use Firebase Production works normally after deployment.
-- The Story release changed Firebase Hosting only. It did **not** change Firestore data, Rules, Indexes, Functions, Storage, Auth, backend configuration, Posting Matrix, WAC/COGS, Merchant Metal WAC, Balance Engine, Entry contracts, or Golden Baseline.
+- Daily business Production remains based on the last known working and owner-accepted legacy application SHA `5241d44d3251a515a81ec6004fb6ae8447a64956`, with the separately approved final Story-only release commit `bd71245520513d663c671e2b8369cf9b20e99a56` on branch `release/story-ui-legacy-2026-09-03`.
+- Current Production main asset: `/assets/index-roY6hn_l.js`.
+- The final Story-only release passed focused Story + StoryPricing tests (15/15 PASS), TypeScript, Balance Contract Guard, and Production build before Firebase Hosting-only deployment.
+- Owner manual Production acceptance: PASS on 2026-09-03; the owner confirmed the deployed Story output is correct and daily-use Firebase Production works normally.
+- The Story release changed Firebase Hosting only. It did **not** change Firestore data, Rules, Indexes, Functions, Storage, Auth, backend configuration, pricing/business/accounting logic, Posting Matrix, WAC/COGS, Merchant Metal WAC, Balance Engine, Entry contracts, or Golden Baseline.
 - Current Central Accounting/main application state was **not** deployed as part of this Story release.
 
-## Accepted Story-only Production release — 2026-09-03
+## StoryBuilder Luxury Jewelry Production Polish — 2026-09-03
 
+- Status: `COMPLETED / PRODUCTION DEPLOYED / OWNER MANUAL ACCEPTED / CROSS-SYSTEM VERIFIED`.
 - Release base: `5241d44d3251a515a81ec6004fb6ae8447a64956`.
 - Release branch: `release/story-ui-legacy-2026-09-03`.
-- Release commit: `7642c22b76b316966cfe67490c8992ebff13a6f2` (`feat: release approved story redesign on legacy production`).
-- Application diff was limited to `src/components/views/StoryBuilderView.tsx` plus the focused Story contract test; no accounting/backend files changed.
-- Compact and Full Story outputs are 1080×1920.
-- Compact uses the accepted price-first fintech layout with dynamic date/time, Gold hero, one-row Silver table, readable CTA/disclaimer/footer, and no decorative outer frame/fake Story UI.
-- Full preserves Gold → Bullion (two columns) → Coins (one vertical column) → Silver → disclaimer → contacts, with no Full CTA.
-- Pricing, Story-only buy spread, workmanship, source content, sharing/download behavior, and filenames remain unchanged.
-- Production release status: `DEPLOYED / OWNER MANUAL ACCEPTED / DAILY USE PASS`.
+- Final Story release commit: `bd71245520513d663c671e2b8369cf9b20e99a56` (`release StoryBuilder Luxury Jewelry redesign`).
+- Application scope remained limited to the Story presentation path and focused Story contract coverage; no accounting/backend files changed.
+- Compact and Full Story outputs remain dynamic 1080×1920.
+- Final visual direction is Luxury Jewelry using warm ivory/cream, deep navy, restrained metallic-gold accents, stronger Makka brand presence, corrected `تأسس منذ 2003`, readable dynamic date/time, premium 21K treatment, silver without the Ag icon, and refined CTA/disclaimer/footer treatment.
+- Existing Story business sections, data sources, pricing semantics, Story-only buy spread, workmanship, sharing/download behavior, and filenames remain unchanged.
+- Verification: focused Story + StoryPricing `15/15 PASS`; TypeScript PASS; Balance Contract Guard PASS; Production build PASS.
+- Deploy: Firebase Hosting only to project `makka-central-accounting`; Production asset `/assets/index-roY6hn_l.js`.
+- Owner manual Production acceptance: PASS on 2026-09-03.
+- Central Accounting `main` was not merged, rebased, or deployed by this Story release.
 
 ## GitHub / Central Accounting source state
 
@@ -104,8 +107,8 @@ Treat the Sale-save failure as a separate Production-critical issue to reproduce
 
 ## Current status
 
-- Daily business Production: `LEGACY BASELINE + STORY-ONLY RELEASE / OWNER MANUAL ACCEPTED / DAILY USE PASS`.
-- Story redesign task: `CLOSED` after Production deployment, Compact + Full owner acceptance, and daily-use confirmation.
+- Daily business Production: `LEGACY BASELINE + FINAL STORY-ONLY RELEASE / OWNER MANUAL ACCEPTED / DAILY USE PASS`.
+- StoryBuilder Luxury Jewelry task: `CLOSED` after Production deployment, owner acceptance, and cross-system synchronization.
 - Central Accounting code: `PRESERVED IN GITHUB / NOT PRODUCTION ACCEPTED`.
 - Central Accounting Production Acceptance task: `BLOCKED / NOT CLOSED`.
 - Emergency rollback task: `IMPLEMENTED / OWNER CHECK PASSED`.
@@ -119,7 +122,7 @@ Start from live sources, not old chat history:
 1. Read Notion `Makka Change Workflow — مسار أي تعديل جديد`.
 2. Read Google Drive `Makka — Current Reviewer Context`.
 3. Verify GitHub `main`, then read `AGENTS.md`, `CONSTITUTION.md`, and this file.
-4. Preserve the accepted daily Production baseline: legacy SHA `5241d44d...` plus the Story-only release commit `7642c22b...`; do not replace it with current Central Accounting/main without a separate explicit owner decision.
+4. Preserve the accepted daily Production baseline: legacy SHA `5241d44d...` plus the final Story-only release commit `bd712455...`; do not replace it with current Central Accounting/main without a separate explicit owner decision.
 5. Do **not** deploy current Central Accounting source to Production merely because it is on `main`.
 6. Investigate Central Accounting in two controlled tracks before any redeploy:
    - parity remediation for the 1,861 open rows, starting with quantity semantics and repeated operation patterns;
