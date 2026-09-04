@@ -151,3 +151,11 @@ Durable V2 boundaries:
 
 Closure record: `docs/V2_PHASE1_BUSINESS_OPERATIONS_CLOSURE_2026-09-04.md`.
 
+## D-029 — Makka V2 uses a separate private repository
+
+Makka V2 implementation/design authority moves to the dedicated private repository `goldmaka2007-netizen/makka-v2`.
+
+This `mo-golf` repository remains the current/legacy application, Central Accounting remediation, Production history, and implementation-evidence repository. Makka V2 must not bulk-inherit this repository's code, Firebase configuration, deployment target, or compatibility structure. Legacy behavior may be inspected/reused later only when it is deliberately verified against the frozen V2 business intent.
+
+The Makka V2 repository begins Docs-only with Phase 1 closed and Phase 2 Domain & Data Model ready/not started.
+
