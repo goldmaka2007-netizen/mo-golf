@@ -1,6 +1,6 @@
 # Current Project State
 
-Last reviewed: 2026-09-03
+Last reviewed: 2026-09-04
 
 ## Current Production operating baseline
 
@@ -105,6 +105,19 @@ During the Central Accounting Production attempt, the owner also tried a Gold Sa
 
 Treat the Sale-save failure as a separate Production-critical issue to reproduce and investigate read-only/focused before any future Central Accounting redeploy. Do not assume it shares the same root cause as the 1,861 parity discrepancies.
 
+## Makka V2 — Phase 1 Business Operations Drill closure — 2026-09-04
+
+- Status: `CLOSED / OWNER-APPROVED BUSINESS FREEZE / GEMINI RED-TEAM REVIEW PASSED / CROSS-SYSTEM DOC SYNC IN PROGRESS AT THIS COMMIT`.
+- V2 remains separate from the accepted daily Production application and from the Central Accounting remediation track.
+- Gemini Pro returned `READY TO CLOSE AFTER DOCUMENTATION CLEANUP` with no genuine Phase 1 Business Blocker.
+- ChatGPT cross-checked the reported drift against live Drive, Notion, and GitHub before cleanup.
+- Canonical cleanup locks operation-specific count semantics, operation-specific negative-inventory policy, direct edit + Hard Delete + no normal Returns, and required current market-price snapshots for new direct Gold/Silver sale and purchase.
+- Phase 2 `Domain & Data Model` is `READY / NOT STARTED`; no implementation is authorized by Phase 1 closure.
+- Protected Accounting/Valuation and Migration work remain deferred.
+- Detailed closure record: `docs/V2_PHASE1_BUSINESS_OPERATIONS_CLOSURE_2026-09-04.md`.
+- Durable decision index: `docs/DECISIONS.md#d-028--makka-v2-phase-1-business-operation-meaning-is-frozen`.
+- No application code, tests, Firebase/Firestore, Production, or deployment surface changed for this docs-only closure.
+
 ## Current status
 
 - Daily business Production: `LEGACY BASELINE + FINAL STORY-ONLY RELEASE / OWNER MANUAL ACCEPTED / DAILY USE PASS`.
@@ -114,6 +127,7 @@ Treat the Sale-save failure as a separate Production-critical issue to reproduce
 - Emergency rollback task: `IMPLEMENTED / OWNER CHECK PASSED`.
 - No Central Accounting redeploy is authorized at this checkpoint.
 - 2026 remains an Open Year; Year-Close / closed-period authority and 2027 transition remain deferred until end-of-year work.
+- Makka V2 Phase 1 Business Operations Drill: `CLOSED`; Phase 2 Domain & Data Model: `READY / NOT STARTED`.
 
 ## Mandatory next work for the next ChatGPT account
 
