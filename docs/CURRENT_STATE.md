@@ -118,6 +118,15 @@ Treat the Sale-save failure as a separate Production-critical issue to reproduce
 - Durable decision index: `docs/DECISIONS.md#d-028--makka-v2-phase-1-business-operation-meaning-is-frozen`.
 - No application code, tests, Firebase/Firestore, Production, or deployment surface changed for this docs-only closure.
 
+## Makka V2 repository separation — 2026-09-04
+
+- New dedicated private repository: `goldmaka2007-netizen/makka-v2`.
+- Purpose: clean Makka V2 technical/durable-decision home starting from Phase 2 Domain & Data Model.
+- Initial mode: `DOCS-ONLY`; no application code, Firebase/Firestore configuration, deployment target, or migration code exists there yet.
+- Makka V2 Phase 1 remains `CLOSED / CROSS-SYSTEM VERIFIED`; Phase 2 remains `READY / NOT STARTED`.
+- This `mo-golf` repository remains the current-app/Central Accounting/history implementation reference and is **not** the Makka V2 implementation repository.
+- Legacy/current-app code may be inspected as evidence and reused later only deliberately; it is not bulk-copied into V2.
+
 ## Current status
 
 - Daily business Production: `LEGACY BASELINE + FINAL STORY-ONLY RELEASE / OWNER MANUAL ACCEPTED / DAILY USE PASS`.
