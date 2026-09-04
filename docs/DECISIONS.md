@@ -135,3 +135,19 @@ Phase 4C routes the existing EGP Income Statement, monthly Financial Position, a
 ## D-027 — Phase 5A establishes a pure Central write preflight without activating Cutover
 
 Before any EntryForm/App/Firestore writer is switched to the Central path, a candidate create/update must pass one pure in-memory Central write preflight. The preflight requires global Registry Cutover readiness, Central operation identity, stable writable account identity, explicit write source (`user`, `setup`, or `system`), and the existing accounting policy, numbering, Posting Matrix, gold-equivalent, accessory quantity-step, and runtime inventory Cost Timeline validators. Unknown/ambiguous/contradictory identity and non-writable operations/accounts fail closed with no legacy operation fallback and no persistence. Update cost validation replaces exactly one existing Entry in memory rather than appending a duplicate, and stable account IDs remain authoritative while historical display labels are preserved. Phase 5A does not wire or change the current writer, Firestore persistence, Entry schema, accounting semantics, or deployment. The real Registry remains not Cutover-ready while `inventory.adjustment.legacy` is still transition-writable. Post-Cutover delete/correction behavior remains an explicit unresolved decision for the next write-path phase and must not be inferred from the current hard-delete implementation. See ADR-016.
+
+## D-028 — Makka V2 Phase 1 business-operation meaning is frozen
+
+Makka V2 Phase 1 — Business Operations Drill is closed after owner decisions, Gemini Pro read-only red-team review, ChatGPT cross-check, and documentation cleanup. Phase 2 may model these decisions but must not reinterpret them or invent new business rules.
+
+Durable V2 boundaries:
+- one product per operation/invoice;
+- direct edit of the original operation, Hard Delete with audit evidence and chronological recomputation, and no normal Return operation;
+- Gold/Silver retail sale uses weight as the primary metal movement; count is optional on sale even for count-tracked products, while purchase/merchant/Tafiet/accessory count requirements remain operation-specific;
+- negative inventory permission is limited to the explicitly approved sale flows after strong warning + confirmation and is not a universal outgoing-inventory rule;
+- new direct Gold Sale, Gold Purchase, Silver Sale, and Silver Purchase require a valid current metal-price snapshot at registration; backdated entry uses registration-time current price, while Final Agreed Total remains the authoritative cash amount;
+- migration cleanup/backfill remains separate from new-operation business behavior;
+- Posting Matrix, WAC/COGS, Balance Engine, merchant carrying-value accounting, Al-Safi realization accounting, valuation, depreciation, platform choice, and migration execution remain outside Phase 1.
+
+Closure record: `docs/V2_PHASE1_BUSINESS_OPERATIONS_CLOSURE_2026-09-04.md`.
+
