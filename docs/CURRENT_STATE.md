@@ -1,29 +1,29 @@
 # Current Project State
 
-Last reviewed: 2026-09-03
+Last reviewed: 2026-09-06
 
-## StoryBuilder Luxury Jewelry production release — owner accepted
+## StoryBuilder Compact redesign — final production release
 
-- Production strategy remains the owner-accepted legacy application SHA `5241d44d3251a515a81ec6004fb6ae8447a64956` plus the isolated Story release on branch `release/story-ui-legacy-2026-09-03`.
-- Final Story release commit: `bd71245520513d663c671e2b8369cf9b20e99a56` (`release StoryBuilder Luxury Jewelry redesign`).
-- Compact and Full Story renderers remain dynamic 1080×1920 PNGs; the release changes presentation only.
-- Final visual system uses warm ivory/cream, deep navy, and restrained metallic-gold accents, with stronger Makka brand presence, corrected `تأسس منذ 2003`, premium 21K treatment, silver without the Ag icon, and refined CTA/disclaimer/footer treatment.
-- Existing Story business sections, data sources, pricing semantics, sharing, and download behavior are preserved.
-- Verification: focused Story + StoryPricing `15/15 PASS`; TypeScript PASS; Balance Contract Guard PASS; Production build PASS.
-- Firebase Hosting-only deploy to project `makka-central-accounting` succeeded. Production asset: `/assets/index-roY6hn_l.js`.
-- Owner manual Production acceptance: PASS on 2026-09-03.
-- No Firestore Data/Rules/Indexes/Functions/Storage/Auth, backend, pricing/business/accounting logic, WAC/COGS, Balance Engine, Entry contract, or Golden Baseline change.
-- Central Accounting `main` was not merged, rebased, or deployed by this Story release.
+- Production strategy remains the owner-accepted legacy application SHA `5241d44d3251a515a81ec6004fb6ae8447a64956` plus the isolated Story release branch `release/story-ui-legacy-2026-09-03`.
+- Release base: `eb612133e1985ce7f696d6094f8bd3a250a7c4f1` (documentation-only follow-up preserved).
+- Final Story release commit: `7f33016280ffdc3acc2d8212f9f2fc63f0075f07`.
+- Compact and Full remain dynamic `1080×1920` PNGs. Compact now uses the owner-approved final layout: compact navy header, hero 21K card, RTL supporting cards 18K / 24K / silver, ivory trust card, compact CTA, refined footer, and brand-accurate WhatsApp/Facebook vector marks.
+- Compact disclaimer/contact wording remains owner-approved; dynamic date/time, Story buy spread, pricingConfig, derived 18K/24K buy prices, silver prices, Full variant, PNG generation, native share, and save fallback are preserved.
+- Validation: focused Story + StoryPricing `15/15 PASS`; TypeScript PASS; Balance Contract Guard PASS; Production build PASS; `git diff --check` PASS.
+- Firebase Hosting-only deploy to project `makka-central-accounting` succeeded.
+- Production assets: `/assets/index-D-jE4nUo.js`; Story chunk `/assets/StoryBuilderView-D8EJIvEw.js` HTTP 200 and matched the local build.
+- Production smoke PASS: React startup clean, Story Builder opens, Compact and Full generate at 1080×1920, share/save available, CTA/footer and RTL/LTR verified, official WhatsApp/Facebook marks present in deployed asset.
+- No Central Accounting code, unrelated owner changes, Firestore Data/Rules/Indexes/Functions/Storage/Auth, backend, pricing/business/accounting logic, WAC/COGS, Balance Engine, Entry contract, or Golden Baseline change.
 
 ## Production baseline
 
 - Repository: `goldmaka2007-netizen/mo-golf`
 - Production: https://makka-central-accounting.web.app
 - Firebase project: `makka-central-accounting`
-- Daily Production application: legacy SHA `5241d44d3251a515a81ec6004fb6ae8447a64956` plus Story release commit `bd71245520513d663c671e2b8369cf9b20e99a56`.
-- Latest release family: StoryBuilder Luxury Jewelry Production Polish.
+- Daily Production application: legacy SHA `5241d44d3251a515a81ec6004fb6ae8447a64956` plus Story release commit `7f33016280ffdc3acc2d8212f9f2fc63f0075f07`.
+- Latest release family: StoryBuilder Compact final redesign.
 - Deployment scope: Firebase Hosting only.
-- Current release status: `COMPLETED / PRODUCTION DEPLOYED / OWNER MANUAL ACCEPTED / CROSS-SYSTEM VERIFIED`.
+- Current release status: `COMPLETED / PRODUCTION DEPLOYED / OWNER VISUAL ACCEPTED / SYNC VERIFIED`.
 
 ## Current production behavior — account management
 
