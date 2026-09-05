@@ -11,12 +11,12 @@ const COMPACT_STORY_HEIGHT = 1920;
 const BULLION_LIST = APPROVED_BULLION_UNIT_WEIGHTS.map(weight => ({ weight, label: `${weight} جم` }));
 const COIN_LIST = APPROVED_COIN_UNIT_WEIGHTS.map(weight => ({ weight, label: `جنيه ذهب ${weight} جم` }));
 type StoryProductItem = { weight: number; label: string };
-const CUSTOMER_MSG_DEFAULT = 'نتعهد بأن هذه الاسعار الحقيقية للسوق المصري و ليس لنا علاقة باي اسعار اخري ولا يوجد خصم من سعر الشراء للسبائك و المشغولات تقديرية حسب سياسة الخصم الخاصة بكل مصنع';
+const CUSTOMER_MSG_DEFAULT = 'نتعهد بأن هذه الاسعار الحقيقية للسوق المصري و ليس لنا علاقة بأي اسعار اخري ولا يوجد خصم من سعر الشراء للسبائك و المشغولات تقديرية حسب سياسة الخصم الخاصة بكل مصنع';
 const FACEBOOK_PAGE_NAME = 'مكة للمصوغات والمجوهرات';
 const CONTACT_ADDRESS = 'مساكن شركة المعمورة، عمارة رقم 4، محل رقم 17، المعمورة البلد';
 const CONTACT_WHATSAPP = '+20 15 50326921';
 const CONTACT_FACEBOOK_USERNAME = '@makkagoldalex';
-const COMPACT_CTA = 'لأحدث أسعار السبائك والجنيهات وقت الطلب، ابعتلنا رسالة على واتساب أو فيسبوك';
+const COMPACT_CTA = 'لأحدث أسعار السبائك والجنيهات وقت الطلب ابعتلنا رسالة على واتساب أو فيسبوك';
 
 export type StoryVariant = 'compact' | 'full';
 
@@ -87,6 +87,29 @@ const getWrappedTextLines = (ctx: CanvasRenderingContext2D, text: string, maxWid
 };
 
 type ContactIcon = 'location' | 'whatsapp' | 'facebook';
+type BrandLogo = Extract<ContactIcon, 'whatsapp' | 'facebook'>;
+
+// Exact CC0 SVG paths from Simple Icons, kept local so Story generation remains offline.
+const OFFICIAL_BRAND_LOGO_PATHS: Record<BrandLogo, string> = {
+  whatsapp: 'M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 01-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 01-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 012.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0012.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.057 24l6.305-1.654a11.882 11.882 0 005.683 1.448h.005c6.554 0 11.89-5.335 11.893-11.893a11.821 11.821 0 00-3.48-8.413Z',
+  facebook: 'M9.101 23.691v-7.98H6.627v-3.667h2.474v-1.58c0-4.085 1.848-5.978 5.858-5.978.401 0 .955.042 1.468.103a8.68 8.68 0 0 1 1.141.195v3.325a8.623 8.623 0 0 0-.653-.036 26.805 26.805 0 0 0-.733-.009c-.707 0-1.259.096-1.675.309a1.686 1.686 0 0 0-.679.622c-.258.42-.374.995-.374 1.752v1.297h3.919l-.386 2.103-.287 1.564h-3.246v8.245C19.396 23.238 24 18.179 24 12.044c0-6.627-5.373-12-12-12s-12 5.373-12 12c0 5.628 3.874 10.35 9.101 11.647Z',
+};
+
+const drawOfficialBrandLogo = (
+  ctx: CanvasRenderingContext2D,
+  logo: BrandLogo,
+  centerX: number,
+  centerY: number,
+  size: number,
+) => {
+  ctx.save();
+  ctx.translate(centerX, centerY);
+  ctx.scale(size / 24, size / 24);
+  ctx.translate(-12, -12);
+  ctx.fillStyle = '#e6be68';
+  ctx.fill(new Path2D(OFFICIAL_BRAND_LOGO_PATHS[logo]));
+  ctx.restore();
+};
 
 const drawContactIcon = (
   ctx: CanvasRenderingContext2D,
@@ -102,6 +125,10 @@ const drawContactIcon = (
   ctx.lineWidth = 3;
   ctx.lineCap = 'round';
   ctx.lineJoin = 'round';
+  ctx.beginPath();
+  ctx.arc(0, 0, size * 0.82, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.stroke();
 
   if (type === 'location') {
     ctx.beginPath();
@@ -160,7 +187,208 @@ const drawContactIcon = (
   ctx.restore();
 };
 
+const drawCtaSocialIcon = (
+  ctx: CanvasRenderingContext2D,
+  type: BrandLogo,
+  centerX: number,
+  centerY: number,
+) => {
+  drawOfficialBrandLogo(ctx, type, centerX, centerY, 54);
+};
+
+const drawCompactFooterIcon = (
+  ctx: CanvasRenderingContext2D,
+  type: ContactIcon,
+  centerX: number,
+  centerY: number,
+  size: number,
+) => {
+  ctx.save();
+  ctx.translate(centerX, centerY);
+  ctx.strokeStyle = '#d8b24f';
+  ctx.fillStyle = '#d8b24f';
+  ctx.lineWidth = 2.5;
+  ctx.lineCap = 'round';
+  ctx.lineJoin = 'round';
+
+  if (type === 'location') {
+    ctx.beginPath();
+    ctx.moveTo(0, size * 0.82);
+    ctx.bezierCurveTo(-size * 0.17, size * 0.5, -size * 0.56, size * 0.12, -size * 0.56, -size * 0.19);
+    ctx.arc(0, -size * 0.19, size * 0.56, Math.PI, 0);
+    ctx.bezierCurveTo(size * 0.56, size * 0.12, size * 0.17, size * 0.5, 0, size * 0.82);
+    ctx.closePath();
+    ctx.stroke();
+    ctx.beginPath();
+    ctx.arc(0, -size * 0.2, size * 0.16, 0, Math.PI * 2);
+    ctx.stroke();
+  } else if (type === 'whatsapp') {
+    ctx.restore();
+    drawOfficialBrandLogo(ctx, type, centerX, centerY, 47);
+    return;
+  } else {
+    ctx.restore();
+    drawOfficialBrandLogo(ctx, type, centerX, centerY, 47);
+    return;
+  }
+  ctx.restore();
+};
+
+const drawSmallStoryCanvas = (ctx: CanvasRenderingContext2D, data: StoryData) => {
+  const centerX = STORY_WIDTH / 2;
+  const contentX = 56;
+  const contentWidth = STORY_WIDTH - (contentX * 2);
+  const rtlFont = '"IBM Plex Sans Arabic", "Tajawal", sans-serif';
+  const numericFont = '"JetBrains Mono", monospace';
+  const C = {
+    navy: '#071a2f',
+    navyElevated: '#0a223a',
+    cream: '#f8f0df',
+    ivory: '#fffaf0',
+    ink: '#10233b',
+    white: '#fbfcff',
+    gold: '#e6be68',
+    goldMuted: '#b78b35',
+    goldBorder: '#d9ad51',
+    silver: '#d7dde0',
+    silverBorder: '#b9c3c8',
+    footerLine: 'rgba(230, 190, 104, 0.54)',
+  };
+  const generatedAt = new Date();
+  const dateStr = generatedAt.toLocaleDateString('ar-EG', { day: 'numeric', month: 'long', year: 'numeric' });
+  const timeStr = generatedAt.toLocaleTimeString('ar-EG', { hour: 'numeric', minute: '2-digit', hour12: true });
+
+  ctx.fillStyle = C.cream;
+  ctx.fillRect(0, 0, STORY_WIDTH, COMPACT_STORY_HEIGHT);
+  ctx.fillStyle = C.navy;
+  ctx.fillRect(0, 0, STORY_WIDTH, 254);
+  ctx.strokeStyle = 'rgba(230, 190, 104, 0.45)';
+  ctx.lineWidth = 1;
+  ctx.beginPath();
+  ctx.moveTo(0, 84); ctx.quadraticCurveTo(70, 170, 178, 182);
+  ctx.moveTo(STORY_WIDTH, 84); ctx.quadraticCurveTo(STORY_WIDTH - 70, 170, STORY_WIDTH - 178, 182);
+  ctx.stroke();
+
+  ctx.textAlign = 'center';
+  ctx.direction = 'rtl';
+  ctx.fillStyle = C.white;
+  ctx.font = `bold 53px ${rtlFont}`;
+  ctx.fillText('مكة للذهب والمجوهرات', centerX, 83);
+  ctx.fillStyle = C.gold;
+  ctx.font = `600 31px ${rtlFont}`;
+  ctx.fillText('تأسس منذ 2003', centerX, 132);
+  ctx.fillStyle = 'rgba(251, 252, 255, 0.82)';
+  ctx.font = `500 24px ${rtlFont}`;
+  ctx.fillText(`${dateStr}  •  ${timeStr}`, centerX, 183);
+  ctx.strokeStyle = C.goldBorder;
+  ctx.lineWidth = 3;
+  ctx.beginPath(); ctx.moveTo(0, 251); ctx.lineTo(STORY_WIDTH, 251); ctx.stroke();
+
+  const heroY = 287;
+  roundedPanel(ctx, contentX, heroY, contentWidth, 514, 30, C.navy, C.goldBorder);
+  ctx.lineWidth = 4;
+  ctx.strokeStyle = 'rgba(230, 190, 104, 0.8)';
+  ctx.beginPath(); ctx.roundRect(contentX + 4, heroY + 4, contentWidth - 8, 506, 27); ctx.stroke();
+  ctx.fillStyle = C.gold;
+  ctx.font = `bold 58px ${rtlFont}`;
+  ctx.fillText('عيار 21', centerX, heroY + 83);
+  ctx.strokeStyle = 'rgba(230, 190, 104, 0.72)';
+  ctx.lineWidth = 2;
+  ctx.beginPath();
+  ctx.moveTo(contentX + 100, heroY + 67); ctx.lineTo(contentX + 307, heroY + 67);
+  ctx.moveTo(contentX + contentWidth - 100, heroY + 67); ctx.lineTo(contentX + contentWidth - 307, heroY + 67);
+  ctx.stroke();
+
+  const drawHeroRow = (y: number, label: string, price: number) => {
+    roundedPanel(ctx, contentX + 46, y, contentWidth - 92, 147, 23, C.navyElevated, 'rgba(255,255,255,0.17)');
+    ctx.strokeStyle = 'rgba(230, 190, 104, 0.34)'; ctx.lineWidth = 2;
+    ctx.beginPath(); ctx.moveTo(666, y + 23); ctx.lineTo(666, y + 124); ctx.stroke();
+    ctx.fillStyle = C.gold;
+    ctx.font = `bold 43px ${rtlFont}`;
+    ctx.fillText(label, 760, y + 91);
+    ctx.fillStyle = C.white;
+    ctx.font = `bold 75px ${numericFont}`;
+    ctx.direction = 'ltr';
+    ctx.fillText(price.toLocaleString(), 394, y + 98);
+    ctx.direction = 'rtl';
+  };
+  drawHeroRow(heroY + 119, 'بيع', data.p21Sell);
+  drawHeroRow(heroY + 288, 'شراء', data.p21Buy);
+
+  const cardsY = 832;
+  const drawPriceCard = (x: number, width: number, title: string, sell: number, buy: number, accent: string, border: string) => {
+    roundedPanel(ctx, x, cardsY, width, 353, 24, C.navy, border);
+    ctx.strokeStyle = accent; ctx.lineWidth = 2;
+    ctx.beginPath(); ctx.moveTo(x + 30, cardsY + 88); ctx.lineTo(x + width - 30, cardsY + 88); ctx.stroke();
+    ctx.fillStyle = accent; ctx.font = `bold ${width < 250 ? 37 : 40}px ${rtlFont}`; ctx.textAlign = 'center'; ctx.direction = 'rtl';
+    ctx.fillText(title, x + (width / 2), cardsY + 60);
+    const drawPriceLine = (lineY: number, label: string, value: number) => {
+      roundedPanel(ctx, x + 20, lineY, width - 40, 108, 18, 'rgba(255,255,255,0.035)', 'rgba(255,255,255,0.1)');
+      ctx.fillStyle = accent; ctx.font = `bold 25px ${rtlFont}`; ctx.direction = 'rtl'; ctx.fillText(label, x + (width / 2), lineY + 34);
+      ctx.fillStyle = C.white; ctx.font = `bold ${width < 250 ? 40 : 48}px ${numericFont}`; ctx.direction = 'ltr'; ctx.fillText(value.toLocaleString(), x + (width / 2), lineY + 84);
+    };
+    drawPriceLine(cardsY + 106, 'بيع', sell);
+    drawPriceLine(cardsY + 227, 'شراء', buy);
+  };
+  drawPriceCard(56, 226, 'الفضة', data.silverSwissSell, data.silverSwissBuy, C.silver, C.silverBorder);
+  drawPriceCard(300, 356, 'عيار 24', data.p24Sell, data.p24Buy, C.gold, C.goldBorder);
+  drawPriceCard(674, 350, 'عيار 18', data.p18Sell, data.p18Buy, C.gold, C.goldBorder);
+
+  const disclaimerY = 1217;
+  roundedPanel(ctx, contentX, disclaimerY, contentWidth, 282, 22, C.ivory, C.goldMuted);
+  ctx.fillStyle = C.ink;
+  ctx.font = `500 33px ${rtlFont}`;
+  ctx.direction = 'rtl'; ctx.textAlign = 'center';
+  const disclaimerLines = getWrappedTextLines(ctx, data.customerMessage, 835);
+  const disclaimerLineHeight = 48;
+  const disclaimerStartY = disclaimerY + ((282 - ((disclaimerLines.length - 1) * disclaimerLineHeight)) / 2) + 24;
+  wrapCenteredText(ctx, data.customerMessage, centerX, disclaimerStartY, 835, disclaimerLineHeight);
+
+  const ctaY = 1523;
+  roundedPanel(ctx, contentX, ctaY, contentWidth, 126, 18, C.navy, C.goldMuted);
+  drawCtaSocialIcon(ctx, 'whatsapp', 158, ctaY + 63);
+  ctx.strokeStyle = 'rgba(230, 190, 104, 0.65)'; ctx.lineWidth = 2; ctx.beginPath(); ctx.moveTo(226, ctaY + 30); ctx.lineTo(226, ctaY + 96); ctx.stroke();
+  drawCtaSocialIcon(ctx, 'facebook', 280, ctaY + 63);
+  ctx.fillStyle = C.gold;
+  ctx.font = `bold 27px ${rtlFont}`;
+  ctx.direction = 'rtl';
+  wrapCenteredText(ctx, COMPACT_CTA, 657, ctaY + 50, 610, 36);
+
+  const footerY = 1674;
+  ctx.fillStyle = C.navy;
+  ctx.fillRect(0, footerY, STORY_WIDTH, COMPACT_STORY_HEIGHT - footerY);
+  const iconX = 960;
+  const textRightX = 887;
+  const rowStep = 82;
+  const rows: Array<{ icon: ContactIcon; label?: string; value: string }> = [
+    { icon: 'location', value: CONTACT_ADDRESS },
+    { icon: 'whatsapp', label: 'واتساب:', value: CONTACT_WHATSAPP },
+    { icon: 'facebook', label: 'فيسبوك:', value: FACEBOOK_PAGE_NAME },
+  ];
+  rows.forEach((row, index) => {
+    const y = footerY + 43 + (index * rowStep);
+    if (index > 0) { ctx.strokeStyle = C.footerLine; ctx.lineWidth = 1; ctx.beginPath(); ctx.moveTo(contentX, y - 41); ctx.lineTo(915, y - 41); ctx.stroke(); }
+    drawCompactFooterIcon(ctx, row.icon, iconX, y, 25);
+    ctx.textAlign = 'right'; ctx.direction = 'rtl'; ctx.font = `600 ${index === 0 ? 23 : 26}px ${rtlFont}`;
+    if (!row.label) { ctx.fillStyle = C.white; ctx.fillText(row.value, textRightX, y + 8, 805); return; }
+    ctx.fillStyle = C.gold; ctx.fillText(row.label, textRightX, y + 8);
+    const valueRightX = textRightX - ctx.measureText(row.label).width - 16;
+    if (row.icon === 'whatsapp') {
+      ctx.fillStyle = C.white; ctx.direction = 'ltr'; ctx.fillText(row.value, valueRightX, y + 8);
+    } else {
+      ctx.fillStyle = C.white; ctx.direction = 'rtl'; ctx.fillText(row.value, valueRightX, y + 8);
+      const usernameRightX = valueRightX - ctx.measureText(row.value).width - 16;
+      ctx.direction = 'ltr'; ctx.fillText(CONTACT_FACEBOOK_USERNAME, usernameRightX, y + 8);
+    }
+  });
+  ctx.direction = 'ltr';
+};
+
 const generateStoryCanvas = (canvas: HTMLCanvasElement, ctx: CanvasRenderingContext2D, data: StoryData, variant: StoryVariant) => {
+  if (variant === 'compact') {
+    drawSmallStoryCanvas(ctx, data);
+    return;
+  }
   canvas.dir = 'ltr';
   const centerX = canvas.width / 2;
   const contentX = 64;
@@ -170,88 +398,39 @@ const generateStoryCanvas = (canvas: HTMLCanvasElement, ctx: CanvasRenderingCont
   const cardInnerWidth = contentWidth - (cardPadding * 2);
   const rtlFont = '"IBM Plex Sans Arabic", "Tajawal", sans-serif';
   const numericFont = '"JetBrains Mono", monospace';
-  const V = {
-    bg: '#f6ecd8',
-    surface: '#fffaf0',
-    elevated: '#0d1c2d',
-    primary: '#172334',
-    secondary: '#71675b',
-    muted: '#9b8e7d',
-    gold: '#bd8b2f',
-    goldTint: '#f2d68d',
-    buy: '#197447',
-    sell: '#a43a3a',
-    border: '#d8c29a',
-    goldBorder: '#bd8b2f',
-    navy: '#0d1c2d',
-    silver: '#747a82',
-  };
+  const C = { bg: '#081321', surface: '#0f1c2d', elevated: '#142033', primary: '#f4f7fb', secondary: '#a7b3c3', muted: '#718095', gold: '#c9a84c', goldTint: 'rgba(201, 168, 76, 0.10)', buy: '#47d7a5', sell: '#f07f8a', border: '#26364a', goldBorder: 'rgba(201, 168, 76, 0.42)' };
+  const V = C;
 
   ctx.fillStyle = V.bg;
   ctx.fillRect(0, 0, canvas.width, canvas.height);
   ctx.textAlign = 'center';
-  const drawGoldFlourish = (x: number, y: number, scale = 1, mirrored = false) => {
-    ctx.save();
-    ctx.translate(x, y);
-    ctx.scale(mirrored ? -scale : scale, scale);
-    ctx.strokeStyle = V.gold;
-    ctx.fillStyle = V.gold;
-    ctx.lineWidth = 2;
-    ctx.lineCap = 'round';
-    ctx.beginPath();
-    ctx.moveTo(-42, 4);
-    ctx.bezierCurveTo(-24, 4, -26, -17, -7, -14);
-    ctx.bezierCurveTo(4, -12, 3, 0, -6, 2);
-    ctx.bezierCurveTo(-16, 5, -12, 15, 0, 13);
-    ctx.bezierCurveTo(14, 11, 14, -2, 29, -5);
-    ctx.bezierCurveTo(38, -7, 43, -2, 46, 3);
-    ctx.stroke();
-    ctx.beginPath();
-    ctx.arc(-42, 4, 3, 0, Math.PI * 2);
-    ctx.arc(46, 3, 3, 0, Math.PI * 2);
-    ctx.fill();
-    ctx.restore();
-  };
+  const headerTop = 40;
   const generatedAt = new Date();
   const dateStr = generatedAt.toLocaleDateString('ar-EG', { day: 'numeric', month: 'long', year: 'numeric' });
   const timeStr = generatedAt.toLocaleTimeString('ar-EG', { hour: 'numeric', minute: '2-digit', hour12: true });
-  ctx.fillStyle = V.navy;
-  ctx.fillRect(0, 0, canvas.width, 250);
   ctx.fillStyle = V.gold;
-  ctx.fillRect(72, 22, canvas.width - 144, 2);
-  ctx.fillRect(72, 228, canvas.width - 144, 2);
-  ctx.beginPath(); ctx.arc(72, 23, 5, 0, Math.PI * 2); ctx.arc(canvas.width - 72, 23, 5, 0, Math.PI * 2); ctx.fill();
-  drawGoldFlourish(142, 84, 0.9);
-  drawGoldFlourish(canvas.width - 142, 84, 0.9, true);
-  ctx.fillStyle = V.gold;
-  ctx.font = `bold ${variant === 'full' ? 74 : 68}px ${rtlFont}`;
-  ctx.fillText('مكة', centerX, 94);
-  ctx.fillStyle = '#fff7e8';
-  ctx.font = `bold ${variant === 'full' ? 42 : 40}px ${rtlFont}`;
-  ctx.fillText('مكة للذهب والمجوهرات', centerX, 150);
-  ctx.fillStyle = V.gold;
-  ctx.font = `500 25px ${rtlFont}`;
-  ctx.fillText('تأسس منذ 2003', centerX, 184);
-  ctx.fillStyle = '#f0dfba';
+  ctx.font = `bold 60px ${rtlFont}`;
+  ctx.fillText('مكة', centerX, headerTop + 62);
+  ctx.fillRect(centerX - 35, headerTop + 76, 70, 2);
+  ctx.fillStyle = V.primary;
+  ctx.font = `bold 42px ${rtlFont}`;
+  ctx.fillText('مكة للذهب والمجوهرات', centerX, headerTop + 132);
+  ctx.fillStyle = V.secondary;
   ctx.font = `500 24px ${rtlFont}`;
-  ctx.fillText(`${dateStr}  •  ${timeStr}`, centerX, 218);
+  ctx.fillText('تأسس منذ ٢٠٠٣', centerX, headerTop + 170);
+  ctx.fillStyle = V.gold;
+  ctx.font = `bold 30px ${rtlFont}`;
+  ctx.fillText('أسعار اليوم', centerX, headerTop + 220);
+  ctx.fillStyle = V.secondary;
+  ctx.font = `500 24px ${rtlFont}`;
+  ctx.fillText(dateStr, centerX, headerTop + 256);
 
-  const sectionRibbon = (title: string, y: number, width = 320) => {
-    ctx.fillStyle = V.navy;
-    ctx.beginPath(); ctx.roundRect(centerX - (width / 2), y - 25, width, 50, 20); ctx.fill();
-    ctx.fillStyle = V.gold;
-    ctx.font = `bold 28px ${rtlFont}`;
-    ctx.fillText(title, centerX, y + 9);
-    ctx.strokeStyle = V.gold; ctx.lineWidth = 2;
-    ctx.beginPath(); ctx.moveTo(contentX + 20, y); ctx.lineTo(centerX - (width / 2) - 14, y); ctx.moveTo(centerX + (width / 2) + 14, y); ctx.lineTo(contentX + contentWidth - 20, y); ctx.stroke();
-    drawGoldFlourish(centerX - (width / 2) - 42, y, 0.23);
-    drawGoldFlourish(centerX + (width / 2) + 42, y, 0.23, true);
-  };
-
-  const heroY = 282;
+  const heroY = variant === 'full' ? 300 : 280;
   const heroHeight = variant === 'full' ? 400 : 490;
-  roundedPanel(ctx, contentX, heroY, contentWidth, heroHeight, 22, V.surface, V.goldBorder);
-  sectionRibbon('الجرام — شراء / بيع', heroY + 18, 350);
+  roundedPanel(ctx, contentX, heroY, contentWidth, heroHeight, 24, V.surface, V.border);
+  ctx.fillStyle = V.gold;
+  ctx.font = `bold 32px ${rtlFont}`;
+  ctx.fillText('الجرام — شراء / بيع', centerX, heroY + 54);
   const tableTop = heroY + 76;
   const tableHeight = heroHeight - 104;
   const headerHeight = 54;
@@ -260,14 +439,14 @@ const generateStoryCanvas = (canvas: HTMLCanvasElement, ctx: CanvasRenderingCont
   const buyX = cardInnerX + heroColumns[0] / 2;
   const sellX = cardInnerX + heroColumns[0] + heroColumns[1] / 2;
   const karatX = cardInnerX + heroColumns[0] + heroColumns[1] + heroColumns[2] / 2;
-  ctx.strokeStyle = '#d9c7a6';
+  ctx.strokeStyle = V.border;
   ctx.lineWidth = 1;
   ctx.beginPath();
   ctx.moveTo(cardInnerX + heroColumns[0], tableTop); ctx.lineTo(cardInnerX + heroColumns[0], tableTop + tableHeight);
   ctx.moveTo(cardInnerX + heroColumns[0] + heroColumns[1], tableTop); ctx.lineTo(cardInnerX + heroColumns[0] + heroColumns[1], tableTop + tableHeight);
   [tableTop + headerHeight, tableTop + headerHeight + rowHeight, tableTop + headerHeight + (rowHeight * 2), tableTop + tableHeight].forEach(y => { ctx.moveTo(cardInnerX, y); ctx.lineTo(cardInnerX + cardInnerWidth, y); });
   ctx.stroke();
-  ctx.font = `bold 25px ${rtlFont}`;
+  ctx.font = `bold 26px ${rtlFont}`;
   ctx.fillStyle = V.buy; ctx.fillText('شراء', buyX, tableTop + 36);
   ctx.fillStyle = V.sell; ctx.fillText('بيع', sellX, tableTop + 36);
   ctx.fillStyle = V.secondary; ctx.fillText('العيار', karatX, tableTop + 36);
@@ -284,12 +463,8 @@ const generateStoryCanvas = (canvas: HTMLCanvasElement, ctx: CanvasRenderingCont
     if (isPrimary) {
       ctx.fillStyle = V.goldTint;
       ctx.fillRect(cardInnerX + 1, rowTop + 1, cardInnerWidth - 2, rowHeight - 2);
-      ctx.fillStyle = '#dfba61';
-      ctx.fillRect(cardInnerX + 1, rowTop + 1, cardInnerWidth - 2, 2);
-      ctx.fillRect(cardInnerX + 1, rowTop + rowHeight - 3, cardInnerWidth - 2, 2);
       ctx.fillStyle = V.gold;
       ctx.fillRect(cardInnerX + cardInnerWidth - 4, rowTop + 1, 3, rowHeight - 2);
-      ctx.fillRect(cardInnerX + 1, rowTop + 1, 2, rowHeight - 2);
     }
     ctx.fillStyle = V.primary;
     ctx.font = `bold ${isPrimary ? (variant === 'full' ? 58 : 62) : (variant === 'full' ? 48 : 52)}px ${numericFont}`;
@@ -303,14 +478,14 @@ const generateStoryCanvas = (canvas: HTMLCanvasElement, ctx: CanvasRenderingCont
 
   if (variant === 'full') {
     const drawProductSection = (title: string, items: StoryProductItem[], type: 'bullion' | 'coin', y: number, height: number, columns: number) => {
-      roundedPanel(ctx, contentX, y, contentWidth, height, 22, V.surface, V.goldBorder);
-      sectionRibbon(title, y + 18, type === 'bullion' ? 220 : 230);
+      roundedPanel(ctx, contentX, y, contentWidth, height, 24, V.surface, V.border);
+      ctx.textAlign = 'center'; ctx.fillStyle = V.gold; ctx.font = `bold 30px ${rtlFont}`; ctx.fillText(title, centerX, y + 44); ctx.fillRect(centerX - 36, y + 58, 72, 2);
       const rowHeight = type === 'bullion' ? 48 : 40;
       const listTop = y + (type === 'bullion' ? 70 : 68);
       const listInnerX = contentX + 18;
       const listInnerWidth = contentWidth - 36;
       const colWidth = listInnerWidth / columns;
-      ctx.strokeStyle = '#d9c7a6'; ctx.lineWidth = 1; ctx.beginPath();
+      ctx.strokeStyle = V.border; ctx.lineWidth = 1; ctx.beginPath();
       for (let column = 1; column < columns; column += 1) { ctx.moveTo(listInnerX + (colWidth * column), listTop); ctx.lineTo(listInnerX + (colWidth * column), y + height - 16); }
       const rows = Math.ceil(items.length / columns);
       for (let row = 0; row <= rows; row += 1) { const dividerY = listTop + (rowHeight * row); if (dividerY <= y + height - 16) { ctx.moveTo(listInnerX, dividerY); ctx.lineTo(listInnerX + listInnerWidth, dividerY); } }
@@ -334,55 +509,23 @@ const generateStoryCanvas = (canvas: HTMLCanvasElement, ctx: CanvasRenderingCont
   const silverY = variant === 'full' ? 1310 : 800;
   const silverHeight = variant === 'full' ? 92 : 160;
   roundedPanel(ctx, contentX, silverY, contentWidth, silverHeight, 18, V.surface, V.border);
-  if (variant === 'compact') {
-    sectionRibbon('الفضة — شراء / بيع', silverY + 18, 300);
-    const silverTableTop = silverY + 52;
-    const silverHeaderHeight = 34;
-    const silverTableBottom = silverY + silverHeight - 16;
-    const silverRowHeight = silverTableBottom - silverTableTop - silverHeaderHeight;
-    const silverColumns = [cardInnerWidth / 2, cardInnerWidth / 2];
-    const silverBuyX = cardInnerX + silverColumns[0] / 2;
-    const silverSellX = cardInnerX + silverColumns[0] + silverColumns[1] / 2;
-    ctx.strokeStyle = '#d9c7a6'; ctx.lineWidth = 1; ctx.beginPath();
-    ctx.moveTo(cardInnerX + silverColumns[0], silverTableTop); ctx.lineTo(cardInnerX + silverColumns[0], silverTableTop + silverHeaderHeight + silverRowHeight);
-    ctx.moveTo(cardInnerX, silverTableTop + silverHeaderHeight); ctx.lineTo(cardInnerX + cardInnerWidth, silverTableTop + silverHeaderHeight);
-    ctx.stroke();
-    ctx.font = `bold 24px ${rtlFont}`;
-    ctx.fillStyle = V.buy; ctx.fillText('شراء', silverBuyX, silverTableTop + 24);
-    ctx.fillStyle = V.sell; ctx.fillText('بيع', silverSellX, silverTableTop + 24);
-    ctx.font = `bold 52px ${numericFont}`; ctx.fillStyle = V.primary;
-    ctx.fillText(data.silverSwissBuy.toLocaleString(), silverBuyX, silverTableTop + silverHeaderHeight + 43);
-    ctx.fillText(data.silverSwissSell.toLocaleString(), silverSellX, silverTableTop + silverHeaderHeight + 43);
-  } else {
-    sectionRibbon('الفضة — شراء / بيع', silverY + 18, 300);
-    ctx.fillStyle = V.silver; ctx.font = `bold 34px ${numericFont}`; ctx.fillText(`${data.silverSwissBuy.toLocaleString()} / ${data.silverSwissSell.toLocaleString()}`, centerX, silverY + 58);
-  }
-  if (variant === 'compact') {
-    roundedPanel(ctx, contentX, 990, contentWidth, 230, 20, V.elevated, V.goldBorder);
-    roundedPanel(ctx, contentX + 14, 1004, contentWidth - 28, 202, 15, V.elevated, '#76571e');
-    drawGoldFlourish(centerX, 1174, 0.34);
-    ctx.fillStyle = V.gold; ctx.font = `bold 39px ${rtlFont}`; wrapCenteredText(ctx, COMPACT_CTA, centerX, 1052, 820, 54);
-  }
+  ctx.fillStyle = V.secondary; ctx.font = `bold 25px ${rtlFont}`; ctx.fillText('الفضة — شراء / بيع', centerX + 190, silverY + 38);
+  ctx.fillStyle = V.primary; ctx.font = `bold 34px ${numericFont}`; ctx.fillText(`${data.silverSwissBuy.toLocaleString()} / ${data.silverSwissSell.toLocaleString()}`, centerX - 190, silverY + 42);
 
   const disclaimerY = variant === 'full' ? 1432 : 1250;
   const disclaimerHeight = variant === 'full' ? 140 : 260;
-  roundedPanel(ctx, contentX, disclaimerY, contentWidth, disclaimerHeight, 18, '#fffaf0', V.border);
-  ctx.fillStyle = '#5f564b';
-  const disclaimerFontSize = variant === 'compact' ? 35 : 22;
-  const disclaimerLineHeight = variant === 'compact' ? 50 : 34;
+  roundedPanel(ctx, contentX, disclaimerY, contentWidth, disclaimerHeight, 18, V.surface, V.border);
+  ctx.fillStyle = V.secondary;
+  const disclaimerFontSize = 22;
+  const disclaimerLineHeight = 31;
   ctx.font = `500 ${disclaimerFontSize}px ${rtlFont}`;
-  const disclaimerLines = getWrappedTextLines(ctx, data.customerMessage, 800);
+  const disclaimerLines = getWrappedTextLines(ctx, data.customerMessage, 830);
   const disclaimerBlockHeight = Math.max(0, (disclaimerLines.length - 1) * disclaimerLineHeight);
-  const disclaimerStartY = variant === 'compact'
-    ? disclaimerY + ((disclaimerHeight - disclaimerBlockHeight) / 2) + (disclaimerFontSize * 0.8)
-    : disclaimerY + 58;
-  wrapCenteredText(ctx, data.customerMessage, centerX, disclaimerStartY, 800, disclaimerLineHeight);
+  const disclaimerStartY = disclaimerY + 58;
+  wrapCenteredText(ctx, data.customerMessage, centerX, disclaimerStartY, 830, disclaimerLineHeight);
   const footerY = variant === 'full' ? 1590 : 1530;
   const footerHeight = variant === 'full' ? 220 : 300;
-  roundedPanel(ctx, contentX, footerY, contentWidth, footerHeight, 20, V.navy, V.goldBorder);
-  ctx.strokeStyle = '#76571e'; ctx.lineWidth = 1;
-  ctx.beginPath(); ctx.moveTo(contentX + 30, footerY + 24); ctx.lineTo(centerX - 52, footerY + 24); ctx.moveTo(centerX + 52, footerY + 24); ctx.lineTo(contentX + contentWidth - 30, footerY + 24); ctx.stroke();
-  drawGoldFlourish(centerX, footerY + 24, 0.28);
+  roundedPanel(ctx, contentX, footerY, contentWidth, footerHeight, 20, V.surface, V.border);
   const iconX = contentX + contentWidth - 46;
   const textRightX = iconX - 48;
   const rowStep = footerHeight / 3;
@@ -391,15 +534,15 @@ const generateStoryCanvas = (canvas: HTMLCanvasElement, ctx: CanvasRenderingCont
   ctx.direction = 'rtl';
   contactRows.forEach((icon, index) => {
     const y = rowYs[index];
-    if (index > 0) { ctx.strokeStyle = '#314458'; ctx.lineWidth = 1; ctx.beginPath(); ctx.moveTo(contentX + 28, y - (rowStep / 2)); ctx.lineTo(contentX + contentWidth - 28, y - (rowStep / 2)); ctx.stroke(); }
+    if (index > 0) { ctx.strokeStyle = V.border; ctx.lineWidth = 1; ctx.beginPath(); ctx.moveTo(contentX + 28, y - (rowStep / 2)); ctx.lineTo(contentX + contentWidth - 28, y - (rowStep / 2)); ctx.stroke(); }
     drawContactIcon(ctx, icon, iconX, y, variant === 'full' ? 27 : 32);
-    ctx.fillStyle = '#fff7e8'; ctx.font = `500 ${variant === 'full' ? 21 : 28}px ${rtlFont}`; ctx.direction = 'rtl'; ctx.textAlign = 'right';
+    ctx.fillStyle = V.primary; ctx.font = `500 ${variant === 'full' ? 20 : 27}px ${rtlFont}`; ctx.direction = 'rtl'; ctx.textAlign = 'right';
     if (icon === 'location') {
       ctx.fillText(CONTACT_ADDRESS, textRightX, y + 8, textRightX - (contentX + 24));
     } else if (icon === 'whatsapp') {
-      const label = 'واتساب:'; ctx.fillStyle = V.gold; ctx.fillText(label, textRightX, y + 8); const numberRightX = textRightX - ctx.measureText(label).width - 16; ctx.fillStyle = '#fff7e8'; ctx.font = `600 ${variant === 'full' ? 23 : 30}px ${rtlFont}`; ctx.direction = 'ltr'; ctx.textAlign = 'right'; ctx.fillText(CONTACT_WHATSAPP, numberRightX, y + 8);
+      const label = 'واتساب:'; ctx.fillStyle = V.gold; ctx.fillText(label, textRightX, y + 8); const numberRightX = textRightX - ctx.measureText(label).width - 16; ctx.fillStyle = V.primary; ctx.direction = 'ltr'; ctx.textAlign = 'right'; ctx.fillText(CONTACT_WHATSAPP, numberRightX, y + 8);
     } else {
-      const label = 'فيسبوك:'; ctx.fillStyle = V.gold; ctx.fillText(label, textRightX, y + 8); const nameRightX = textRightX - ctx.measureText(label).width - 14; ctx.fillStyle = '#fff7e8'; ctx.direction = 'rtl'; ctx.textAlign = 'right'; ctx.fillText(FACEBOOK_PAGE_NAME, nameRightX, y + 8); const usernameRightX = nameRightX - ctx.measureText(FACEBOOK_PAGE_NAME).width - 14; ctx.direction = 'ltr'; ctx.textAlign = 'right'; ctx.fillText(CONTACT_FACEBOOK_USERNAME, usernameRightX, y + 8);
+      const label = 'فيسبوك:'; ctx.fillStyle = V.gold; ctx.fillText(label, textRightX, y + 8); const nameRightX = textRightX - ctx.measureText(label).width - 14; ctx.fillStyle = V.primary; ctx.direction = 'rtl'; ctx.textAlign = 'right'; ctx.fillText(FACEBOOK_PAGE_NAME, nameRightX, y + 8); const usernameRightX = nameRightX - ctx.measureText(FACEBOOK_PAGE_NAME).width - 14; ctx.direction = 'ltr'; ctx.textAlign = 'right'; ctx.fillText(CONTACT_FACEBOOK_USERNAME, usernameRightX, y + 8);
     }
   });
   ctx.direction = 'ltr';
