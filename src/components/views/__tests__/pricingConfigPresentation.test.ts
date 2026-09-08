@@ -61,4 +61,21 @@ describe('pricingConfig presentation boundaries', () => {
     expect(assistant).not.toContain('addDoc');
     expect(assistant).not.toContain("collection(db, 'entries')");
   });
+
+  it('keeps Smart Sale mobile UX presentation-only and backed by the captured program price', () => {
+    const assistant = source('../GoldPricingAssistant.tsx');
+    const entryForm = source('../EntryForm.tsx');
+    expect(entryForm).toContain('createGoldAssistantSession(entryAssistantMode, goldPrice, Date.now())');
+    expect(assistant).toContain('سعر بيع الذهب — عيار 21');
+    expect(assistant).toContain('session.gold21PriceSnapshot');
+    expect(assistant).toContain('role="tablist" aria-label="مسار البيع"');
+    expect(assistant).toContain("['afrangi', 'أفرنجي']");
+    expect(assistant).toContain("['arabi', 'عربي']");
+    expect(assistant).toContain("['bullion', 'سبائك وجنيهات']");
+    expect(assistant).toContain("saleEntryPoint === 'direct'");
+    expect(assistant).toContain('عرض الأسعار فقط / اختر للبيع');
+    expect(assistant).toContain('للقراءة فقط — الاختيار للبيع من القائمة فوق');
+    expect(assistant).not.toContain('addDoc');
+    expect(assistant).not.toContain("collection(db, 'entries')");
+  });
 });
