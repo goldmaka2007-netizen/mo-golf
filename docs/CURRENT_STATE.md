@@ -6,7 +6,7 @@ Last reviewed: 2026-09-09
 
 - Smart Sale displays one compact, fixed session snapshot for 18K, 21K, and 24K sale prices; 21K remains the captured program price and 18K/24K use the existing canonical karat-price helper.
 - The read-only coin board displays only the approved 8g Gold Pound, 4g Half Pound, and 2g Quarter Pound, in that visual order. Existing `buildGoldPriceBoardRows`, pricing configuration, and workmanship calculations remain authoritative.
-- The redundant Price Board explanatory card was removed. The existing EntryForm review handoff, pricing semantics, accounting, WAC, COGS, Firestore surfaces, and Golden Baseline remain unchanged.
+- The Price Board has no trailing explanatory card. The existing EntryForm review handoff, pricing semantics, accounting, WAC, COGS, Firestore surfaces, and Golden Baseline remain unchanged.
 - Validation: Gold Pricing Assistant `24/24`; requested Smart Sale presentation contract `2/2`; TypeScript, Balance Contract Guard, and production build passed.
 - Firebase project `makka-central-accounting` received a Hosting-only release at https://makka-central-accounting.web.app. Browser smoke confirmed startup plus the live triple snapshot and 8g/4g/2g read-only coin board.
 
