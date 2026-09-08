@@ -1,0 +1,22 @@
+name: Temporary Smart Sale validation
+
+on:
+  push:
+    branches:
+      - feat/smart-sale-ux-refresh-2026-09-08
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npm run test -- src/lib/__tests__/goldPricingAssistant.test.ts src/components/views/__tests__/pricingConfigPresentation.test.ts
+      - run: npm run typecheck
+      - run: npm run check:balance-contract
+      - run: npm run build
