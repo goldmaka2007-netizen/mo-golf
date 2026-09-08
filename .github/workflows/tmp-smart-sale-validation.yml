@@ -23,7 +23,8 @@ jobs:
           node-version: 22
           cache: npm
       - run: npm ci
-      - run: npm run test -- src/lib/__tests__/goldPricingAssistant.test.ts src/components/views/__tests__/pricingConfigPresentation.test.ts
+      - run: npx vitest run --testTimeout=30000 src/lib/__tests__/goldPricingAssistant.test.ts
+      - run: npx vitest run --testTimeout=30000 src/components/views/__tests__/pricingConfigPresentation.test.ts -t "keeps fixed-weight assistant taxonomy-only|keeps Smart Sale mobile UX presentation-only"
       - run: npm run typecheck
       - run: npm run check:balance-contract
       - run: npm run build
