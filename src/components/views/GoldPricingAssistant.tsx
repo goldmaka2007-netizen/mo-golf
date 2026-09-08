@@ -52,6 +52,11 @@ type WorkmanshipSource = 'perGram' | 'piece';
 
 const normalizeInput = (value: string): string => normalizeNumerals(value.replace(/[،٫]/g, '.'));
 const displayNumber = (value: number): string => Number.isFinite(value) ? String(Number(value.toFixed(2))) : '';
+const COIN_DISPLAY_LABELS: Record<number, string> = {
+  8: 'جنيه ذهب — 8 جم',
+  4: 'نصف جنيه — 4 جم',
+  2: 'ربع جنيه — 2 جم',
+};
 
 const AssistantInput = ({
   label,
@@ -111,15 +116,17 @@ export const GoldPricingAssistant = ({
   const sale = mode === 'sale';
   const saleProductGroups = useMemo(() => groupSaleAssistantProducts(products), [products]);
   const saleSection = saleEntryPoint === 'direct' ? 'bullion' : saleEntryPoint;
+  const gold18PriceSnapshot = officialGoldKaratPrice(session.gold21PriceSnapshot, 18 / 21);
+  const gold24PriceSnapshot = officialGoldKaratPrice(session.gold21PriceSnapshot, 24 / 21);
   const bullionPriceBoard = useMemo(() => buildGoldPriceBoardRows({
-    p24Sell: Math.round((session.gold21PriceSnapshot / 21) * 24),
+    p24Sell: gold24PriceSnapshot ?? 0,
     p21Sell: session.gold21PriceSnapshot,
     pricingConfig,
     legacyBullionCharges,
     legacyCoinCharges,
-  }), [legacyBullionCharges, legacyCoinCharges, pricingConfig, session.gold21PriceSnapshot]);
+  }), [gold24PriceSnapshot, legacyBullionCharges, legacyCoinCharges, pricingConfig, session.gold21PriceSnapshot]);
   const bullionRows = bullionPriceBoard.filter(row => row.type === 'bullion');
-  const coinRows = bullionPriceBoard.filter(row => row.type === 'coin');
+  const coinRows = [8, 4, 2].flatMap(weight => bullionPriceBoard.filter(row => row.type === 'coin' && row.weight === weight));
   const product = state.product;
   const officialPrice = product ? officialGoldKaratPrice(session.gold21PriceSnapshot, product.multiplier) : null;
   const unitWeight = parseAssistantNumber(state.weight);
@@ -344,18 +351,30 @@ export const GoldPricingAssistant = ({
 
       {sale && (
         <div className="overflow-hidden rounded-[26px] border border-[#d2ad4a]/45 bg-[linear-gradient(145deg,#171716,#0b0f17_58%,#0a0d13)] shadow-[0_14px_36px_rgba(0,0,0,0.26)]">
-          <div className="flex items-center gap-3 px-4 py-3.5">
+          <div className="flex items-center gap-3 px-4 pt-3.5 pb-2.5">
             <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl border border-[#d2ad4a]/30 bg-[#d2ad4a]/10 text-[#f3cf70]">
               <Gem className="h-5 w-5" aria-hidden="true" />
             </div>
             <div className="min-w-0 flex-1">
-              <span className="block text-[11px] font-black text-[#a69e8d]">سعر بيع الذهب — عيار 21</span>
-              <strong className="mt-0.5 block font-mono text-2xl font-black tabular-nums text-[#f5d779]">{formatEgpAmount(session.gold21PriceSnapshot, 0)}</strong>
+              <span className="block text-[11px] font-black text-[#a69e8d]">سعر بيع الذهب</span>
+              <span className="mt-0.5 block text-[10px] font-bold text-[#817a6e]">من سعر البرنامج عند فتح المساعد</span>
             </div>
             <span className="shrink-0 rounded-full border border-emerald-400/20 bg-emerald-400/10 px-2.5 py-1 text-[10px] font-black text-emerald-300">سناب شوت</span>
           </div>
-          <div className="border-t border-[#292d35] bg-[#080b11]/60 px-4 py-2 text-[10px] font-bold text-[#817a6e]">
-            من سعر البرنامج عند فتح المساعد • مثبت منذ {capturedTime}
+          <div className="grid grid-cols-3 gap-px border-y border-[#292d35] bg-[#292d35]">
+            {[
+              [18, gold18PriceSnapshot],
+              [21, session.gold21PriceSnapshot],
+              [24, gold24PriceSnapshot],
+            ].map(([karat, price]) => (
+              <div key={karat} className="min-w-0 bg-[#080b11]/75 px-2 py-2.5 text-center">
+                <span className="block text-[10px] font-black text-[#aaa295]">عيار {karat}</span>
+                <strong className="mt-1 block font-mono text-sm font-black tabular-nums text-[#f5d779]">{price === null ? '—' : formatEgpAmount(price, 0)}</strong>
+              </div>
+            ))}
+          </div>
+          <div className="bg-[#080b11]/60 px-4 py-2 text-[10px] font-bold text-[#817a6e]">
+            مثبت منذ {capturedTime}
           </div>
         </div>
       )}
@@ -464,7 +483,7 @@ export const GoldPricingAssistant = ({
             <div className="grid grid-cols-2 gap-2">
               {coinRows.map(row => (
                 <div key={`${row.type}-${row.weight}`} className="rounded-2xl border border-[#252b37] bg-[#080c13] px-3 py-2.5">
-                  <span className="block text-[10px] font-black text-[#aaa295]">{row.label}</span>
+                  <span className="block text-[10px] font-black text-[#aaa295]">{COIN_DISPLAY_LABELS[row.weight] ?? row.label}</span>
                   <strong className="mt-1 block font-mono text-base font-black tabular-nums text-[#f3cf70]">{formatEgpAmount(row.price, 0)}</strong>
                 </div>
               ))}
