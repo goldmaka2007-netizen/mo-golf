@@ -1,5 +1,5 @@
 import React, { useMemo, useRef, useState } from 'react';
-import { ArrowRight, Link2, RotateCcw, Scale, Sparkles } from 'lucide-react';
+import { ArrowRight, Gem, Link2, RotateCcw, Scale, Sparkles } from 'lucide-react';
 import type { Account, Entry } from '../../types';
 import { normalizeNumerals } from '../../lib/accounting';
 import { formatEgpAmount } from '../../lib/formatting';
@@ -110,6 +110,7 @@ export const GoldPricingAssistant = ({
   const workmanshipSource = useRef<WorkmanshipSource>('perGram');
   const sale = mode === 'sale';
   const saleProductGroups = useMemo(() => groupSaleAssistantProducts(products), [products]);
+  const saleSection = saleEntryPoint === 'direct' ? 'bullion' : saleEntryPoint;
   const bullionPriceBoard = useMemo(() => buildGoldPriceBoardRows({
     p24Sell: Math.round((session.gold21PriceSnapshot / 21) * 24),
     p21Sell: session.gold21PriceSnapshot,
@@ -117,6 +118,8 @@ export const GoldPricingAssistant = ({
     legacyBullionCharges,
     legacyCoinCharges,
   }), [legacyBullionCharges, legacyCoinCharges, pricingConfig, session.gold21PriceSnapshot]);
+  const bullionRows = bullionPriceBoard.filter(row => row.type === 'bullion');
+  const coinRows = bullionPriceBoard.filter(row => row.type === 'coin');
   const product = state.product;
   const officialPrice = product ? officialGoldKaratPrice(session.gold21PriceSnapshot, product.multiplier) : null;
   const unitWeight = parseAssistantNumber(state.weight);
@@ -151,6 +154,12 @@ export const GoldPricingAssistant = ({
 
   const capturedTime = new Intl.DateTimeFormat('ar-EG', { hour: 'numeric', minute: '2-digit' })
     .format(new Date(session.capturedAt));
+
+  const activateSaleSection = (next: 'bullion' | 'afrangi' | 'arabi') => {
+    workmanshipSource.current = 'perGram';
+    setSaleEntryPoint(next);
+    setState(createEmptyGoldAssistantState());
+  };
 
   const selectProduct = (accountId: string) => {
     const nextProduct = products.find(item => item.accountId === accountId);
@@ -316,38 +325,154 @@ export const GoldPricingAssistant = ({
   };
 
   return (
-    <section className="-mx-1 space-y-4 pb-[calc(var(--bottom-nav-height)+env(safe-area-inset-bottom)+16px)]" dir="rtl">
-      <div className="flex items-center justify-between gap-3">
-        <button type="button" onClick={onCancel} className="flex min-h-11 items-center gap-2 rounded-2xl border border-[#282d39] bg-[#10141d] px-3 text-xs font-black text-[#d8d2c6]">
-          <ArrowRight className="h-4 w-4" />
+    <section className="-mx-1 space-y-3 pb-[calc(var(--bottom-nav-height)+env(safe-area-inset-bottom)+16px)]" dir="rtl">
+      <div className="flex items-start justify-between gap-3">
+        <div>
+          <h2 className="text-2xl font-black tracking-tight text-[#f4cf70]">{sale ? 'مساعد البيع' : 'مساعد الشراء'}</h2>
+          <p className="mt-1 text-[11px] font-bold text-[#8f887a]">{sale ? 'اختار مسار البيع، وبعدها كمّل بيانات القطعة.' : `السعر ثابت منذ ${capturedTime}`}</p>
+        </div>
+        <button
+          type="button"
+          onClick={onCancel}
+          aria-label="الانتقال إلى الإدخال اليدوي"
+          className="flex min-h-11 shrink-0 items-center gap-2 rounded-2xl border border-[#2b313d] bg-[#0f141d] px-3 text-xs font-black text-[#d8d2c6] transition active:scale-[0.98]"
+        >
+          <ArrowRight className="h-4 w-4" aria-hidden="true" />
           إدخال يدوي
         </button>
-        <div className="text-left">
-          <h2 className="text-lg font-black text-[#f3cf70]">{sale ? 'مساعد البيع' : 'مساعد الشراء'}</h2>
-          <p className="mt-1 text-[10px] font-bold text-[#8e8778]">السعر ثابت منذ {capturedTime}</p>
-        </div>
       </div>
 
       {sale && (
-        <div className="space-y-3 rounded-3xl border border-[#292e3a] bg-[linear-gradient(145deg,#111723,#090c12)] p-4 shadow-[0_18px_50px_rgba(0,0,0,0.28)]">
-          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-            <label className="space-y-2"><span className="block text-xs font-black text-[#d7cdaf]">منتجات أفرنجي</span><select value={saleEntryPoint === 'afrangi' ? product?.accountId ?? '' : ''} onChange={event => { setSaleEntryPoint('afrangi'); selectProduct(event.target.value); }} className="min-h-12 w-full rounded-2xl border border-[#343a48] bg-[#080b12] px-3 text-sm font-black text-[#f5f1e8]"><option value="">اختر منتج أفرنجي</option>{saleProductGroups.afrangi.map(item => <option key={item.accountId} value={item.accountId}>{item.name}</option>)}</select></label>
-            <label className="space-y-2"><span className="block text-xs font-black text-[#d7cdaf]">منتجات عربي</span><select value={saleEntryPoint === 'arabi' ? product?.accountId ?? '' : ''} onChange={event => { setSaleEntryPoint('arabi'); selectProduct(event.target.value); }} className="min-h-12 w-full rounded-2xl border border-[#343a48] bg-[#080b12] px-3 text-sm font-black text-[#f5f1e8]"><option value="">اختر منتج عربي</option>{saleProductGroups.arabi.map(item => <option key={item.accountId} value={item.accountId}>{item.name}</option>)}</select></label>
+        <div className="overflow-hidden rounded-[26px] border border-[#d2ad4a]/45 bg-[linear-gradient(145deg,#171716,#0b0f17_58%,#0a0d13)] shadow-[0_14px_36px_rgba(0,0,0,0.26)]">
+          <div className="flex items-center gap-3 px-4 py-3.5">
+            <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl border border-[#d2ad4a]/30 bg-[#d2ad4a]/10 text-[#f3cf70]">
+              <Gem className="h-5 w-5" aria-hidden="true" />
+            </div>
+            <div className="min-w-0 flex-1">
+              <span className="block text-[11px] font-black text-[#a69e8d]">سعر بيع الذهب — عيار 21</span>
+              <strong className="mt-0.5 block font-mono text-2xl font-black tabular-nums text-[#f5d779]">{formatEgpAmount(session.gold21PriceSnapshot, 0)}</strong>
+            </div>
+            <span className="shrink-0 rounded-full border border-emerald-400/20 bg-emerald-400/10 px-2.5 py-1 text-[10px] font-black text-emerald-300">سناب شوت</span>
           </div>
-          <button type="button" onClick={() => { setSaleEntryPoint('bullion'); setState(createEmptyGoldAssistantState()); }} className={cn('min-h-12 w-full rounded-2xl border px-3 text-sm font-black', saleEntryPoint === 'bullion' ? 'border-[#d2ad4a] bg-[#d2ad4a]/15 text-[#f3cf70]' : 'border-[#292e3a] bg-[#10141d] text-[#c8c1b4]')}>السبائك والجنيهات</button>
-          <label className="block max-w-sm space-y-2"><span className="block text-[11px] font-black text-[#b8af9b]">اختيار سبيكة/جنيه للبيع</span><select value={saleEntryPoint === 'direct' ? product?.accountId ?? '' : ''} onChange={event => { setSaleEntryPoint('direct'); selectProduct(event.target.value); }} className="min-h-11 w-full rounded-2xl border border-[#343a48] bg-[#080b12] px-3 text-sm font-black text-[#f5f1e8]"><option value="">اختر سبيكة/جنيه</option>{saleProductGroups.direct.map(item => <option key={item.accountId} value={item.accountId}>{item.name}</option>)}</select></label>
+          <div className="border-t border-[#292d35] bg-[#080b11]/60 px-4 py-2 text-[10px] font-bold text-[#817a6e]">
+            من سعر البرنامج عند فتح المساعد • مثبت منذ {capturedTime}
+          </div>
         </div>
       )}
 
-      {sale && saleEntryPoint === 'bullion' ? (
-        <div className="rounded-3xl border border-[#d2ad4a]/35 bg-[linear-gradient(145deg,#111723,#090c12)] p-4 shadow-[0_18px_50px_rgba(0,0,0,0.28)]">
-          <div className="mb-3"><h3 className="text-base font-black text-[#f3cf70]">أسعار السبائك والجنيهات</h3><p className="mt-1 text-[10px] font-bold text-[#8e8778]">عرض استرشادي للقراءة فقط — لا يبدأ عملية بيع</p></div>
-          <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
-            {bullionPriceBoard.map(row => <div key={`${row.type}-${row.weight}`} className="flex items-center justify-between rounded-2xl border border-[#252b37] bg-[#0b0f17] px-3 py-3"><span className="text-sm font-black text-[#ddd8cc]">{row.label}</span><strong className="font-mono text-lg text-[#f3cf70]">{formatEgpAmount(row.price, 0)}</strong></div>)}
+      {sale && (
+        <div className="rounded-[26px] border border-[#292e3a] bg-[#0d121b] p-2 shadow-[0_12px_32px_rgba(0,0,0,0.22)]">
+          <div className="grid grid-cols-3 gap-1 rounded-2xl bg-[#080b11] p-1" role="tablist" aria-label="مسار البيع">
+            {([
+              ['afrangi', 'أفرنجي'],
+              ['arabi', 'عربي'],
+              ['bullion', 'سبائك وجنيهات'],
+            ] as const).map(([key, label]) => (
+              <button
+                key={key}
+                type="button"
+                role="tab"
+                aria-selected={saleSection === key}
+                onClick={() => activateSaleSection(key)}
+                className={cn(
+                  'min-h-11 rounded-xl px-2 text-[11px] font-black transition active:scale-[0.98]',
+                  saleSection === key
+                    ? 'bg-[#d2ad4a] text-[#080a0f] shadow-[0_6px_18px_rgba(210,173,74,0.18)]'
+                    : 'text-[#9f988a]',
+                )}
+              >
+                {label}
+              </button>
+            ))}
+          </div>
+
+          {saleSection === 'afrangi' && (
+            <label className="mt-2 block space-y-1.5 px-1 pb-1">
+              <span className="block text-[11px] font-black text-[#b8af9b]">اختار المنتج الأفرنجي</span>
+              <select
+                value={saleEntryPoint === 'afrangi' ? product?.accountId ?? '' : ''}
+                onChange={event => { setSaleEntryPoint('afrangi'); selectProduct(event.target.value); }}
+                className="min-h-12 w-full rounded-2xl border border-[#343a48] bg-[#080b12] px-3 text-base font-black text-[#f5f1e8] outline-none focus:border-[#d2ad4a]"
+              >
+                <option value="">اختر منتج أفرنجي</option>
+                {saleProductGroups.afrangi.map(item => <option key={item.accountId} value={item.accountId}>{item.name}</option>)}
+              </select>
+            </label>
+          )}
+
+          {saleSection === 'arabi' && (
+            <label className="mt-2 block space-y-1.5 px-1 pb-1">
+              <span className="block text-[11px] font-black text-[#b8af9b]">اختار المنتج العربي</span>
+              <select
+                value={saleEntryPoint === 'arabi' ? product?.accountId ?? '' : ''}
+                onChange={event => { setSaleEntryPoint('arabi'); selectProduct(event.target.value); }}
+                className="min-h-12 w-full rounded-2xl border border-[#343a48] bg-[#080b12] px-3 text-base font-black text-[#f5f1e8] outline-none focus:border-[#d2ad4a]"
+              >
+                <option value="">اختر منتج عربي</option>
+                {saleProductGroups.arabi.map(item => <option key={item.accountId} value={item.accountId}>{item.name}</option>)}
+              </select>
+            </label>
+          )}
+
+          {saleSection === 'bullion' && (
+            <label className="mt-2 block space-y-1.5 px-1 pb-1">
+              <span className="block text-[11px] font-black text-[#b8af9b]">لو هتبيع سبيكة أو جنيه</span>
+              <select
+                value={saleEntryPoint === 'direct' ? product?.accountId ?? '' : ''}
+                onChange={event => {
+                  if (!event.target.value) {
+                    activateSaleSection('bullion');
+                    return;
+                  }
+                  setSaleEntryPoint('direct');
+                  selectProduct(event.target.value);
+                }}
+                className="min-h-12 w-full rounded-2xl border border-[#343a48] bg-[#080b12] px-3 text-base font-black text-[#f5f1e8] outline-none focus:border-[#d2ad4a]"
+              >
+                <option value="">عرض الأسعار فقط / اختر للبيع</option>
+                {saleProductGroups.direct.map(item => <option key={item.accountId} value={item.accountId}>{item.name}</option>)}
+              </select>
+            </label>
+          )}
+        </div>
+      )}
+
+      {sale && saleSection === 'bullion' && saleEntryPoint !== 'direct' ? (
+        <div className="rounded-[26px] border border-[#d2ad4a]/30 bg-[#0d121b] p-3 shadow-[0_14px_34px_rgba(0,0,0,0.24)]">
+          <div className="mb-3 flex items-end justify-between gap-3">
+            <div>
+              <h3 className="text-base font-black text-[#f3cf70]">أسعار السبائك والجنيهات</h3>
+              <p className="mt-1 text-[10px] font-bold text-[#8e8778]">للقراءة فقط — الاختيار للبيع من القائمة فوق</p>
+            </div>
+            <span className="shrink-0 rounded-full border border-[#343a48] px-2 py-1 text-[9px] font-black text-[#8f887a]">محدّثة مع السناب شوت</span>
+          </div>
+
+          <div>
+            <h4 className="mb-2 text-[11px] font-black text-[#c9c1b1]">السبائك</h4>
+            <div className="grid grid-cols-2 gap-2">
+              {bullionRows.map(row => (
+                <div key={`${row.type}-${row.weight}`} className="rounded-2xl border border-[#252b37] bg-[#080c13] px-3 py-2.5">
+                  <span className="block text-[10px] font-black text-[#aaa295]">{row.label}</span>
+                  <strong className="mt-1 block font-mono text-base font-black tabular-nums text-[#f3cf70]">{formatEgpAmount(row.price, 0)}</strong>
+                </div>
+              ))}
+            </div>
+          </div>
+
+          <div className="mt-4 border-t border-[#252b37] pt-3">
+            <h4 className="mb-2 text-[11px] font-black text-[#c9c1b1]">الجنيهات</h4>
+            <div className="grid grid-cols-2 gap-2">
+              {coinRows.map(row => (
+                <div key={`${row.type}-${row.weight}`} className="rounded-2xl border border-[#252b37] bg-[#080c13] px-3 py-2.5">
+                  <span className="block text-[10px] font-black text-[#aaa295]">{row.label}</span>
+                  <strong className="mt-1 block font-mono text-base font-black tabular-nums text-[#f3cf70]">{formatEgpAmount(row.price, 0)}</strong>
+                </div>
+              ))}
+            </div>
           </div>
         </div>
       ) : (
-      <div className="rounded-3xl border border-[#292e3a] bg-[linear-gradient(145deg,#111723,#090c12)] p-4 shadow-[0_18px_50px_rgba(0,0,0,0.28)]">
+      <div className="rounded-[26px] border border-[#292e3a] bg-[#0d121b] p-3 shadow-[0_12px_30px_rgba(0,0,0,0.22)]">
         {!sale && <label className="space-y-2">
           <span className="block text-xs font-black text-[#d7cdaF]">المنتج</span>
           <select
@@ -360,14 +485,14 @@ export const GoldPricingAssistant = ({
           </select>
         </label>}
         {product && (
-          <div className="mt-3 grid grid-cols-2 gap-2">
-            <div className="rounded-2xl border border-[#252b37] bg-[#0b0f17] p-3">
-              <span className="block text-[10px] text-[#817a6d]">العيار</span>
-              <strong className="mt-1 block text-lg text-[#f3cf70]">{product.karat}</strong>
+          <div className="grid grid-cols-2 gap-2">
+            <div className="rounded-2xl border border-[#252b37] bg-[#080c13] p-3">
+              <span className="block text-[10px] font-bold text-[#817a6d]">العيار</span>
+              <strong className="mt-1 block text-xl font-black text-[#f3cf70]">{product.karat}</strong>
             </div>
-            <div className="rounded-2xl border border-[#252b37] bg-[#0b0f17] p-3">
-              <span className="block text-[10px] text-[#817a6d]">السعر الرسمي / جم</span>
-              <strong className="mt-1 block text-lg text-[#f5f1e8]">{officialPrice ? formatEgpAmount(officialPrice, 2) : '—'}</strong>
+            <div className="rounded-2xl border border-[#252b37] bg-[#080c13] p-3">
+              <span className="block text-[10px] font-bold text-[#817a6d]">سعر الجرام من السناب شوت</span>
+              <strong className="mt-1 block font-mono text-base font-black tabular-nums text-[#f5f1e8]">{officialPrice ? formatEgpAmount(officialPrice, 2) : '—'}</strong>
             </div>
           </div>
         )}
@@ -382,7 +507,9 @@ export const GoldPricingAssistant = ({
 
       {product && (!sale || saleEntryPoint !== 'bullion') && (
         <>
-          <div className="grid grid-cols-1 gap-3 rounded-3xl border border-[#252b37] bg-[#0d1119] p-4 sm:grid-cols-2">
+          <div className="rounded-[26px] border border-[#252b37] bg-[#0d1119] p-3">
+            <h3 className="mb-3 text-sm font-black text-[#e9e3d8]">بيانات القطعة</h3>
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
             {fixedWeight ? (
               <label className="block space-y-1.5"><span className="block text-[11px] font-black text-[#b8af9b]">وزن الوحدة</span><select value={state.weight} onChange={event => selectUnitWeight(event.target.value)} className="min-h-14 w-full rounded-2xl border border-[#242a36] bg-[#080b12] px-3 font-mono text-lg font-black text-[#f5f1e8]"><option value="">اختر الوزن</option>{approvedWeightsForProduct(product).map(item => <option key={item} value={item}>{item} جم</option>)}</select></label>
             ) : <AssistantInput label="الوزن" value={state.weight} onChange={updateWeight} suffix="جم" />}
@@ -394,6 +521,7 @@ export const GoldPricingAssistant = ({
                 suffix="قطعة"
               />
             )}
+            </div>
           </div>
           {fixedWeight && unitWeight !== null && weight !== null && <div className="rounded-2xl border border-[#252b37] bg-[#0b0f17] p-3 text-xs font-bold text-[#d8d2c6]">إجمالي الوزن: {weight} جم</div>}
 
@@ -419,7 +547,7 @@ export const GoldPricingAssistant = ({
                 </div>
               )}
 
-              <div className="rounded-3xl border border-[#d2ad4a]/30 bg-[#d2ad4a]/[0.06] p-4">
+              <div className="rounded-[26px] border border-[#d2ad4a]/35 bg-[linear-gradient(145deg,rgba(210,173,74,0.10),rgba(13,17,25,0.94))] p-4 shadow-[0_12px_30px_rgba(0,0,0,0.20)]">
                 <div className="flex items-center justify-between gap-3">
                   <span className="text-xs font-bold text-[#aaa18e]">السعر المقترح</span>
                   <strong className="text-2xl font-black text-[#f3cf70]">{salePricing ? formatEgpAmount(salePricing.suggestedTotal, 2) : '—'}</strong>
@@ -456,7 +584,11 @@ export const GoldPricingAssistant = ({
             </>
           )}
 
-          <div className="rounded-[28px] border border-[#d2ad4a]/60 bg-[radial-gradient(circle_at_50%_0%,rgba(210,173,74,0.12),transparent_55%),#0d1119] p-4 shadow-[0_16px_38px_rgba(0,0,0,0.32)]">
+          <div className="rounded-[28px] border border-[#d2ad4a]/65 bg-[radial-gradient(circle_at_50%_0%,rgba(210,173,74,0.16),transparent_54%),#0d1119] p-4 shadow-[0_18px_42px_rgba(0,0,0,0.34)]">
+            <div className="mb-3 flex items-center justify-between gap-3">
+              <h3 className="text-sm font-black text-[#eee8dc]">الاتفاق النهائي</h3>
+              <span className="text-[10px] font-bold text-[#817a6d]">ده المبلغ اللي هيروح للمراجعة</span>
+            </div>
             <AssistantInput
               label={sale ? 'السعر المتفق عليه' : 'السعر النهائي المتفق عليه'}
               value={state.finalTotal}
@@ -482,12 +614,12 @@ export const GoldPricingAssistant = ({
             )}
           </div>
 
-          <div className="grid grid-cols-[1fr_2fr] gap-3">
+          <div className="grid grid-cols-[0.85fr_2.15fr] gap-3">
             <button type="button" onClick={handleReset} className="flex min-h-14 items-center justify-center gap-2 rounded-2xl border border-[#3a404d] bg-[#11161f] text-sm font-black text-[#c8c1b4] active:scale-[0.98]">
               <RotateCcw className="h-4 w-4" /> مسح
             </button>
             <button type="button" disabled={!canReview} onClick={handleReview} className="min-h-14 rounded-2xl bg-gradient-to-l from-[#dfbd5b] to-[#b78925] text-lg font-black text-[#090b10] shadow-lg disabled:cursor-not-allowed disabled:opacity-35 active:scale-[0.98]">
-              مراجعة
+              مراجعة الفاتورة
             </button>
           </div>
         </>
