@@ -9,6 +9,7 @@ Last reviewed: 2026-09-09
 - The Price Board has no trailing explanatory card. The existing EntryForm review handoff, pricing semantics, accounting, WAC, COGS, Firestore surfaces, and Golden Baseline remain unchanged.
 - Validation: Gold Pricing Assistant `24/24`; requested Smart Sale presentation contract `2/2`; TypeScript, Balance Contract Guard, and production build passed.
 - Firebase project `makka-central-accounting` received a Hosting-only release at https://makka-central-accounting.web.app. Browser smoke confirmed startup plus the live triple snapshot and 8g/4g/2g read-only coin board.
+- Owner manual Production acceptance: PASS on 2026-09-09; the final Smart Sale mobile UX was accepted with the triple 18K/21K/24K snapshot and 8g/4g/2g read-only coin board.
 
 ## StoryBuilder Compact redesign — final production release
 
@@ -29,9 +30,9 @@ Last reviewed: 2026-09-09
 - Production: https://makka-central-accounting.web.app
 - Firebase project: `makka-central-accounting`
 - Daily Production application: legacy SHA `5241d44d3251a515a81ec6004fb6ae8447a64956` plus Story release commit `7f33016280ffdc3acc2d8212f9f2fc63f0075f07`.
-- Latest release family: StoryBuilder Compact final redesign.
+- Latest release family: Smart Sale final mobile presentation.
 - Deployment scope: Firebase Hosting only.
-- Current release status: `COMPLETED / PRODUCTION DEPLOYED / OWNER VISUAL ACCEPTED / SYNC VERIFIED`.
+- Current release status: `COMPLETED / PRODUCTION DEPLOYED / OWNER MANUAL ACCEPTED / CROSS-SYSTEM VERIFIED`.
 
 ## Current production behavior — account management
 
