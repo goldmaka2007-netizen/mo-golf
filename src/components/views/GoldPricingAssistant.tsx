@@ -471,7 +471,7 @@ export const GoldPricingAssistant = ({
             </div>
           </div>
         </div>
-      ) : (
+      ) : (!sale || product) ? (
       <div className="rounded-[26px] border border-[#292e3a] bg-[#0d121b] p-3 shadow-[0_12px_30px_rgba(0,0,0,0.22)]">
         {!sale && <label className="space-y-2">
           <span className="block text-xs font-black text-[#d7cdaF]">المنتج</span>
@@ -497,7 +497,7 @@ export const GoldPricingAssistant = ({
           </div>
         )}
       </div>
-      )}
+      ) : null}
 
       {(!sale || saleEntryPoint !== 'bullion') && products.length === 0 && (
         <div className="rounded-2xl border border-amber-400/30 bg-amber-400/10 p-4 text-xs font-bold leading-6 text-amber-100">
