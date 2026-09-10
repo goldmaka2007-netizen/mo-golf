@@ -1,0 +1,243 @@
+name: Emergency V1 Recovery Verification
+
+on:
+  push:
+    branches:
+      - hotfix/v1-central-registry-recovery-2026-09-10
+
+permissions:
+  contents: write
+
+jobs:
+  verify-and-commit:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Checkout isolated production base branch
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Apply only the approved Al-Safi Hawala price-capture hotfix
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+
+          entry = Path('src/components/views/EntryForm.tsx')
+          text = entry.read_text(encoding='utf-8')
+
+          old_import = "import { mergeGoldMerchantSettlementEntryRules } from '../../lib/merchantSettlementEntryOptions';\n"
+          new_import = old_import + "import { shouldCaptureGoldMarketPrice } from '../../lib/merchantTransferInvoicePricing';\n"
+          assert text.count(old_import) == 1, 'Expected EntryForm import anchor exactly once'
+          text = text.replace(old_import, new_import, 1)
+
+          old_gold = "      const isGold = formData.tx.includes('ذهب') || formData.debit.includes('ذهب') || formData.credit.includes('ذهب');\n"
+          new_gold = """      const isGold = shouldCaptureGoldMarketPrice({
+                tx: formData.tx,
+                debit: formData.debit,
+                credit: formData.credit,
+                debitAccountId: formData.debitAccountId,
+                creditAccountId: formData.creditAccountId,
+              }, accountsDb);
+          """
+          assert text.count(old_gold) == 1, 'Expected legacy gold detector exactly once'
+          text = text.replace(old_gold, new_gold, 1)
+
+          old_deps = "  }, [formData.tx, formData.debit, formData.credit, formData.priceSnapshotLocked, goldPrice, silverPrice]);\n"
+          new_deps = "  }, [formData.tx, formData.debit, formData.credit, formData.debitAccountId, formData.creditAccountId, formData.priceSnapshotLocked, goldPrice, silverPrice, accountsDb]);\n"
+          assert text.count(old_deps) == 1, 'Expected price effect dependency anchor exactly once'
+          text = text.replace(old_deps, new_deps, 1)
+          entry.write_text(text, encoding='utf-8')
+
+          helper = Path('src/lib/merchantTransferInvoicePricing.ts')
+          helper.write_text("""import type { Account } from '../types';
+          import { AL_SAFI_TRANSFER_HUB_ACCOUNT_ID } from './merchantGoldLiability';
+
+          export interface EntryPricingContext {
+            tx?: string;
+            debit?: string;
+            credit?: string;
+            debitAccountId?: string;
+            creditAccountId?: string;
+          }
+
+          const resolveSelectedAccount = (
+            context: EntryPricingContext,
+            accounts: Account[],
+            side: 'debit' | 'credit',
+          ): Account | undefined => {
+            const id = side === 'debit' ? context.debitAccountId : context.creditAccountId;
+            const name = side === 'debit' ? context.debit : context.credit;
+            return accounts.find(account => account.id === id)
+              ?? accounts.find(account => account.name === name);
+          };
+
+          /**
+           * UI-only recognition for Makka V1's approved merchant transfer invoice.
+           * Accounting validation remains authoritative; this helper only makes sure
+           * EntryForm captures the price snapshot that the existing save guard requires.
+           */
+          export const isAlSafiGoldMerchantTransfer = (
+            context: EntryPricingContext,
+            accounts: Account[],
+          ): boolean => {
+            if (context.tx !== 'حوالة') return false;
+
+            const debit = resolveSelectedAccount(context, accounts, 'debit');
+            const credit = resolveSelectedAccount(context, accounts, 'credit');
+            if (!debit || !credit) return false;
+
+            const bothGoldMerchants = [debit, credit].every(account =>
+              account.type === 'merchant'
+              && account.metal === 'gold'
+              && account.is_inventory !== true,
+            );
+
+            return bothGoldMerchants
+              && [debit.id, credit.id].includes(AL_SAFI_TRANSFER_HUB_ACCOUNT_ID);
+          };
+
+          export const shouldCaptureGoldMarketPrice = (
+            context: EntryPricingContext,
+            accounts: Account[],
+          ): boolean => (
+            (context.tx || '').includes('ذهب')
+            || (context.debit || '').includes('ذهب')
+            || (context.credit || '').includes('ذهب')
+            || isAlSafiGoldMerchantTransfer(context, accounts)
+          );
+          """.replace('          ', ''), encoding='utf-8')
+
+          test = Path('src/lib/__tests__/merchantTransferInvoicePricing.test.ts')
+          test.write_text("""import { describe, expect, it } from 'vitest';
+          import type { Account } from '../../types';
+          import {
+            isAlSafiGoldMerchantTransfer,
+            shouldCaptureGoldMarketPrice,
+          } from '../merchantTransferInvoicePricing';
+
+          const accounts: Account[] = [
+            {
+              id: 'alaa',
+              name: 'علاء صالح',
+              mainType: 'الالتزامات',
+              subType: 'تاجر ذهب',
+              balanceNature: 'جرام ذهب',
+              type: 'merchant',
+              metal: 'gold',
+              is_inventory: false,
+              userId: 'u',
+            },
+            {
+              id: '3zGclNk6qdAuNxM6y5iP',
+              name: 'الصافي',
+              mainType: 'الالتزامات',
+              subType: 'تاجر ذهب',
+              balanceNature: 'جرام ذهب',
+              type: 'merchant',
+              metal: 'gold',
+              is_inventory: false,
+              userId: 'u',
+            },
+            {
+              id: 'merchant-21',
+              name: 'تاجر آخر',
+              mainType: 'الالتزامات',
+              subType: 'تاجر ذهب',
+              balanceNature: 'جرام ذهب',
+              type: 'merchant',
+              metal: 'gold',
+              is_inventory: false,
+              userId: 'u',
+            },
+          ];
+
+          describe('merchant transfer invoice pricing', () => {
+            it('recognizes Alaa Saleh -> Al-Safi as a gold transfer even though labels do not contain ذهب', () => {
+              const context = {
+                tx: 'حوالة',
+                debit: 'علاء صالح',
+                credit: 'الصافي',
+              };
+
+              expect(isAlSafiGoldMerchantTransfer(context, accounts)).toBe(true);
+              expect(shouldCaptureGoldMarketPrice(context, accounts)).toBe(true);
+            });
+
+            it('recognizes the approved transfer by stable Al-Safi account ID when IDs are available', () => {
+              expect(isAlSafiGoldMerchantTransfer({
+                tx: 'حوالة',
+                debit: 'اسم قديم',
+                credit: 'اسم قديم للصافي',
+                debitAccountId: 'alaa',
+                creditAccountId: '3zGclNk6qdAuNxM6y5iP',
+              }, accounts)).toBe(true);
+            });
+
+            it('does not broaden price capture to an ordinary merchant-to-merchant transfer', () => {
+              const context = {
+                tx: 'حوالة',
+                debitAccountId: 'alaa',
+                creditAccountId: 'merchant-21',
+              };
+
+              expect(isAlSafiGoldMerchantTransfer(context, accounts)).toBe(false);
+              expect(shouldCaptureGoldMarketPrice(context, accounts)).toBe(false);
+            });
+
+            it('preserves the existing label-based gold price detection', () => {
+              expect(shouldCaptureGoldMarketPrice({ tx: 'بيع ذهب' }, accounts)).toBe(true);
+            });
+          });
+          """.replace('          ', ''), encoding='utf-8')
+          PY
+
+      - name: Prove scope is isolated before tests
+        shell: bash
+        run: |
+          git diff --check
+          test -z "$(git diff --name-only | grep -vE '^(src/components/views/EntryForm.tsx|src/lib/merchantTransferInvoicePricing.ts|src/lib/__tests__/merchantTransferInvoicePricing.test.ts)$')"
+          ! grep -q "centralAccountingWriteService" src/components/views/EntryForm.tsx
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Focused regression suite
+        run: >-
+          npx vitest run
+          src/lib/__tests__/merchantTransferInvoicePricing.test.ts
+          src/lib/__tests__/accountingPolicy.test.ts
+          src/lib/__tests__/alSafiTransferAccounting.regression.test.ts
+          src/lib/__tests__/merchantGoldLiabilityWac.regression.test.ts
+          src/components/views/__tests__/EntryFormCompletionActions.test.ts
+          src/lib/__tests__/entryValidation.test.ts
+
+      - name: TypeScript
+        run: npm run typecheck
+
+      - name: Balance Contract
+        run: npm run check:balance-contract
+
+      - name: Production build
+        run: npm run build
+
+      - name: Commit verified hotfix and remove temporary workflow
+        shell: bash
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git rm .github/workflows/emergency-v1-recovery.yml
+          git add src/components/views/EntryForm.tsx src/lib/merchantTransferInvoicePricing.ts src/lib/__tests__/merchantTransferInvoicePricing.test.ts
+          git diff --cached --check
+          changed="$(git diff --cached --name-only | sort)"
+          expected="$(printf '%s\n' src/components/views/EntryForm.tsx src/lib/__tests__/merchantTransferInvoicePricing.test.ts src/lib/merchantTransferInvoicePricing.ts | sort)"
+          test "$changed" = "$expected"
+          git commit -m "fix: restore safe V1 save path with Al-Safi Hawala pricing"
+          git push origin HEAD:${GITHUB_REF_NAME}
