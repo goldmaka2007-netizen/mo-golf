@@ -30,6 +30,7 @@ import { buildAccountRegistry } from '../../lib/accountRegistry';
 import { buildCanonicalPosting } from '../../lib/postingMatrix';
 import { validateAccountingPolicy } from '../../lib/accountingPolicy';
 import { mergeGoldMerchantSettlementEntryRules } from '../../lib/merchantSettlementEntryOptions';
+import { shouldCaptureGoldMarketPrice } from '../../lib/merchantTransferInvoicePricing';
 import { GoldPricingAssistant } from './GoldPricingAssistant';
 import {
   createGoldAssistantSession,
@@ -317,13 +318,19 @@ export const EntryForm = React.memo(({ onStepChange }: EntryFormProps) => {
         }));
       }
 
-      const isGold = formData.tx.includes('ذهب') || formData.debit.includes('ذهب') || formData.credit.includes('ذهب');
+      const isGold = shouldCaptureGoldMarketPrice({
+      tx: formData.tx,
+      debit: formData.debit,
+      credit: formData.credit,
+      debitAccountId: formData.debitAccountId,
+      creditAccountId: formData.creditAccountId,
+    }, accountsDb);
       const isSilver = formData.tx.includes('فضة') || formData.debit.includes('فضة') || formData.credit.includes('فضة');
       if (isGold) basePrice = goldPrice || 0;
       else if (isSilver) { basePrice = silverPrice || 0; mult = 1; }
       if (basePrice > 0) setFormData(prev => ({ ...prev, marketPrice: calculateKaratPrice(basePrice, mult) }));
     }
-  }, [formData.tx, formData.debit, formData.credit, formData.priceSnapshotLocked, goldPrice, silverPrice]);
+  }, [formData.tx, formData.debit, formData.credit, formData.debitAccountId, formData.creditAccountId, formData.priceSnapshotLocked, goldPrice, silverPrice, accountsDb]);
 
   const generateInvoiceNumber = (txType: string) => {
     return getNextInvoiceNumber(txType, entries, lastSavedInvoiceRef.current);
