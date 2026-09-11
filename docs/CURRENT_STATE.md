@@ -1,42 +1,42 @@
 # Current Project State
 
-Last reviewed: 2026-09-10
+Last reviewed: 2026-09-11
 
-## Makka 1 — Production Save Recovery — 2026-09-10
+## Makka 1 — Production Save Recovery — FINAL CLOSE — 2026-09-11
 
-- Status: `IMPLEMENTATION COMPLETE / VERIFIED / RELEASE READY / PRODUCTION DEPLOY PENDING`.
-- After the first Al-Safi Hawala price-capture Production release, the owner reported that a normal Hawala save was blocked by `Central Registry is not cutover-ready: accounts_needing_approval=65`.
-- This exposed an unsafe Production coupling to the Central Accounting write-cutover line. The recovery therefore does **not** deploy current `main` application code.
+- Status: `CLOSED / PRODUCTION DEPLOYED / OWNER MANUAL ACCEPTANCE PASS / CROSS-SYSTEM VERIFIED`.
+- The first Al-Safi Hawala price-capture Production release exposed an unsafe coupling to the Central Accounting write-cutover line through the blocker `Central Registry is not cutover-ready: accounts_needing_approval=65`.
 - Safe recovery base: owner-accepted V1 application SHA `5330ccc2eb0a9e8a929889217d1ebefe6026ef43`.
 - Recovery release branch: `release/v1-safe-production-recovery-2026-09-10`.
-- Recovery release merge SHA: `b18c37c04e9251287edadfd68e6675635add9adc`.
+- Deployed recovery SHA: `b18c37c04e9251287edadfd68e6675635add9adc`.
 - Recovery scope is intentionally narrow: legacy V1 save path + only the approved Al-Safi Hawala price-capture fix. Central Accounting write cutover is excluded.
 - Application delta from the accepted V1 base is limited to `src/components/views/EntryForm.tsx`, `src/lib/merchantTransferInvoicePricing.ts`, and `src/lib/__tests__/merchantTransferInvoicePricing.test.ts`.
-- Verification: isolated GitHub Actions run `34532292832` PASS for scope guard, focused regressions, TypeScript, Balance Contract, and Production build.
+- Verification: isolated GitHub Actions run `34532292832` PASS; local release verification also PASS for TypeScript, Balance Contract, Vite Production build, exact SHA, clean Git state, Production Firebase project identity, and exclusion of CI dummy config.
+- Firebase Hosting-only deployment completed to project `makka-central-accounting`; live Production asset after recovery: `/assets/index-C-gYHDJa.js`.
+- Safe Production smoke PASS. No Production test transaction was created during technical smoke verification.
+- Owner manual Production acceptance PASS on 2026-09-11 after a real normal Hawala save succeeded without the Central Registry blocker recurring.
 - Posting Matrix, Inventory WAC/COGS, Merchant Metal WAC, Balance Engine, Firestore data, Firebase backend/config, Golden Baseline, and the existing Al-Safi immutable-price accounting rule were not changed.
-- No recovery deployment has been performed yet. Until the recovery release is deployed and owner-accepted, the task is not Closed.
-- GitHub Actions does not currently provide the Production Firebase/Vite credentials needed for an authenticated Hosting deployment, so deployment remains a separate owner-approved gate from an authenticated local Firebase environment.
+- Final GitHub + Notion + Google Drive sync was completed and re-verified after owner acceptance.
 
 ## Makka 1 — Current Live Production
 
 - Repository: `goldmaka2007-netizen/mo-golf`.
 - Production: `https://makka-central-accounting.web.app`.
 - Firebase project: `makka-central-accounting`.
-- Current live Production is still the first PR #33 deployment until the safe recovery release above is deployed.
-- First release / merge SHA: `98fe8336f8b7ae3a08281f3a0f8deb595acc6c8d`.
-- Current live asset from that first deployment: `/assets/index-CSgM94uv.js`.
-- The earlier mount/smoke verification passed, but owner-reported save behavior later exposed the Central Registry blocker described above; therefore that first deployment is superseded as an accepted operational target.
-- Do not deploy current `main` application state as the recovery. The approved recovery candidate is the isolated release branch and SHA listed above.
+- Current accepted Production application is the safe recovery release SHA `b18c37c04e9251287edadfd68e6675635add9adc` from branch `release/v1-safe-production-recovery-2026-09-10`.
+- Current live asset: `/assets/index-C-gYHDJa.js`.
+- The earlier PR #33 deployment SHA `98fe8336f8b7ae3a08281f3a0f8deb595acc6c8d` and asset `/assets/index-CSgM94uv.js` are historical and superseded as the accepted Production target.
+- Do not deploy current `main` application state as a substitute for this accepted recovery line unless a separate change workflow and owner approval explicitly authorize it.
 
-## Al-Safi Hawala Price Capture — 2026-09-10
+## Al-Safi Hawala Price Capture — 2026-09-11
 
-- Status: `IMPLEMENTED / VERIFIED / SAFE RECOVERY READY / DEPLOY PENDING`.
+- Status: `CLOSED / PRODUCTION DEPLOYED / OWNER MANUAL ACCEPTANCE PASS`.
 - Problem: `حوالة` between a gold merchant and Al-Safi could reach save without `marketPrice` because the EntryForm gold-price capture path previously depended on the word `ذهب` appearing in the operation/account labels.
 - Confirmed scenario: `علاء صالح -> الصافي`, 21K.
 - Fix: EntryForm recognizes the approved Al-Safi gold merchant Hawala through account metadata plus the stable Al-Safi transfer-hub account ID and captures the required price snapshot while preserving the previous gold-label behavior for other operations.
 - The existing Al-Safi immutable-price accounting save guard remains authoritative and unchanged.
 - Ordinary merchant-to-merchant transfers that do not involve the approved Al-Safi hub are not broadened into this price-capture path.
-- The first PR #33 implementation/deployment is historical evidence; current operational recovery status is governed by the Production Save Recovery section above.
+- Owner acceptance on the deployed safe recovery line confirms the real Hawala save path works without the Central Registry cutover blocker.
 
 ## Makka 1 — Other current operational notes
 
